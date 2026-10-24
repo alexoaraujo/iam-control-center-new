@@ -2,7 +2,7 @@
   "project": "iam-control-center",
   "status": "bootstrap scaffold; not production-ready",
   "manifest_updated_at_utc": "2026-10-24",
-  "tracked_file_count": 28,
+  "tracked_file_count": 29,
   "tracked_files": [
     ".env.example",
     ".github/workflows/quality.yml",
@@ -25,6 +25,7 @@
     "database/migrations/README.md",
     "docs/architecture/decisions/0001-modular-monolith.md",
     "docs/architecture/overview.md",
+    "docs/evidence/dependency-security-remediation.md",
     "docs/evidence/policy.md",
     "docs/operations/environments.md",
     "main ci quality.json",
@@ -53,10 +54,10 @@
       "test",
       "build"
     ],
-    "last_verified_sha": "7d773c83754a35b87442f6da59df0cfab7d9c3ec",
+    "last_verified_sha": "853d583f55754e1db0e1a6e0308fe9008d22eb52",
     "last_verified_runs": [
-      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40051640192",
-      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40051644403"
+      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053650005",
+      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053582089"
     ]
   },
   "known_limitations": [
@@ -65,5 +66,22 @@
     "GitHub ruleset UI indicates native ruleset enforcement is unavailable for this private repository on the current free plan; manual review and CI checks are compensating process controls, not equivalent enforcement.",
     "No authentication, authorization, tenant persistence, database migrations, or production deployment is implemented by this scaffold."
   ],
-  "production_ready": false
+  "production_ready": false,
+  "dependency_security": {
+    "packages": {
+      "next": "15.5.28",
+      "eslint-config-next": "15.5.28",
+      "react": "19.1.10",
+      "react-dom": "19.1.10",
+      "vitest": "4.1.12",
+      "pnpm.overrides.postcss": "8.5.23",
+      "pnpm.overrides.sharp": "0.35.5"
+    },
+    "audit_scope": "all dependencies",
+    "audit_result": "PASS",
+    "vulnerabilities_found": 0,
+    "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053582089",
+    "audit_sha": "d932b67f250913662b176a8c910043d283608cdd",
+    "note": "last_verified_sha records the code SHA before this metadata-only manifest update; the final manifest commit must be checked by standard CI."
+  }
 }
