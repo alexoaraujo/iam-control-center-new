@@ -27,3 +27,5 @@ The lockfile was committed by the workflow as `1e0ab603bb00d3ce2df7443c9e666948e
 
 ## Scope limits
 This evidence covers dependency installation, lint, typecheck, tests, build, and the package audit. It does not establish working Auth0 login, managed PostgreSQL connectivity, tenant authorization/RLS, Vercel deployment protections, or production readiness. Keep the pull request in Draft until standard CI passes on the final SHA and the remaining integration/security reviews are complete.
+## Follow-up: CI trigger coverage
+The base workflow now accepts `pull_request` events for all base branches (not only `main`). The workflow and README correction passed standard CI on base-branch commit `9a6aaaf3b98f086c8a67d1af4eb179765d0ce41e`: https://github.com/alexoaraujo83/iam-control-center/actions/runs/40055207478. This is evidence for that exact base-branch commit only; the dependency-update PR must still pass audit, lint, typecheck, tests, and build on its own updated head SHA.
