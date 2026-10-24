@@ -12,5 +12,11 @@
     "lint": "pnpm --filter @iam-control-center/web lint",
     "typecheck": "pnpm --filter @iam-control-center/web typecheck",
     "test": "pnpm --filter @iam-control-center/web test"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "8.5.23",
+      "sharp": "0.35.5"
+    }
   }
 }
