@@ -12,3 +12,6 @@ coverage/
 .DS_Store
 playwright-report/
 test-results/
+
+# TypeScript incremental build cache
+**/*.tsbuildinfo
