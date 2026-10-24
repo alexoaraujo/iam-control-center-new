@@ -8,7 +8,7 @@ Bootstrap scaffold only. Authentication, authorization, persistence, and deploym
 ## Architecture
 - `apps/web`: Next.js App Router UI and server-side endpoints.
 - `database/migrations`: reviewed, versioned PostgreSQL migrations.
-- `.github/workflows/ci.yml`: pull-request quality gate.
+- `.github/workflows/quality.yml`: CI checks for push and pull requests targeting `main`.
 - `docs/`: architecture, security, evidence, and operations records.
 
 Auth0 is the identity provider; application authorization and tenant membership remain server-side application responsibilities. Never derive tenant access from email or user-editable metadata.
@@ -23,7 +23,7 @@ Auth0 is the identity provider; application authorization and tenant membership 
 ## Local setup
 ```bash
 corepack enable
-pnpm install
+pnpm install --frozen-lockfile
 cp .env.example apps/web/.env.local
 pnpm lint
 pnpm typecheck
@@ -32,7 +32,7 @@ pnpm build
 pnpm --filter @iam-control-center/web dev
 ```
 
-Bootstrap note: this archive omits a generated `pnpm-lock.yaml` because package resolution was not run in this environment. Generate and commit the lockfile with the pinned pnpm version, then change CI installation to `pnpm install --frozen-lockfile` before making CI a required merge check. Until then, CI is not considered release evidence. The app deliberately does not require Auth0 or a database to run the initial scaffold. Configure secrets only in local ignored env files or protected service environment settings.
+Bootstrap note: `pnpm-lock.yaml` is committed and CI uses `pnpm install --frozen-lockfile` with the pinned pnpm version. The quality workflow runs lint, typecheck, tests, and build; a successful run is evidence only for the exact tested SHA and does not by itself make GitHub branch rules enforceable. The health endpoint reports only whether the required Auth0 and database environment variables are present; it does not verify credentials, perform an Auth0 login, or establish database connectivity. The app deliberately remains a scaffold and does not require Auth0 or a database to run locally. Configure secrets only in local ignored env files or protected service environment settings.
 
 ## Evidence policy
 A result is PASS only when a check completed successfully against the exact commit SHA under review. A missing, skipped, stale, or unrelated check is not PASS. Production deployment requires explicit approval and a verified Preview evidence bundle.
