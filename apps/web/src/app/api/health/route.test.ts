@@ -32,6 +32,20 @@ describe("GET /api/health", () => {
     expect(serialized).not.toContain("example.auth0.com");
   });
 
+  it("reports each integration independently when configuration is partial", async () => {
+    vi.stubEnv("AUTH0_DOMAIN", "example.auth0.com");
+    vi.stubEnv("AUTH0_CLIENT_ID", "");
+    vi.stubEnv("DATABASE_URL", "postgres://user:password@localhost/iam");
+
+    const response = GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.authConfigured).toBe(false);
+    expect(body.databaseConfigured).toBe(true);
+    expect(JSON.stringify(body)).not.toContain("postgres://");
+  });
+
   it("reports integrations as unconfigured when required values are absent", async () => {
     vi.stubEnv("AUTH0_DOMAIN", "");
     vi.stubEnv("AUTH0_CLIENT_ID", "");
