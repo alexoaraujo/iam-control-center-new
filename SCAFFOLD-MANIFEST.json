@@ -55,9 +55,9 @@
       "test",
       "build"
     ],
-    "last_verified_sha": "9a8c311185af5c074f53a35df959ed17277085e4",
+    "last_verified_sha": "c0b0d19a9bc95d888a8ee77cd986da80e78cdf6d",
     "last_verified_runs": [
-      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40132794744"
+      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40133195417"
     ]
   },
   "known_limitations": [
@@ -80,8 +80,8 @@
     "audit_scope": "all dependencies",
     "audit_result": "PASS",
     "vulnerabilities_found": 0,
-    "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40132794744",
-    "audit_sha": "9a8c311185af5c074f53a35df959ed17277085e4",
-    "note": "The permanent quality workflow, including pnpm audit, passed on audit_sha. The run checked the PR merge commit combining the security branch head with fix/health-runtime-config. This evidence is specific to that tested merge commit; the updated manifest itself must pass the subsequent CI run."
+    "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40133195417",
+    "audit_sha": "c0b0d19a9bc95d888a8ee77cd986da80e78cdf6d",
+    "note": "The permanent quality workflow, including pnpm audit, passed on audit_sha. This run checked the PR merge commit combining the security branch head with fix/health-runtime-config. Evidence applies to that tested commit; every subsequent commit must pass CI before it is considered validated."
   }
 }
