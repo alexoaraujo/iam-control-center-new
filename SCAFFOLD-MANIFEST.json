@@ -2,7 +2,7 @@
   "project": "iam-control-center",
   "status": "bootstrap scaffold; not production-ready",
   "manifest_updated_at_utc": "2026-10-24",
-  "tracked_file_count": 29,
+  "tracked_file_count": 30,
   "tracked_files": [
     ".env.example",
     ".github/workflows/quality.yml",
@@ -17,6 +17,7 @@
     "apps/web/next.config.ts",
     "apps/web/package.json",
     "apps/web/src/app/api/health/route.ts",
+    "apps/web/src/app/api/health/route.whitespace.test.ts",
     "apps/web/src/app/layout.tsx",
     "apps/web/src/app/page.tsx",
     "apps/web/src/lib/env.test.ts",
