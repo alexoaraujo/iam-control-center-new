@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          pnpm audit --prod
+          pnpm audit
           audit_status=$?
           echo "pnpm audit exit code: $audit_status"
           echo "Audit is recorded separately from lint/typecheck/test/build; inspect findings before merge."
