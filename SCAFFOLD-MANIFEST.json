@@ -54,9 +54,9 @@
       "test",
       "build"
     ],
-    "last_verified_sha": "853d583f55754e1db0e1a6e0308fe9008d22eb52",
+    "last_verified_sha": "d2cd41f3b22d0296637195d9eddb6362fba8bca0",
     "last_verified_runs": [
-      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053650005",
+      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053769508",
       "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053582089"
     ]
   },
@@ -82,6 +82,6 @@
     "vulnerabilities_found": 0,
     "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053582089",
     "audit_sha": "d932b67f250913662b176a8c910043d283608cdd",
-    "note": "last_verified_sha records the code SHA before this metadata-only manifest update; the final manifest commit must be checked by standard CI."
+    "note": "last_verified_sha records the validated code SHA before this metadata-only manifest update; standard CI on the new manifest commit is the final gate."
   }
 }

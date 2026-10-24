@@ -17,7 +17,7 @@ The temporary GitHub Actions validation on commit `d932b67f250913662b176a8c91004
 - lint, typecheck, tests, and build
 - full `pnpm audit`: `No known vulnerabilities found` (exit code 0)
 
-The lockfile was committed by the workflow as `1e0ab603bb00d3ce2df7443c9e666948efe52cbe`. Standard CI then passed on SHA `853d583f55754e1db0e1a6e0308fe9008d22eb52`: https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053650005. The manifest/evidence update in the current commit still requires its own standard CI run before the PR can be considered validated.
+The lockfile was committed by the workflow as `1e0ab603bb00d3ce2df7443c9e666948efe52cbe`. Standard CI passed on SHA `d2cd41f3b22d0296637195d9eddb6362fba8bca0`: https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053769508 (attempt 2). This final manifest/evidence metadata update requires its own standard CI run before the PR can be considered validated.
 
 ## Security references
 - Next.js fixed release guidance: https://www.csa.gov.sg/alerts-and-advisories/alerts/al-2026-148/
