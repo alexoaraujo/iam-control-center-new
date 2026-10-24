@@ -50,11 +50,12 @@
     "install": "pnpm install --frozen-lockfile",
     "checks": [
       "lint",
+      "dependency audit",
       "typecheck",
       "test",
       "build"
     ],
-    "last_verified_sha": "d2cd41f3b22d0296637195d9eddb6362fba8bca0",
+    "last_verified_sha": "30e8e83389aeda38204a57133d612de216dddf6b",
     "last_verified_runs": [
       "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053769508",
       "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053582089"
@@ -82,6 +83,6 @@
     "vulnerabilities_found": 0,
     "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053582089",
     "audit_sha": "d932b67f250913662b176a8c910043d283608cdd",
-    "note": "last_verified_sha records the validated code SHA before this metadata-only manifest update; standard CI on the new manifest commit is the final gate."
+    "note": "The full dependency audit passed on the regenerated lockfile. The permanent quality workflow now runs pnpm audit on every push and relevant pull request; the commit adding this step must pass CI on its exact SHA."
   }
 }
