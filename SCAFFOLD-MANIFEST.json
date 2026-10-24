@@ -1,0 +1,43 @@
+{
+  "project": "iam-control-center",
+  "status": "bootstrap scaffold; not production-ready",
+  "file_count": 27,
+  "created_files": [
+    ".env.example",
+    ".github/CODEOWNERS",
+    ".github/pull_request_template.md",
+    ".github/workflows/ci.yml",
+    ".gitignore",
+    ".node-version",
+    ".npmrc",
+    "README.md",
+    "SECURITY.md",
+    "apps/web/eslint.config.mjs",
+    "apps/web/next-env.d.ts",
+    "apps/web/next.config.ts",
+    "apps/web/package.json",
+    "apps/web/src/app/api/health/route.ts",
+    "apps/web/src/app/layout.tsx",
+    "apps/web/src/app/page.tsx",
+    "apps/web/src/lib/env.test.ts",
+    "apps/web/src/lib/env.ts",
+    "apps/web/tsconfig.json",
+    "database/migrations/README.md",
+    "docs/architecture/decisions/0001-modular-monolith.md",
+    "docs/architecture/overview.md",
+    "docs/evidence/policy.md",
+    "docs/operations/environments.md",
+    "package.json",
+    "pnpm-workspace.yaml",
+    "tsconfig.base.json"
+  ],
+  "not_provisioned": [
+    "GitHub repository",
+    "Auth0 tenant",
+    "Vercel project",
+    "PostgreSQL instance",
+    "production deployment"
+  ],
+  "known_bootstrap_blocker": "pnpm-lock.yaml is not generated; generate and commit it, then switch CI to --frozen-lockfile before required checks.",
+  "production_ready": false
+}

@@ -1,0 +1,16 @@
+{
+  "name": "iam-control-center",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @iam-control-center/web dev",
+    "build": "pnpm --filter @iam-control-center/web build",
+    "lint": "pnpm --filter @iam-control-center/web lint",
+    "typecheck": "pnpm --filter @iam-control-center/web typecheck",
+    "test": "pnpm --filter @iam-control-center/web test"
+  }
+}
