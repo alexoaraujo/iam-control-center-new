@@ -1,16 +1,16 @@
 {
   "project": "iam-control-center",
   "status": "bootstrap scaffold; not production-ready",
-  "file_count": 27,
-  "created_files": [
+  "manifest_updated_at_utc": "2026-10-24",
+  "tracked_file_count": 28,
+  "tracked_files": [
     ".env.example",
-    ".github/CODEOWNERS",
-    ".github/pull_request_template.md",
-    ".github/workflows/ci.yml",
+    ".github/workflows/quality.yml",
     ".gitignore",
     ".node-version",
     ".npmrc",
     "README.md",
+    "SCAFFOLD-MANIFEST.json",
     "SECURITY.md",
     "apps/web/eslint.config.mjs",
     "apps/web/next-env.d.ts",
@@ -27,17 +27,43 @@
     "docs/architecture/overview.md",
     "docs/evidence/policy.md",
     "docs/operations/environments.md",
+    "main ci quality.json",
     "package.json",
+    "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
     "tsconfig.base.json"
   ],
-  "not_provisioned": [
-    "GitHub repository",
-    "Auth0 tenant",
-    "Vercel project",
-    "PostgreSQL instance",
-    "production deployment"
+  "repository": {
+    "created": true,
+    "visibility": "private"
+  },
+  "external_integrations_not_verified": [
+    "Auth0 tenant/application configuration and real OIDC login/session/logout",
+    "Vercel project, Preview deployment, environment variables, and deployment protections",
+    "Managed PostgreSQL provisioning, TLS connection, migrations, row-level security, and effective runtime privileges"
   ],
-  "known_bootstrap_blocker": "pnpm-lock.yaml is not generated; generate and commit it, then switch CI to --frozen-lockfile before required checks.",
+  "ci": {
+    "workflow": ".github/workflows/quality.yml",
+    "package_manager": "pnpm@10.12.1",
+    "node": "24.x",
+    "install": "pnpm install --frozen-lockfile",
+    "checks": [
+      "lint",
+      "typecheck",
+      "test",
+      "build"
+    ],
+    "last_verified_sha": "fb48b060882e026783285d736d44af1c95cc8d58",
+    "last_verified_runs": [
+      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40051386213",
+      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40051388616"
+    ]
+  },
+  "known_limitations": [
+    "Health endpoint reports presence of selected environment variables only; it does not prove Auth0 authentication or database connectivity.",
+    "pnpm currently ignores build scripts for esbuild, sharp, and unrs-resolver; quality checks passed without approving these scripts. Keep blocked unless a reproducible functional need is demonstrated.",
+    "GitHub ruleset UI indicates native ruleset enforcement is unavailable for this private repository on the current free plan; manual review and CI checks are compensating process controls, not equivalent enforcement.",
+    "No authentication, authorization, tenant persistence, database migrations, or production deployment is implemented by this scaffold."
+  ],
   "production_ready": false
 }
