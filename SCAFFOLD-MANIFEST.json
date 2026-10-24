@@ -55,14 +55,14 @@
       "test",
       "build"
     ],
-    "last_verified_sha": "4938cba4a65ec1fc00b7ac25159465f36fff2c8f",
+    "last_verified_sha": "9a8c311185af5c074f53a35df959ed17277085e4",
     "last_verified_runs": [
-      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40055317828"
+      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40132794744"
     ]
   },
   "known_limitations": [
     "Health endpoint reports presence of selected environment variables only; it does not prove Auth0 authentication or database connectivity.",
-    "pnpm currently ignores build scripts for esbuild, sharp, and unrs-resolver; quality checks passed without approving these scripts. Keep blocked unless a reproducible functional need is demonstrated.",
+    "pnpm currently ignores install/build scripts for esbuild and unrs-resolver; the latest quality run passed without approving them. Keep blocked unless a reproducible functional need is demonstrated and the specific script is reviewed.",
     "GitHub ruleset UI indicates native ruleset enforcement is unavailable for this private repository on the current free plan; manual review and CI checks are compensating process controls, not equivalent enforcement.",
     "No authentication, authorization, tenant persistence, database migrations, or production deployment is implemented by this scaffold."
   ],
@@ -80,8 +80,8 @@
     "audit_scope": "all dependencies",
     "audit_result": "PASS",
     "vulnerabilities_found": 0,
-    "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40055317828",
-    "audit_sha": "4938cba4a65ec1fc00b7ac25159465f36fff2c8f",
-    "note": "The permanent quality workflow, including pnpm audit, passed on audit_sha. Evidence is specific to that commit and must be rechecked for any later PR head."
+    "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40132794744",
+    "audit_sha": "9a8c311185af5c074f53a35df959ed17277085e4",
+    "note": "The permanent quality workflow, including pnpm audit, passed on audit_sha. The run checked the PR merge commit combining the security branch head with fix/health-runtime-config. This evidence is specific to that tested merge commit; the updated manifest itself must pass the subsequent CI run."
   }
 }
