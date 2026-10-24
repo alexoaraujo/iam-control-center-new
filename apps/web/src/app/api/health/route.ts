@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPublicRuntimeStatus } from "@/lib/env";
+import { getPublicRuntimeStatus } from "../../../lib/env";
 
 export function GET() {
   return NextResponse.json({
