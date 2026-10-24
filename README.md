@@ -8,7 +8,7 @@ Bootstrap scaffold only. Authentication, authorization, persistence, and deploym
 ## Architecture
 - `apps/web`: Next.js App Router UI and server-side endpoints.
 - `database/migrations`: reviewed, versioned PostgreSQL migrations.
-- `.github/workflows/quality.yml`: CI checks for push and pull requests targeting `main`.
+- `.github/workflows/quality.yml`: CI checks for pushes and pull requests targeting any branch.
 - `docs/`: architecture, security, evidence, and operations records.
 
 Auth0 is the identity provider; application authorization and tenant membership remain server-side application responsibilities. Never derive tenant access from email or user-editable metadata.
