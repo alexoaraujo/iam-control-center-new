@@ -32,7 +32,7 @@ pnpm build
 pnpm --filter @iam-control-center/web dev
 ```
 
-Bootstrap note: `pnpm-lock.yaml` is committed and CI uses `pnpm install --frozen-lockfile` with the pinned pnpm version. The quality workflow runs lint, typecheck, tests, and build; a successful run is evidence only for the exact tested SHA and does not by itself make GitHub branch rules enforceable. The health endpoint reports only whether the required Auth0 and database environment variables are present; it does not verify credentials, perform an Auth0 login, or establish database connectivity. The app deliberately remains a scaffold and does not require Auth0 or a database to run locally. Configure secrets only in local ignored env files or protected service environment settings.
+Bootstrap note: `pnpm-lock.yaml` is committed and CI uses `pnpm install --frozen-lockfile` with the pinned pnpm version. The quality workflow runs dependency audit, lint, typecheck, tests, and build; a successful run is evidence only for the exact tested SHA and does not by itself make GitHub branch rules enforceable. The health endpoint reports only whether the required Auth0 and database environment variables are present; it does not verify credentials, perform an Auth0 login, or establish database connectivity. The app deliberately remains a scaffold and does not require Auth0 or a database to run locally. Configure secrets only in local ignored env files or protected service environment settings.
 
 ## Evidence policy
 A result is PASS only when a check completed successfully against the exact commit SHA under review. A missing, skipped, stale, or unrelated check is not PASS. Production deployment requires explicit approval and a verified Preview evidence bundle.
