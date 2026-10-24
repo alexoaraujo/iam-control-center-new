@@ -55,10 +55,9 @@
       "test",
       "build"
     ],
-    "last_verified_sha": "30e8e83389aeda38204a57133d612de216dddf6b",
+    "last_verified_sha": "4938cba4a65ec1fc00b7ac25159465f36fff2c8f",
     "last_verified_runs": [
-      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053769508",
-      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053582089"
+      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40055317828"
     ]
   },
   "known_limitations": [
@@ -81,8 +80,8 @@
     "audit_scope": "all dependencies",
     "audit_result": "PASS",
     "vulnerabilities_found": 0,
-    "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40053582089",
-    "audit_sha": "d932b67f250913662b176a8c910043d283608cdd",
-    "note": "The full dependency audit passed on the regenerated lockfile. The permanent quality workflow now runs pnpm audit on every push and relevant pull request; the commit adding this step must pass CI on its exact SHA."
+    "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40055317828",
+    "audit_sha": "4938cba4a65ec1fc00b7ac25159465f36fff2c8f",
+    "note": "The permanent quality workflow, including pnpm audit, passed on audit_sha. Evidence is specific to that commit and must be rechecked for any later PR head."
   }
 }
