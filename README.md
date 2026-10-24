@@ -3,7 +3,7 @@
 Security-first, multi-tenant identity and access management control plane.
 
 ## Status
-Bootstrap scaffold only. Authentication, authorization, persistence, and deployment are **not yet production-ready**. No real Auth0 tenant, database, GitHub repository, or Vercel project is provisioned by this archive.
+Bootstrap scaffold only. Authentication, authorization, persistence, and deployment are **not yet production-ready**. This private GitHub repository exists, but this scaffold does not configure or verify a working Auth0 login, managed PostgreSQL connection, or Vercel deployment.
 
 ## Architecture
 - `apps/web`: Next.js App Router UI and server-side endpoints.
