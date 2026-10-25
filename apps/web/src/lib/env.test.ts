@@ -14,6 +14,17 @@ describe("getPublicRuntimeStatus", () => {
     });
   });
 
+  it("reports integrations as unconfigured when values contain only whitespace", () => {
+    vi.stubEnv("AUTH0_DOMAIN", "   ");
+    vi.stubEnv("AUTH0_CLIENT_ID", "\t");
+    vi.stubEnv("DATABASE_URL", " \n ");
+
+    expect(getPublicRuntimeStatus()).toEqual({
+      authConfigured: false,
+      databaseConfigured: false,
+    });
+  });
+
   it("does not expose secret values in its result", () => {
     vi.stubEnv("AUTH0_DOMAIN", "example.auth0.com");
     vi.stubEnv("AUTH0_CLIENT_ID", "public-client-id");
