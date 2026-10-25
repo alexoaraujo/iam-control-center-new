@@ -1,7 +1,7 @@
 {
   "project": "iam-control-center",
   "status": "bootstrap scaffold; not production-ready",
-  "manifest_updated_at_utc": "2026-10-24",
+  "manifest_updated_at_utc": "2026-10-25",
   "tracked_file_count": 30,
   "tracked_files": [
     ".env.example",
@@ -37,12 +37,12 @@
   ],
   "repository": {
     "created": true,
-    "visibility": "private"
+    "visibility": "public"
   },
   "external_integrations_not_verified": [
     "Auth0 tenant/application configuration and real OIDC login/session/logout",
-    "Vercel project, Preview deployment, environment variables, and deployment protections",
-    "Managed PostgreSQL provisioning, TLS connection, migrations, row-level security, and effective runtime privileges"
+    "Neon runtime connection with a non-empty least-privilege DATABASE_URL, TLS verification, effective grants, and tenant-isolation/RLS tests",
+    "Vercel Preview external HTTP validation and proof that GitHub Development/Preview deployment records satisfy the active ruleset"
   ],
   "ci": {
     "workflow": ".github/workflows/quality.yml",
@@ -64,8 +64,8 @@
   "known_limitations": [
     "Health endpoint reports presence of selected environment variables only; it does not prove Auth0 authentication or database connectivity.",
     "pnpm currently ignores install/build scripts for esbuild and unrs-resolver; the latest quality run passed without approving them. Keep blocked unless a reproducible functional need is demonstrated and the specific script is reviewed.",
-    "GitHub ruleset UI indicates native ruleset enforcement is unavailable for this private repository on the current free plan; manual review and CI checks are compensating process controls, not equivalent enforcement.",
-    "No authentication, authorization, tenant persistence, database migrations, or production deployment is implemented by this scaffold."
+    "No authentication, authorization, tenant persistence, database migrations, or production deployment is implemented by this scaffold.",
+    "The repository is public. The active main_ci_quality ruleset (ID 25821220) requires the quality status check and successful Development and Preview deployments; verify the live ruleset before treating a checked-in snapshot as authoritative."
   ],
   "production_ready": false,
   "dependency_security": {
@@ -84,5 +84,20 @@
     "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40133195417",
     "audit_sha": "c0b0d19a9bc95d888a8ee77cd986da80e78cdf6d",
     "note": "The permanent quality workflow, including pnpm audit, passed on audit_sha. This run checked the PR merge commit combining the security branch head with fix/health-runtime-config. Evidence applies to that tested commit; every subsequent commit must pass CI before it is considered validated."
+  },
+  "governance": {
+    "active_ruleset": "main_ci_quality",
+    "active_ruleset_id": 25821220,
+    "target": "refs/heads/main",
+    "enforcement": "active",
+    "required_status_checks": [
+      "quality"
+    ],
+    "required_deployment_environments": [
+      "Development",
+      "Preview"
+    ],
+    "bypass_actors": [],
+    "observed_at_utc": "2026-10-25T22:57:00Z"
   }
 }
