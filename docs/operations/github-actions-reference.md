@@ -57,6 +57,8 @@ A documentação oficial explica a criação e a importação de rulesets: [Crea
 
 A regra ativa também exige deployments bem-sucedidos nos ambientes `Development` e `Preview`. Antes de considerar a política pronta para o fluxo de merge, confirme que esses ambientes são publicados e geram estados de deployment para os SHAs que devem entrar em `main`. A leitura da API de rulesets confirma a configuração declarada, mas não comprova que os deployments exigidos ocorreram.
 
+A atualização do JSON com os campos observados no ruleset ativo está proposta separadamente no [PR #20](https://github.com/alexoaraujo83/iam-control-center/pull/20). No momento deste registro, o PR #20 está em Draft e seus checks ainda precisam concluir com sucesso. Até a revisão e integração verificadas dessa correção, trate o JSON presente em `main` como snapshot desatualizado; depois da integração, confira o conteúdo efetivo em `main` antes de importar. Mesmo com o snapshot corrigido, não o importe no próprio repositório como novo ruleset sem intenção explícita.
+
 ### Evidência relacionada de workflows
 
 [PR #10 — ciclo de vida de branches Neon isoladas para PRs](https://github.com/alexoaraujo83/iam-control-center/pull/10)
