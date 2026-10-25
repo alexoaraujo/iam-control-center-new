@@ -1,0 +1,109 @@
+name: Neon PR Branch Lifecycle
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neon-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  create_preview_branch:
+    name: Create isolated schema-only Neon branch
+    # Fork PR workflows do not receive repository secrets; skip because no preview is created for forks.
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Calculate branch expiration
+        id: expiration
+        shell: bash
+        run: echo "expires_at=$(date -u --date='+14 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      # Neon Manage Branches docs currently list 3 root branches on Free;
+      # schema-only branches are roots. The API's branches_limit is a separate quota.
+      # Re-check the plan and capacity if the account changes. Expiration is not a capacity guarantee.
+      - name: Check Neon root-branch capacity
+        id: capacity
+        shell: bash
+        env:
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          PREVIEW_BRANCH: preview/pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          response="$(curl --silent --show-error --fail \
+            --header "Authorization: Bearer ${NEON_API_KEY}" \
+            --header "Accept: application/json" \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches?limit=100")"
+          jq -e '.branches | type == "array"' <<< "$response" >/dev/null
+          existing_count="$(jq --arg name "$PREVIEW_BRANCH" '[.branches[] | select(.name == $name)] | length' <<< "$response")"
+          if [[ "$existing_count" -gt 0 ]]; then
+            existing_state="$(jq -r --arg name "$PREVIEW_BRANCH" '.branches[] | select(.name == $name) | .current_state' <<< "$response" | head -n 1)"
+            if [[ "$existing_state" != "ready" ]]; then
+              echo "::error::Existing Neon preview branch is not ready; refusing to create or replace it automatically."
+              exit 1
+            fi
+            echo "Preview branch already exists and is ready; no additional root branch is needed."
+            echo "should_create=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          root_count="$(jq '[.branches[] | select(.parent_id == null)] | length' <<< "$response")"
+          if [[ "$root_count" -ge 3 ]]; then
+            echo "::error::Neon Free root-branch allowance is 3; ${root_count} root branches already exist. Do not create another preview until an authorized temporary branch has been cleaned up."
+            exit 1
+          fi
+          echo "should_create=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create schema-only Neon branch
+        id: create_neon_branch
+        if: steps.capacity.outputs.should_create == 'true'
+        uses: neondatabase/create-branch-action@fb620d43d4c565abaf088b848a4e28e5c4ea4d9c
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch_name: preview/pr-${{ github.event.pull_request.number }}
+          parent_branch: production
+          branch_type: schema-only
+          expires_at: ${{ steps.expiration.outputs.expires_at }}
+
+  delete_preview_branch:
+    name: Delete Neon PR branch
+    # Only clean up previews created for same-repository PRs; fork PRs never get a preview.
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check whether the preview branch exists
+        id: preview
+        shell: bash
+        env:
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          PREVIEW_BRANCH: preview/pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          response="$(curl --silent --show-error --fail \
+            --header "Authorization: Bearer ${NEON_API_KEY}" \
+            --header "Accept: application/json" \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches?limit=100")"
+          jq -e '.branches | type == "array"' <<< "$response" >/dev/null
+          count="$(jq --arg name "$PREVIEW_BRANCH" '[.branches[] | select(.name == $name)] | length' <<< "$response")"
+          if [[ "$count" -eq 0 ]]; then
+            echo "Preview branch does not exist; cleanup is already complete."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Delete Neon branch
+        if: steps.preview.outputs.exists == 'true'
+        uses: neondatabase/delete-branch-action@4468d825d5a88ef4012f1705a82f02ec3072f776 # v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch: preview/pr-${{ github.event.pull_request.number }}
