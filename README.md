@@ -3,13 +3,14 @@
 Security-first, multi-tenant identity and access management control plane.
 
 ## Status
-Bootstrap scaffold only. Authentication, authorization, persistence, and deployment are **not yet production-ready**. This private GitHub repository exists, but this scaffold does not configure or verify a working Auth0 login, managed PostgreSQL connection, or Vercel deployment.
+Bootstrap scaffold only. Authentication, authorization, persistence, and deployment are **not yet production-ready**. This repository does not configure or verify a working Auth0 login, managed PostgreSQL connection, or Vercel deployment.
 
 ## Architecture
 - `apps/web`: Next.js App Router UI and server-side endpoints.
 - `database/migrations`: reviewed, versioned PostgreSQL migrations.
 - `.github/workflows/quality.yml`: CI checks for pushes and pull requests targeting any branch.
 - `docs/`: architecture, security, evidence, and operations records.
+- [Neon database management reference](docs/reference/neon-databases.md): official guidance and project-specific safety checklist for database ownership, privileges, renaming/deletion, and migration readiness.
 
 Auth0 is the identity provider; application authorization and tenant membership remain server-side application responsibilities. Never derive tenant access from email or user-editable metadata.
 
@@ -18,7 +19,7 @@ Auth0 is the identity provider; application authorization and tenant membership 
 - pnpm 10.12.1 (pinned through `packageManager`)
 - PostgreSQL for future integration tests
 - Auth0 development tenant created separately
-- Private GitHub repository and Vercel project created separately
+- GitHub repository and Vercel project created separately
 
 ## Local setup
 ```bash
