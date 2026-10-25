@@ -3,7 +3,7 @@
 Security-first, multi-tenant identity and access management control plane.
 
 ## Status
-Bootstrap scaffold only. Authentication, authorization, persistence, and deployment are **not yet production-ready**. This private GitHub repository exists, but this scaffold does not configure or verify a working Auth0 login, managed PostgreSQL connection, or Vercel deployment.
+Bootstrap scaffold only. Authentication, authorization, persistence, and deployment are **not yet production-ready**. This GitHub repository is public. A Vercel Preview deployment exists, but external HTTP behavior and runtime integrations are not yet fully verified. This scaffold does not provide a working Auth0 login or managed PostgreSQL connection.
 
 ## Architecture
 - `apps/web`: Next.js App Router UI and server-side endpoints.
@@ -31,6 +31,8 @@ pnpm test
 pnpm build
 pnpm --filter @iam-control-center/web dev
 ```
+
+Repository governance: the active ruleset `main_ci_quality` targets `main` and requires the `quality` check plus successful deployments to the GitHub environments `Development` and `Preview`. Keep the versioned ruleset snapshot synchronized with the live API state; a stale JSON export is not evidence of current enforcement.
 
 Bootstrap note: `pnpm-lock.yaml` is committed and CI uses `pnpm install --frozen-lockfile` with the pinned pnpm version. The quality workflow runs dependency audit, lint, typecheck, tests, and build; a successful run is evidence only for the exact tested SHA and does not by itself make GitHub branch rules enforceable. The health endpoint reports only whether the required Auth0 and database environment variables are present; it does not verify credentials, perform an Auth0 login, or establish database connectivity. The app deliberately remains a scaffold and does not require Auth0 or a database to run locally. Configure secrets only in local ignored env files or protected service environment settings.
 
