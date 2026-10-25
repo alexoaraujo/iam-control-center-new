@@ -24,7 +24,7 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 - **Tipo:** documentação oficial Neon.
 - **Usar para:** instalar/conectar o GitHub App, compreender NEON_API_KEY e NEON_PROJECT_ID, adaptar o workflow de criação/exclusão de branches para PRs e consultar actions de schema diff/reset.
 - **Regras relevantes:** o workflow exemplificativo é um ponto de partida, não uma garantia de segurança de produção. Os dados de conexão retornados pela action não devem ser impressos em logs. As variáveis/secrets são removidas quando a integração é desconectada, podendo deixar workflows sem credenciais.
-- **Evidência relacionada:** [PR #10](https://github.com/alexoaraujo83/iam-control-center/pull/10); [workflow executado #40155808016](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40155808016), success no SHA `610e3474c59e5b67516d5cc255b288765849eafd`.
+- **Evidência relacionada:** [PR #10](https://github.com/alexoaraujo83/iam-control-center/pull/10); [workflow executado #40156821432](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40156821432), success no SHA `c595e41334c34cc3d57c557d9fe6b57058f249c6`; preflight validou a reutilização de uma preview existente em estado ready.
 - **Critérios de validação:** confirmar o evento do PR, nome determinístico da branch, origem/tipo da branch, outputs secretos, permissões do workflow, expiração, exclusão e comportamento de retry/cleanup. Confirmar que o workflow não executa migrations ou SQL em production.
 - **Limite:** o sucesso do workflow não comprova, isoladamente, que todos os cenários adversariais, concorrentes ou de falha foram exercitados.
 
@@ -62,16 +62,16 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 - **Usar para:** avaliar branch que copia schema sem copiar registros, especialmente em testes em que dados reais não devem aparecer.
 - **Evidência relacionada:** [PR #10](https://github.com/alexoaraujo83/iam-control-center/pull/10); estado da branch preview/pr-10 retornou init_source parent-schema.
 - **Critérios de validação:** confirmar o tipo da branch no Neon; provar que dados de produção não estão disponíveis nela; testar a criação com o workflow atual e documentar o significado dos campos retornados.
-- **Limite:** não considerar a palavra schema-only no workflow como prova suficiente de isolamento; consultar o estado real e testar o resultado.
+- **Limite importante:** branches `schema-only` são branches raiz no Neon e consomem a quota de roots; não considerar a palavra schema-only no workflow como prova suficiente de isolamento, consultar o estado real e testar o resultado.
 
 ### A6. Neon plans and quotas
 
-- **Fonte:** [https://neon.com/docs/introduction/plans](https://neon.com/docs/introduction/plans)
+- **Fonte:** [Neon plans](https://neon.com/docs/introduction/plans); [Manage branches — root branch allowance](https://neon.com/docs/manage/branches)
 - **Tipo:** documentação oficial de planos/limites.
 - **Usar para:** verificar quotas incluídas, recursos por plano e limites relevantes a branches.
-- **Evidência relacionada:** projeto Neon iam-control-center consultado em 2026-10-25: plano `free_v3`; registro do projeto retornou `branches_limit: 10`. Branches observadas: `production`, `preview/pr-10` e `preview/pr-12`.
-- **Critérios de validação:** confirmar quota e consumo atuais no console/API antes de criar branches em massa; testar tratamento para limite atingido; aplicar expiração/cleanup; considerar que expiração futura não libera capacidade imediatamente.
-- **Correção aplicada em 2026-10-25:** a alegação fixa de “3 root branches” foi removida do workflow e a descrição do PR #10 foi atualizada. O campo `branches_limit: 10` é quota geral reportada pela API e não prova, sozinho, limite específico de branches raiz. O CI e o workflow Neon passaram no SHA `610e3474c59e5b67516d5cc255b288765849eafd`.
+- **Evidência relacionada:** projeto Neon iam-control-center consultado em 2026-10-25: plano `free_v3`; API retorna `branches_limit: 10` como quota geral. A documentação atual de Manage branches lista 3 roots no Free e classifica branches `schema-only` como roots. O projeto tem exatamente três roots observadas: `production`, `preview/pr-10` e `preview/pr-12`.
+- **Critérios de validação:** consultar quota/uso antes de criar branches; testar a barreira de quota cheia; aplicar expiração/cleanup; não presumir que TTL libera capacidade antes da exclusão efetiva.
+- **Correção aplicada:** o workflow agora consulta branches pela API, reutiliza a preview existente se estiver ready e falha antes de criar outra quando já existem 3 roots. CI e workflow Neon passaram no SHA `c595e41334c34cc3d57c557d9fe6b57058f249c6`; somente o caminho de reutilização foi exercitado até agora.
 - **Observação:** quotas e recursos de plano são dinâmicos; esta seção não substitui a consulta ao estado atual da conta.
 
 ### A9. Neon Free Plan — artigo de contexto complementar
@@ -98,7 +98,7 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 | Action | Fonte | Estado no workflow consultado | Critério |
 |---|---|---|---|
 | Create branch | [neondatabase/create-branch-action](https://github.com/neondatabase/create-branch-action) | Pin no SHA fb620d43d4c565abaf088b848a4e28e5c4ea4d9c em .github/workflows/neon-branch.yml | Confirmar que o SHA vem do repositório upstream correto; rever diff e logs ao atualizar. |
-| Delete branch | [neondatabase/delete-branch-action](https://github.com/neondatabase/delete-branch-action) | Usa tag @v3 na versão consultada; pin imutável pendente | Verificar release/commit upstream, testar a exclusão pelo nome/ID correto e fixar SHA completo. |
+| Delete branch | [neondatabase/delete-branch-action](https://github.com/neondatabase/delete-branch-action) | Pin no SHA `4468d825d5a88ef4012f1705a82f02ec3072f776` em `.github/workflows/neon-branch.yml` | Testar exclusão pelo nome/ID correto e confirmar a ausência da preview após fechamento autorizado de PR. |
 | Schema diff | [neondatabase/schema-diff-action](https://github.com/neondatabase/schema-diff-action) | Referência complementar; não habilitada no workflow consultado | Se habilitada, limitar permissões de comentário e leitura, tratar output como dados de PR e confirmar diff contra branches corretas. |
 | Reset branch | [neondatabase/reset-branch-action](https://github.com/neondatabase/reset-branch-action) | Referência complementar; não habilitada no workflow consultado | Exigir ação deliberada, revisão e branch-alvo inequívoca; nunca resetar production como rotina de PR. |
 
@@ -233,19 +233,20 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 
 - **Fonte:** [https://github.com/alexoaraujo83/iam-control-center/pull/10](https://github.com/alexoaraujo83/iam-control-center/pull/10)
 - **Tipo:** mudança de workflow.
-- **Head SHA observado:** `610e3474c59e5b67516d5cc255b288765849eafd`.
-- **Evidências atuais:** [CI #40155808041](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40155808041) e [Neon PR Branch Lifecycle #40155808016](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40155808016), ambas success no SHA exato.
+- **Head SHA observado:** `c595e41334c34cc3d57c557d9fe6b57058f249c6`.
+- **Evidências atuais:** [CI #40156821442](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40156821442) e [Neon PR Branch Lifecycle #40156821432](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40156821432), ambas success no SHA exato.
 - **Estado observado em 2026-10-25:** Draft/open; merge não realizado.
-- **Correções aplicadas:** ação de exclusão fixada no SHA imutável `4468d825d5a88ef4012f1705a82f02ec3072f776`; alegação fixa de quota removida do workflow e descrição atualizada.
-- **Pendências:** teste real de fechamento/cleanup; cenários de falha, concorrência, cancelamento e retry; revisão de permissões mínimas do workflow.
+- **Correções aplicadas:** ações fixadas em SHA imutável; preflight consulta a Neon API, reutiliza preview existente ready e impede nova root quando o limite Free de 3 está cheio.
+- **Pendências:** testar explicitamente o caminho de quota cheia; testar fechamento/cleanup real, falha, concorrência, cancelamento e retry; revisar permissões mínimas do workflow.
 - **Critério:** comportamento real das branches comprovado; sem migrations, deploy ou escrita em production.
 
 ### E4. Estado Neon observado
 
-- **Fonte de verificação:** connector Neon consultado em 2026-10-24; painel e API do Neon são a referência operacional para o estado atual.
-- **Projeto retornado:** iam-control-center, id floral-surf-85783683, região aws-sa-east-1, PostgreSQL 18, plano free_v3.
-- **Branches retornadas em 2026-10-25:** `production` (ready), `preview/pr-10` (ready) e `preview/pr-12` (ready); previews com `init_source: parent-schema`, zero bytes gravados reportados e expiração em 2026-11-08.
-- **Critério:** tratar como snapshot temporal, não como configuração imutável. Reconsultar branch, expiração, uso e quotas antes de qualquer operação que altere recursos.
+- **Fonte de verificação:** connector Neon consultado em 2026-10-25; painel e API do Neon são a referência operacional para o estado atual.
+- **Projeto retornado:** iam-control-center, id `floral-surf-85783683`, região `aws-sa-east-1`, PostgreSQL 18, plano `free_v3`.
+- **Branches retornadas:** `production` (ready, `protected: false`), `preview/pr-10` (ready) e `preview/pr-12` (ready). Previews com `init_source: parent-schema`, zero bytes gravados reportados e expiração em 2026-11-08.
+- **Quota e proteção:** a documentação atual lista 3 roots no Free; as três roots estão ocupadas. Neon protected branches só está disponível em planos pagos; não tentar ativar no Free. A rede pública permanece habilitada; não alterar sem inventariar consumidores.
+- **Critério:** tratar como snapshot temporal, não como configuração imutável. Reconsultar branches, expiração, uso e quotas antes de qualquer operação que altere recursos.
 
 ---
 
@@ -253,8 +254,8 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 
 | ID | Pendência | Evidência necessária para fechar |
 |---|---|---|
-| REF-01 | Fixar o SHA da delete-branch-action | **Implementado:** SHA `4468d825d5a88ef4012f1705a82f02ec3072f776`; CI e workflow Neon passaram no SHA `610e3474c59e5b67516d5cc255b288765849eafd`. Manter revisão do upstream e comportamento de exclusão real como evidência complementar. |
-| REF-02 | Resolver a alegação “3 root branches” do PR #10 | **Correção textual aplicada:** removida do workflow e descrição do PR atualizada; `branches_limit: 10` não deve ser interpretado como limite de root branches. Confirmar quota efetiva antes de aumentar concorrência. |
+| REF-01 | Fixar o SHA da delete-branch-action | **Implementado:** SHA `4468d825d5a88ef4012f1705a82f02ec3072f776`; workflow e CI passaram no head atual `c595e41334c34cc3d57c557d9fe6b57058f249c6`. Cleanup real ainda pendente. |
+| REF-02 | Respeitar quota de branches raiz no Neon Free | **Guard implementado:** documentação oficial lista 3 roots no Free; API retorna `branches_limit: 10` como quota geral separada. Preflight impede criação de quarta root; caminho de quota cheia ainda precisa ser exercitado. |
 | REF-03 | Confirmar proteção de branch/merge no repo privado com plano Free | Evidência de configuração aplicada. Se indisponível, manter como limitação, não como controle ativo. |
 | REF-04 | Implementar e provar Auth0 OIDC E2E | Login/callback/logout, sessão, validação JWKS/issuer/audience/expiração, testes negativos e autorização no servidor. |
 | REF-05 | Criar/testar migrations PostgreSQL separadamente | PR de SQL revisado; testes isolados de empty DB/upgrade/RLS/privilégios/tenant boundaries/rollback ou forward recovery. |
