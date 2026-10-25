@@ -4,8 +4,7 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, closed]
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: neon-pr-${{ github.event.pull_request.number }}
