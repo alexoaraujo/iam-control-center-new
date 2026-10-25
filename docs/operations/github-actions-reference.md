@@ -37,6 +37,26 @@ O JSON consultado exige um status check cujo contexto é `quality`. Esse nome pr
 
 Antes de importar ou reaplicar uma configuração exportada, comparar o arquivo com a configuração ativa no GitHub. Não presumir que identificadores exportados, o contexto de integração ou o estado do enforcement continuam atuais. Esta documentação não altera nem substitui a configuração ativa do ruleset.
 
+#### Divergência identificada na auditoria de 2026-10-25
+
+A leitura da API do GitHub para o ruleset ativo `25821220` retornou o nome `main_ci_quality`, enforcement `active` e alvo `refs/heads/main`. A comparação com o arquivo versionado `main ci quality.json` identificou divergências materiais:
+
+| Item | JSON versionado (SHA de blob consultado) | Ruleset ativo retornado pela API |
+|---|---|---|
+| Identificação | ID `25757502`, nome `main ci quality` | ID `25821220`, nome `main_ci_quality` |
+| Status check | `quality`, política estrita habilitada | `quality`, política estrita habilitada |
+| Resolução de threads de revisão | Obrigatória (`true`) | Não obrigatória (`false`) |
+| Aprovação extra para alterações sem atribuição | Não exigida (`false`) | Exigida (`true`) |
+| Métodos de merge | `merge`, `squash`, `rebase` | `squash`, `rebase` |
+| Regra de exclusão da branch | Não consta no arquivo | Regra `deletion` ativa |
+| Deployments obrigatórios | Não constam no arquivo | Ambientes `Development` e `Preview` |
+
+**Conclusão:** o arquivo `main ci quality.json` não representa fielmente o ruleset ativo observado nesta auditoria e não deve ser usado como cópia de restauração/importação sem reconciliação explícita. Não importar o arquivo atual sobre a configuração ativa: isso pode modificar controles de revisão e métodos de merge e deixar de representar regras de exclusão e deployments. Primeiro defina a política desejada, gere um JSON fiel a essa política e revise o arquivo importado na interface antes de salvar.
+
+A documentação oficial explica a criação e a importação de rulesets: [Creating rulesets for a repository](https://docs.github.com/pt/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository) e [Managing rulesets for repositories in your organization](https://docs.github.com/pt/organizations/managing-organization-settings/managing-rulesets-for-repositories-in-your-organization). A importação de um JSON cria uma configuração que ainda precisa ser revisada e salva; o arquivo não prova, sozinho, que a configuração ativa corresponde a ele.
+
+A regra ativa também exige deployments bem-sucedidos nos ambientes `Development` e `Preview`. Antes de considerar a política pronta para o fluxo de merge, confirme que esses ambientes são publicados e geram estados de deployment para os SHAs que devem entrar em `main`. A leitura da API de rulesets confirma a configuração declarada, mas não comprova que os deployments exigidos ocorreram.
+
 ### Evidência relacionada de workflows
 
 [PR #10 — ciclo de vida de branches Neon isoladas para PRs](https://github.com/alexoaraujo83/iam-control-center/pull/10)
