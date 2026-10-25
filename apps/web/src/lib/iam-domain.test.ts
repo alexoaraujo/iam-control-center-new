@@ -47,6 +47,25 @@ describe("evaluateAuthorization", () => {
     expect(evaluateAuthorization(input)).toEqual({ outcome: "deny", reason });
   });
 
+  it("denies an unsupported permission even when a matching grant exists", () => {
+    const input: AuthorizationInput = {
+      ...allowedInput,
+      requiredPermission: "tenant.admin",
+      grants: [
+        {
+          tenantId: "tenant-1",
+          membershipId: "membership-1",
+          permissionKey: "tenant.admin",
+        },
+      ],
+    };
+
+    expect(evaluateAuthorization(input)).toEqual({
+      outcome: "deny",
+      reason: "permission_not_granted",
+    });
+  });
+
   it("does not treat an email or provider metadata as a grant", () => {
     const input = { ...allowedInput, grants: [] };
     expect(evaluateAuthorization(input)).toEqual({
