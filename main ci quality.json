@@ -54,15 +54,6 @@
     },
     {
       "type": "deletion"
-    },
-    {
-      "type": "required_deployments",
-      "parameters": {
-        "required_deployment_environments": [
-          "Development",
-          "Preview"
-        ]
-      }
     }
   ],
   "bypass_actors": []
