@@ -1,7 +1,7 @@
 # Catálogo permanente de fontes — IAM Control Center
 
-**Versão:** 1.0  
-**Última revisão das páginas e evidências:** 2026-10-24 (America/Sao_Paulo).  
+**Versão:** 1.1  
+**Última revisão das páginas e evidências:** 2026-10-25 (America/Sao_Paulo).  
 **Responsável pelo uso:** manutenção do projeto IAM Control Center.  
 **Escopo:** fontes primárias, documentação técnica complementar, artefatos do repositório, evidência de CI e critérios de aceitação para identidade, autorização, PostgreSQL, Neon e GitHub Actions.
 
@@ -24,7 +24,7 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 - **Tipo:** documentação oficial Neon.
 - **Usar para:** instalar/conectar o GitHub App, compreender NEON_API_KEY e NEON_PROJECT_ID, adaptar o workflow de criação/exclusão de branches para PRs e consultar actions de schema diff/reset.
 - **Regras relevantes:** o workflow exemplificativo é um ponto de partida, não uma garantia de segurança de produção. Os dados de conexão retornados pela action não devem ser impressos em logs. As variáveis/secrets são removidas quando a integração é desconectada, podendo deixar workflows sem credenciais.
-- **Evidência relacionada:** [PR #10](https://github.com/alexoaraujo83/iam-control-center/pull/10); [workflow executado #40148092168](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40148092168).
+- **Evidência relacionada:** [PR #10](https://github.com/alexoaraujo83/iam-control-center/pull/10); [workflow executado #40155808016](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40155808016), success no SHA `610e3474c59e5b67516d5cc255b288765849eafd`.
 - **Critérios de validação:** confirmar o evento do PR, nome determinístico da branch, origem/tipo da branch, outputs secretos, permissões do workflow, expiração, exclusão e comportamento de retry/cleanup. Confirmar que o workflow não executa migrations ou SQL em production.
 - **Limite:** o sucesso do workflow não comprova, isoladamente, que todos os cenários adversariais, concorrentes ou de falha foram exercitados.
 
@@ -69,9 +69,9 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 - **Fonte:** [https://neon.com/docs/introduction/plans](https://neon.com/docs/introduction/plans)
 - **Tipo:** documentação oficial de planos/limites.
 - **Usar para:** verificar quotas incluídas, recursos por plano e limites relevantes a branches.
-- **Evidência relacionada:** projeto Neon iam-control-center consultado em 2026-10-24: plano free_v3; registro do projeto retornou branches_limit 10. Branches observadas: production e preview/pr-10.
+- **Evidência relacionada:** projeto Neon iam-control-center consultado em 2026-10-25: plano `free_v3`; registro do projeto retornou `branches_limit: 10`. Branches observadas: `production`, `preview/pr-10` e `preview/pr-12`.
 - **Critérios de validação:** confirmar quota e consumo atuais no console/API antes de criar branches em massa; testar tratamento para limite atingido; aplicar expiração/cleanup; considerar que expiração futura não libera capacidade imediatamente.
-- **Divergência pendente:** o texto do PR #10 dizia “até 3 root branches”. A documentação de planos consultada mostra 10 branches no Free e a API do projeto retornou branches_limit 10. Não manter a alegação de 3 root branches sem uma fonte oficial específica que sustente essa regra e esclareça a diferença entre quota geral e branches raiz.
+- **Correção aplicada em 2026-10-25:** a alegação fixa de “3 root branches” foi removida do workflow e a descrição do PR #10 foi atualizada. O campo `branches_limit: 10` é quota geral reportada pela API e não prova, sozinho, limite específico de branches raiz. O CI e o workflow Neon passaram no SHA `610e3474c59e5b67516d5cc255b288765849eafd`.
 - **Observação:** quotas e recursos de plano são dinâmicos; esta seção não substitui a consulta ao estado atual da conta.
 
 ### A9. Neon Free Plan — artigo de contexto complementar
@@ -233,17 +233,18 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 
 - **Fonte:** [https://github.com/alexoaraujo83/iam-control-center/pull/10](https://github.com/alexoaraujo83/iam-control-center/pull/10)
 - **Tipo:** mudança de workflow.
-- **Head SHA observado:** f7d4aaade9ba712c3b32b066c84431c94b1fcda4.
-- **Evidências:** [CI #40148092164](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40148092164) e [Neon PR Branch Lifecycle #40148092168](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40148092168), ambas success no SHA consultado.
-- **Estado observado:** Draft/open na consulta de 2026-10-24 (America/Sao_Paulo); revalidar.
-- **Pontos pendentes conhecidos:** pin imutável da delete-branch-action; correção/comprovação da afirmação de quota “3 root branches”; testes explícitos para falha, concorrência, cancelamento e cleanup.
-- **Critério:** CI no head atual, revisão de segurança e comportamento real das branches; sem migrations, deploy ou escrita em production.
+- **Head SHA observado:** `610e3474c59e5b67516d5cc255b288765849eafd`.
+- **Evidências atuais:** [CI #40155808041](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40155808041) e [Neon PR Branch Lifecycle #40155808016](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40155808016), ambas success no SHA exato.
+- **Estado observado em 2026-10-25:** Draft/open; merge não realizado.
+- **Correções aplicadas:** ação de exclusão fixada no SHA imutável `4468d825d5a88ef4012f1705a82f02ec3072f776`; alegação fixa de quota removida do workflow e descrição atualizada.
+- **Pendências:** teste real de fechamento/cleanup; cenários de falha, concorrência, cancelamento e retry; revisão de permissões mínimas do workflow.
+- **Critério:** comportamento real das branches comprovado; sem migrations, deploy ou escrita em production.
 
 ### E4. Estado Neon observado
 
 - **Fonte de verificação:** connector Neon consultado em 2026-10-24; painel e API do Neon são a referência operacional para o estado atual.
 - **Projeto retornado:** iam-control-center, id floral-surf-85783683, região aws-sa-east-1, PostgreSQL 18, plano free_v3.
-- **Branches retornadas:** production (ready) e preview/pr-10 (ready); preview/pr-10 com init_source parent-schema e expiração 2026-11-08T00:35:02Z.
+- **Branches retornadas em 2026-10-25:** `production` (ready), `preview/pr-10` (ready) e `preview/pr-12` (ready); previews com `init_source: parent-schema`, zero bytes gravados reportados e expiração em 2026-11-08.
 - **Critério:** tratar como snapshot temporal, não como configuração imutável. Reconsultar branch, expiração, uso e quotas antes de qualquer operação que altere recursos.
 
 ---
@@ -252,8 +253,8 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 
 | ID | Pendência | Evidência necessária para fechar |
 |---|---|---|
-| REF-01 | Fixar o SHA da delete-branch-action | Commit SHA verificado no upstream, diff revisado, workflow executado no novo head. |
-| REF-02 | Resolver a alegação “3 root branches” do PR #10 | Fonte oficial específica ou correção do texto após validar limites/quota; CI no head revisado. |
+| REF-01 | Fixar o SHA da delete-branch-action | **Implementado:** SHA `4468d825d5a88ef4012f1705a82f02ec3072f776`; CI e workflow Neon passaram no SHA `610e3474c59e5b67516d5cc255b288765849eafd`. Manter revisão do upstream e comportamento de exclusão real como evidência complementar. |
+| REF-02 | Resolver a alegação “3 root branches” do PR #10 | **Correção textual aplicada:** removida do workflow e descrição do PR atualizada; `branches_limit: 10` não deve ser interpretado como limite de root branches. Confirmar quota efetiva antes de aumentar concorrência. |
 | REF-03 | Confirmar proteção de branch/merge no repo privado com plano Free | Evidência de configuração aplicada. Se indisponível, manter como limitação, não como controle ativo. |
 | REF-04 | Implementar e provar Auth0 OIDC E2E | Login/callback/logout, sessão, validação JWKS/issuer/audience/expiração, testes negativos e autorização no servidor. |
 | REF-05 | Criar/testar migrations PostgreSQL separadamente | PR de SQL revisado; testes isolados de empty DB/upgrade/RLS/privilégios/tenant boundaries/rollback ou forward recovery. |
