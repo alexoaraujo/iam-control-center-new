@@ -74,6 +74,16 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 - **Divergência pendente:** o texto do PR #10 dizia “até 3 root branches”. A documentação de planos consultada mostra 10 branches no Free e a API do projeto retornou branches_limit 10. Não manter a alegação de 3 root branches sem uma fonte oficial específica que sustente essa regra e esclareça a diferença entre quota geral e branches raiz.
 - **Observação:** quotas e recursos de plano são dinâmicos; esta seção não substitui a consulta ao estado atual da conta.
 
+### A9. Neon Free Plan — artigo de contexto complementar
+
+- **Fonte:** [https://neon.com/blog/neon-free-plan-1-gb-per-project](https://neon.com/blog/neon-free-plan-1-gb-per-project)
+- **Tipo:** artigo oficial do blog Neon; material contextual, não substitui a documentação normativa de planos.
+- **Usar para:** contexto sobre a proposta/benefícios do plano gratuito e mudanças anunciadas pela Neon.
+- **Referências operacionais prioritárias:** [documentação oficial de planos](https://neon.com/docs/introduction/plans), console do projeto e resposta atual da API Neon.
+- **Evidência relacionada:** snapshot do projeto IAM Control Center registrado neste catálogo e no índice operacional; consultar novamente antes de qualquer decisão sobre quotas.
+- **Critérios de validação:** confirmar no momento da execução o plano ativo, limites aplicáveis, uso/consumo e quotas no console/API; registrar data, resultado e projeto/branch envolvidos sem expor credenciais.
+- **Limite:** o título do artigo menciona 1 GB por projeto, mas não deve ser tratado como prova de que essa quota ou qualquer outro limite permanece vigente para a conta atual. Não inferir número de branches raiz a partir do artigo ou de uma descrição resumida.
+
 ### A7. Neon Manage API Keys
 
 - **Fonte:** [https://neon.com/docs/manage/api-keys](https://neon.com/docs/manage/api-keys)
@@ -253,4 +263,5 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 ## Histórico deste catálogo
 
 - **2026-10-24:** primeira consolidação; reuniu documentação oficial Neon/Auth0/PostgreSQL/GitHub, PRs #9–#10, runs observados e critérios de aceitação. Os status operacionais devem ser atualizados em cada revisão relevante.
+- **2026-10-24:** adicionado o artigo oficial do blog sobre o plano gratuito como contexto complementar; documentação oficial de planos e estado atual do console/API permanecem como referência para decisões de quota.
 - Próxima revisão: ao concluir a revisão do PR #10, implementar Auth0, iniciar migrations ou alterar plano/configurações do repositório.
