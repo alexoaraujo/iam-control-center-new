@@ -1,0 +1,48 @@
+name: Neon PR Branch Lifecycle
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neon-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  create_preview_branch:
+    name: Create isolated schema-only Neon branch
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Calculate branch expiration
+        id: expiration
+        shell: bash
+        run: echo "expires_at=$(date -u --date='+14 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      - name: Create schema-only Neon branch
+        id: create_neon_branch
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch_name: preview/pr-${{ github.event.pull_request.number }}
+          parent_branch: production
+          branch_type: schema-only
+          expires_at: ${{ steps.expiration.outputs.expires_at }}
+
+  delete_preview_branch:
+    name: Delete Neon PR branch
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete Neon branch
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch: preview/pr-${{ github.event.pull_request.number }}
