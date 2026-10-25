@@ -258,6 +258,14 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 - **Escopo:** lockfile congelado, dependency audit, lint/typecheck/tests/build, endpoint de health sem exposição de secrets e dependências corrigidas.
 - **Limite:** não comprova Auth0 real, banco/RLS, migrations ou deploy.
 
+### E6. PR #12 — biblioteca permanente de referências
+
+- **Fonte:** [PR #12](https://github.com/alexoaraujo83/iam-control-center/pull/12).
+- **Estado:** merged no branch `chore/neon-pr-branching`, commit `6417d4403ce41093856c237b47215777b0dc4833`; não foi mesclado diretamente em `main`.
+- **Evidência de cleanup:** [workflow Neon #40158359717](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158359717) executou o job `Delete Neon PR branch` com PASS; o inventário atual confirma que `preview/pr-12` não existe.
+- **Estado da biblioteca:** `docs/reference/README.md` e `docs/reference/permanent-source-catalog.md` foram sincronizados no branch do PR #10. CI e workflow Neon precisam passar no head mais recente antes de qualquer decisão sobre o PR #10.
+- **Limite:** catálogo de fontes/evidências não é prova de Auth0 OIDC, RLS, migrations ou produção pronta.
+
 ## F. Lista de pendências extraída do catálogo
 
 | ID | Pendência | Evidência necessária para fechar |
