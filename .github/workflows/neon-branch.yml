@@ -14,7 +14,8 @@ concurrency:
 jobs:
   create_preview_branch:
     name: Create isolated schema-only Neon branch
-    if: github.event.action != 'closed'
+    # Fork PR workflows do not receive repository secrets; skip because no preview is created for forks.
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -72,7 +73,8 @@ jobs:
 
   delete_preview_branch:
     name: Delete Neon PR branch
-    if: github.event.action == 'closed'
+    # Only clean up previews created for same-repository PRs; fork PRs never get a preview.
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
