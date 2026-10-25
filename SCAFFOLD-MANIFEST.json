@@ -2,7 +2,7 @@
   "project": "iam-control-center",
   "status": "bootstrap scaffold; not production-ready",
   "manifest_updated_at_utc": "2026-10-24",
-  "tracked_file_count": 28,
+  "tracked_file_count": 30,
   "tracked_files": [
     ".env.example",
     ".github/workflows/quality.yml",
@@ -17,6 +17,7 @@
     "apps/web/next.config.ts",
     "apps/web/package.json",
     "apps/web/src/app/api/health/route.ts",
+    "apps/web/src/app/api/health/route.whitespace.test.ts",
     "apps/web/src/app/layout.tsx",
     "apps/web/src/app/page.tsx",
     "apps/web/src/lib/env.test.ts",
@@ -25,6 +26,7 @@
     "database/migrations/README.md",
     "docs/architecture/decisions/0001-modular-monolith.md",
     "docs/architecture/overview.md",
+    "docs/evidence/dependency-security-remediation.md",
     "docs/evidence/policy.md",
     "docs/operations/environments.md",
     "main ci quality.json",
@@ -49,21 +51,38 @@
     "install": "pnpm install --frozen-lockfile",
     "checks": [
       "lint",
+      "dependency audit",
       "typecheck",
       "test",
       "build"
     ],
-    "last_verified_sha": "7d773c83754a35b87442f6da59df0cfab7d9c3ec",
+    "last_verified_sha": "c0b0d19a9bc95d888a8ee77cd986da80e78cdf6d",
     "last_verified_runs": [
-      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40051640192",
-      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40051644403"
+      "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40133195417"
     ]
   },
   "known_limitations": [
     "Health endpoint reports presence of selected environment variables only; it does not prove Auth0 authentication or database connectivity.",
-    "pnpm currently ignores build scripts for esbuild, sharp, and unrs-resolver; quality checks passed without approving these scripts. Keep blocked unless a reproducible functional need is demonstrated.",
+    "pnpm currently ignores install/build scripts for esbuild and unrs-resolver; the latest quality run passed without approving them. Keep blocked unless a reproducible functional need is demonstrated and the specific script is reviewed.",
     "GitHub ruleset UI indicates native ruleset enforcement is unavailable for this private repository on the current free plan; manual review and CI checks are compensating process controls, not equivalent enforcement.",
     "No authentication, authorization, tenant persistence, database migrations, or production deployment is implemented by this scaffold."
   ],
-  "production_ready": false
+  "production_ready": false,
+  "dependency_security": {
+    "packages": {
+      "next": "15.5.28",
+      "eslint-config-next": "15.5.28",
+      "react": "19.1.10",
+      "react-dom": "19.1.10",
+      "vitest": "4.1.12",
+      "pnpm.overrides.postcss": "8.5.23",
+      "pnpm.overrides.sharp": "0.35.5"
+    },
+    "audit_scope": "all dependencies",
+    "audit_result": "PASS",
+    "vulnerabilities_found": 0,
+    "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/40133195417",
+    "audit_sha": "c0b0d19a9bc95d888a8ee77cd986da80e78cdf6d",
+    "note": "The permanent quality workflow, including pnpm audit, passed on audit_sha. This run checked the PR merge commit combining the security branch head with fix/health-runtime-config. Evidence applies to that tested commit; every subsequent commit must pass CI before it is considered validated."
+  }
 }
