@@ -78,7 +78,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Check whether the preview branch exists
+        id: preview
+        shell: bash
+        env:
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          PREVIEW_BRANCH: preview/pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          response="$(curl --silent --show-error --fail \
+            --header "Authorization: Bearer ${NEON_API_KEY}" \
+            --header "Accept: application/json" \
+            "https://console.neon.tech/api/v2/projects/${NEON_PROJECT_ID}/branches?limit=100")"
+          jq -e '.branches | type == "array"' <<< "$response" >/dev/null
+          count="$(jq --arg name "$PREVIEW_BRANCH" '[.branches[] | select(.name == $name)] | length' <<< "$response")"
+          if [[ "$count" -eq 0 ]]; then
+            echo "Preview branch does not exist; cleanup is already complete."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Delete Neon branch
+        if: steps.preview.outputs.exists == 'true'
         uses: neondatabase/delete-branch-action@4468d825d5a88ef4012f1705a82f02ec3072f776 # v3
         with:
           project_id: ${{ vars.NEON_PROJECT_ID }}
