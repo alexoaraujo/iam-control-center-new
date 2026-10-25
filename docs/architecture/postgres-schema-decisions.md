@@ -22,7 +22,7 @@ Status: proposed defaults for review. This document does not create or execute S
 Use application-generated UUIDv4 values initially. This avoids requiring a database extension or elevated database privilege solely for identifier generation. Do not derive authorization identity from email or profile metadata.
 
 ### Membership lifecycle
-Keep one durable membership row for each tenant/principal pair. Revocation changes the row to `revoked`; a later re-invitation/reactivation reuses the same row and changes its status through an explicit authorized transition. Every transition must emit an append-only audit event with actor, tenant, target membership, outcome, request/correlation identifier, and UTC timestamp where available. Never cascade-delete audit evidence.
+Keep one durable membership row for each tenant/principal pair. Revocation changes the row to `revoked`; a later re-invitation/reactivation reuses the same row and changes its status through an explicit authorized transition. Every transition must emit an append-only audit event with a required `occurred_at_utc` timestamp (non-null; use a database-generated UTC timestamp when the caller cannot supply a trustworthy occurrence time), actor, tenant, target membership, outcome, and request/correlation identifier where available. No membership transition may commit without its audit event and required timestamp. Never cascade-delete audit evidence.
 
 This choice makes uniqueness straightforward, but does not preserve each membership incarnation as a separate relational row. If product requirements need distinct historical membership periods as first-class queryable objects, this decision must be revisited before SQL is written.
 
