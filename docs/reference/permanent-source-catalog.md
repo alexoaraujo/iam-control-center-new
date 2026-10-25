@@ -231,14 +231,14 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 
 ### E3. PR #10 — Neon PR Branch Lifecycle
 
-- **Fonte:** [https://github.com/alexoaraujo83/iam-control-center/pull/10](https://github.com/alexoaraujo83/iam-control-center/pull/10)
-- **Tipo:** mudança de workflow; PR Draft/open.
-- **Head atual:** `de0ed2f26c7a5b1e3182f6320cad983b9bfa0596`.
-- **Evidências:** [CI #40158589651](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158589651) e [Neon lifecycle #40158589464](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158589464) passaram no SHA exato.
-- **Correções:** actions pinadas por SHA; preflight de quota; reutilização de preview ready; criação/exclusão ignoram forks; cleanup idempotente verifica existência antes de deletar.
-- **Cleanup real:** após o PR #12 ser merged/fechado, [run #40158359717](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158359717) executou o job de exclusão com PASS; inventário Neon atual mostra `preview/pr-12` ausente.
-- **Pendência bloqueadora:** cenário de quota cheia ainda não foi exercitado; acompanhar [issue #14](https://github.com/alexoaraujo83/iam-control-center/issues/14). Não criar/fechar PR de teste que apague branch sem autorização explícita; o operador autorizou permanentemente ações de merge, fechamento e exclusão nesta sessão. Ainda assim, quota cheia permanece pendente porque não há teste controlado com cleanup completo da branch Git de teste.
-- **Critério:** não executar SQL, migrations, seeds ou deploy; sem escrita em `production`.
+- **Fonte:** [PR #10](https://github.com/alexoaraujo83/iam-control-center/pull/10)
+- **Tipo/estado:** workflow; PR Draft/open, base `fix/health-runtime-config`; não integrado em `main`.
+- **Último head de workflow validado:** `9f9a215632b6506403a3cf0d99a3f8d08576b4d2`. CI [#40159031535](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40159031535) e Neon [#40159031482](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40159031482) concluíram success. Commits posteriores atualizam somente este ledger de evidências.
+- **Correções:** actions pinadas por SHA; preflight de quota; reutilização de preview ready; forks ignorados; cleanup idempotente consulta existência antes de deletar.
+- **Ciclo real:** close/reopen de PR #10 removeu e recriou `preview/pr-10` com PASS nos runs #40158861105/#40158884423. PR #12 removeu `preview/pr-12` no #40158359717.
+- **Quota cheia validada:** PR #17 ocupou a terceira root no [#40159174152](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40159174152); PR #18 falhou no preflight e pulou a criação de quarta root no [#40159198770](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40159198770). Ao fechar PR #18, o guard de cleanup pulou exclusão da branch inexistente com success ([#40159212505](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40159212505)); ao fechar PR #17, `preview/pr-17` foi removida com success ([#40159228360](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40159228360)).
+- **Inventário pós-teste:** apenas `production` e `preview/pr-10`, ambas ready. Issue #14 fechada como concluída.
+- **Pendências:** retry/falha, concorrência/cancelamento e revisão de permissões mínimas. Sem SQL, migrations, seeds, deploy ou escrita em production.
 
 ### E4. Estado Neon observado
 
