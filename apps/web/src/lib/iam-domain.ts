@@ -8,7 +8,21 @@
 export type PrincipalId = string;
 export type TenantId = string;
 export type MembershipId = string;
-export type PermissionKey = string;
+
+export const SUPPORTED_PERMISSION_KEYS = [
+  "tenant.read",
+  "tenant.members.read",
+  "tenant.members.manage",
+  "iam.control_center.read",
+] as const;
+
+export type PermissionKey = (typeof SUPPORTED_PERMISSION_KEYS)[number];
+
+export function isSupportedPermissionKey(
+  value: string,
+): value is PermissionKey {
+  return (SUPPORTED_PERMISSION_KEYS as readonly string[]).includes(value);
+}
 
 export interface ExternalIdentityKey {
   /** Exact issuer value from a successfully validated OIDC identity. */
@@ -41,7 +55,7 @@ export interface Membership {
 export interface MembershipPermission {
   readonly tenantId: TenantId;
   readonly membershipId: MembershipId;
-  readonly permissionKey: PermissionKey;
+  readonly permissionKey: string;
   /** Null/absent means not revoked; timestamps are ISO-8601 UTC strings. */
   readonly revokedAt?: string | null;
 }
@@ -67,7 +81,7 @@ export interface AuthorizationInput {
   readonly membership: Membership;
   readonly requestedTenantId: TenantId;
   readonly resourceTenantId: TenantId;
-  readonly requiredPermission: PermissionKey;
+  readonly requiredPermission: string;
   readonly grants: readonly MembershipPermission[];
 }
 
@@ -112,6 +126,10 @@ export function evaluateAuthorization(
     resourceTenantId !== tenant.id
   ) {
     return { outcome: "deny", reason: "tenant_scope_mismatch" };
+  }
+
+  if (!isSupportedPermissionKey(requiredPermission)) {
+    return { outcome: "deny", reason: "permission_not_granted" };
   }
 
   const hasGrant = grants.some(
