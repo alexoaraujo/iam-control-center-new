@@ -1,6 +1,6 @@
 # Catálogo permanente de fontes — IAM Control Center
 
-**Versão:** 1.1  
+**Versão:** 1.2  
 **Última revisão das páginas e evidências:** 2026-10-25 (America/Sao_Paulo).  
 **Responsável pelo uso:** manutenção do projeto IAM Control Center.  
 **Escopo:** fontes primárias, documentação técnica complementar, artefatos do repositório, evidência de CI e critérios de aceitação para identidade, autorização, PostgreSQL, Neon e GitHub Actions.
@@ -69,9 +69,9 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 - **Fonte:** [Neon plans](https://neon.com/docs/introduction/plans); [Manage branches — root branch allowance](https://neon.com/docs/manage/branches)
 - **Tipo:** documentação oficial de planos/limites.
 - **Usar para:** verificar quotas incluídas, recursos por plano e limites relevantes a branches.
-- **Evidência relacionada:** projeto Neon iam-control-center consultado em 2026-10-25: plano `free_v3`; API retorna `branches_limit: 10` como quota geral. A documentação atual de Manage branches lista 3 roots no Free e classifica branches `schema-only` como roots. O projeto tem exatamente três roots observadas: `production`, `preview/pr-10` e `preview/pr-12`. CI do head reconciliado do workflow: [#40157800826](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40157800826); execução Neon [#40157800722](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40157800722).
+- **Evidência relacionada:** projeto Neon iam-control-center consultado em 2026-10-25: plano `free_v3`; API retorna `branches_limit: 10` como quota geral. A documentação atual de Manage branches lista 3 roots no Free e classifica branches `schema-only` como roots. O inventário atual tem duas roots: `production` e `preview/pr-10`; `preview/pr-12` foi removida após o fechamento do PR #12. CI atual do PR #10: [#40158589651](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158589651); workflow Neon [#40158589464](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158589464).
 - **Critérios de validação:** consultar quota/uso antes de criar branches; testar a barreira de quota cheia; aplicar expiração/cleanup; não presumir que TTL libera capacidade antes da exclusão efetiva.
-- **Correção aplicada:** o workflow consulta branches pela API, reutiliza preview existente ready, falha antes de criar outra quando já existem 3 roots e ignora PRs de forks sem secrets. CI [#40157800826](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40157800826) e workflow Neon [#40157800722](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40157800722) passaram no head reconciliado `efa981fc9a5c79ffac579b7e94089eb39f754404`; quota cheia e exclusão real ainda não foram exercitadas.
+- **Correção aplicada:** o workflow consulta branches pela API, reutiliza preview existente ready, recusa criar quando a quota de roots está cheia, ignora forks e faz cleanup idempotente. O head `de0ed2f26c7a5b1e3182f6320cad983b9bfa0596` passou CI [#40158589651](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158589651) e Neon [#40158589464](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158589464). A exclusão real foi observada no run #40158359717; cenário de quota cheia continua pendente (issue #14).
 - **Observação:** quotas e recursos de plano são dinâmicos; esta seção não substitui a consulta ao estado atual da conta.
 
 ### A9. Neon Free Plan — artigo de contexto complementar
@@ -188,7 +188,7 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 - **Fonte:** [https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches)
 - **Tipo:** documentação oficial GitHub.
 - **Usar para:** regras de proteção, status checks, aprovações, restrições de push e exclusão.
-- **Evidência relacionada:** a API GitHub retornou ruleset `main ci quality` (`id: 25761691`) com `enforcement: disabled`; portanto, não há enforcement nativo ativo comprovado. A interface autenticada identifica o repositório como privado. O processo manual de review/CI é compensatório, não equivalente a branch protection.
+- **Evidência relacionada:** API GitHub consultada em 2026-10-25 retornou `private: false` (repositório público), ruleset `main ci quality` (`id: 25761691`) com `enforcement: disabled` e branches `protected: false`. Acompanhar issues [#13](https://github.com/alexoaraujo83/iam-control-center/issues/13) (enforcement) e [#15](https://github.com/alexoaraujo83/iam-control-center/issues/15) (confirmar visibilidade). Não declarar branch protection ativa.
 - **Critérios de validação:** provar a regra configurada na interface/API e testar seu efeito. Se o recurso não estiver disponível no plano atual, registrar limitação explicitamente e não afirmar que existe bloqueio técnico de merge.
 - **Limite de plano:** a documentação informa que branch protection está disponível no GitHub Free para repositórios públicos; proteção em repositórios privados requer plano compatível, como Pro, Team ou Enterprise.
 
@@ -197,7 +197,7 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 - **Fonte:** [https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)
 - **Tipo:** documentação oficial GitHub.
 - **Usar para:** environments, secrets de environment, restrição de branches e revisores de deployment.
-- **Evidência relacionada:** limitações de plano observadas para o repositório privado do projeto.
+- **Evidência relacionada:** a visibilidade atual precisa ser confirmada: API retornou `private: false`; consultar issue #15. A disponibilidade de environments/proteções deve ser validada para a visibilidade/plano efetivos.
 - **Critérios de validação:** verificar disponibilidade no plano e visibilidade do repositório; confirmar que qualquer proteção configurada é efetivamente aplicada; não armazenar credenciais como se fossem isoladas por environment quando o recurso não estiver disponível.
 - **Limite de plano:** a documentação atual limita environments/secrets e proteções como required reviewers em repositórios privados conforme o plano. Revalidar as condições na fonte oficial antes de planejar um gate.
 
@@ -223,43 +223,51 @@ Este catálogo complementa o [índice operacional por etapa](README.md). As pág
 ### E2. PR #9 — PostgreSQL migration design
 
 - **Fonte:** [https://github.com/alexoaraujo83/iam-control-center/pull/9](https://github.com/alexoaraujo83/iam-control-center/pull/9)
-- **Tipo:** PR documental.
-- **Head reconciliado:** `3a9b72e911725ce6006fd1a56c41cec8677d0ceb`.
-- **Evidência:** [CI PR #40157789151](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40157789151) e push [#40157786236](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40157786236) terminaram success.
-- **Estado:** Draft/open; cadeia sincronizada com o head atual de `feat/identity-domain-types`.
-- **Critério:** resolver decisões de schema e runner antes de migrations; documento não prova isolamento real.
+- **Tipo:** PR documental, integrado na branch de trabalho.
+- **Head validado:** `46288be445803bdca09445a15b994d0cc46d71b5`.
+- **Evidência:** [CI PR #40158212892](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158212892) passou no head exato; merge commit `7f64580e739ab997aac4be6c1adf2acea2f0516a`.
+- **Estado:** merged na branch de trabalho `fix/health-runtime-config`, não em `main`.
+- **Critério:** resolver retenção de auditoria, migration runner, privilégios e testes isolados antes de SQL; o documento não prova RLS efetiva.
 
 ### E3. PR #10 — Neon PR Branch Lifecycle
 
 - **Fonte:** [https://github.com/alexoaraujo83/iam-control-center/pull/10](https://github.com/alexoaraujo83/iam-control-center/pull/10)
-- **Tipo:** mudança de workflow.
-- **Head reconciliado:** `efa981fc9a5c79ffac579b7e94089eb39f754404`.
-- **Evidências:** [CI #40157800826](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40157800826) e [Neon lifecycle #40157800722](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40157800722), ambos success no SHA exato.
-- **Estado:** Draft/open; sem merge.
-- **Correções:** actions pinadas por SHA; preflight de quota; reutilização de preview ready; PRs de forks ignorados sem secrets.
-- **Pendências:** testar quota cheia; exclusão real; falha, concorrência, cancelamento/retry; revisar permissões mínimas.
-- **Critério:** comportamento real das branches comprovado; sem migrations, deploy ou escrita em production.
+- **Tipo:** mudança de workflow; PR Draft/open.
+- **Head atual:** `de0ed2f26c7a5b1e3182f6320cad983b9bfa0596`.
+- **Evidências:** [CI #40158589651](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158589651) e [Neon lifecycle #40158589464](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158589464) passaram no SHA exato.
+- **Correções:** actions pinadas por SHA; preflight de quota; reutilização de preview ready; criação/exclusão ignoram forks; cleanup idempotente verifica existência antes de deletar.
+- **Cleanup real:** após o PR #12 ser merged/fechado, [run #40158359717](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158359717) executou o job de exclusão com PASS; inventário Neon atual mostra `preview/pr-12` ausente.
+- **Pendência bloqueadora:** cenário de quota cheia ainda não foi exercitado; acompanhar [issue #14](https://github.com/alexoaraujo83/iam-control-center/issues/14). Não criar/fechar PR de teste que apague branch sem aprovação específica do operador.
+- **Critério:** não executar SQL, migrations, seeds ou deploy; sem escrita em `production`.
 
 ### E4. Estado Neon observado
 
-- **Fonte de verificação:** connector Neon consultado em 2026-10-25; painel e API do Neon são a referência operacional para o estado atual.
+- **Fonte de verificação:** connector Neon consultado em 2026-10-25; painel e API Neon são a referência operacional para o estado atual.
 - **Projeto retornado:** iam-control-center, id `floral-surf-85783683`, região `aws-sa-east-1`, PostgreSQL 18, plano `free_v3`.
-- **Branches retornadas:** `production` (ready, `protected: false`), `preview/pr-10` (ready) e `preview/pr-12` (ready). Previews com `init_source: parent-schema`, zero bytes gravados reportados e expiração em 2026-11-08.
-- **Quota e proteção:** a documentação atual lista 3 roots no Free; as três roots estão ocupadas. Neon protected branches só está disponível em planos pagos; não tentar ativar no Free. A rede pública permanece habilitada; não alterar sem inventariar consumidores.
-- **Critério:** tratar como snapshot temporal, não como configuração imutável. Reconsultar branches, expiração, uso e quotas antes de qualquer operação que altere recursos.
+- **Branches atuais:** `production` (ready, `protected: false`) e `preview/pr-10` (ready, `init_source: parent-schema`); `preview/pr-12` foi excluída com sucesso no evento de fechamento/merge do PR #12. As duas branches observadas são roots; `production` não foi alterada.
+- **Quota e proteção:** o Free permite 3 roots; a quota geral `branches_limit: 10` é separada. Não criar preview temporária sem plano aprovado para limpeza; Neon protected branches não serão habilitadas via upgrade de plano.
+- **Critério:** tratar como snapshot temporal. Reconsultar branches, expiração, uso e quotas antes de qualquer operação que altere recursos.
 
 ---
+
+### E5. PR #2 — bootstrap, lockfile e dependency security
+
+- **Fonte:** [PR #2](https://github.com/alexoaraujo83/iam-control-center/pull/2).
+- **Estado:** merged em `main`, commit `18a30ab67b9422be4c86c73675384e709a40a03d`.
+- **Evidência:** CI pré-merge [#40158267537](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158267537) e CI pós-merge [#40158331912](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158331912) PASS.
+- **Escopo:** lockfile congelado, dependency audit, lint/typecheck/tests/build, endpoint de health sem exposição de secrets e dependências corrigidas.
+- **Limite:** não comprova Auth0 real, banco/RLS, migrations ou deploy.
 
 ## F. Lista de pendências extraída do catálogo
 
 | ID | Pendência | Evidência necessária para fechar |
 |---|---|---|
-| REF-01 | Fixar o SHA da delete-branch-action | **Implementado:** SHA `4468d825d5a88ef4012f1705a82f02ec3072f776`; CI e workflow Neon passaram no head reconciliado `efa981fc9a5c79ffac579b7e94089eb39f754404`. Cleanup real ainda pendente. |
-| REF-02 | Respeitar quota de branches raiz no Neon Free | **Guard implementado:** documentação oficial lista 3 roots no Free; API retorna `branches_limit: 10` como quota geral separada. Preflight impede criação de quarta root; caminho de quota cheia ainda precisa ser exercitado. |
-| REF-03 | Confirmar proteção de branch/merge no repo privado com plano Free | **Não aplicado:** API retornou ruleset `main ci quality` com `enforcement: disabled`. Não declarar branch protection ativa; manter Draft/manual review como controle processual compensatório. |
+| REF-01 | Fixar o SHA da delete-branch-action | **Implementado e cleanup observado:** SHA `4468d825d5a88ef4012f1705a82f02ec3072f776`; run [#40158359717](https://github.com/alexoaraujo83/iam-control-center/actions/runs/40158359717) executou o job de exclusão com PASS e `preview/pr-12` está ausente. Testes de falha/retry continuam pendentes. |
+| REF-02 | Respeitar quota de branches raiz no Neon Free | **Guard implementado, cenário real pendente:** documentação oficial lista 3 roots no Free; API retorna `branches_limit: 10` como quota geral separada. Preflight recusa quarta root; testar cenário de quota cheia sob controle (issue #14). |
+| REF-03 | Confirmar proteção de branch/merge e visibilidade do repositório | API retornou `private: false`, ruleset `main ci quality` com `enforcement: disabled` e branches `protected: false`. Acompanhar issues #13 e #15; não declarar enforcement ativo. |
 | REF-04 | Implementar e provar Auth0 OIDC E2E | Login/callback/logout, sessão, validação JWKS/issuer/audience/expiração, testes negativos e autorização no servidor. |
 | REF-05 | Criar/testar migrations PostgreSQL separadamente | PR de SQL revisado; testes isolados de empty DB/upgrade/RLS/privilégios/tenant boundaries/rollback ou forward recovery. |
-| REF-06 | Provar cleanup e recuperação do workflow Neon | Runs para PR opened/reopened/synchronize/closed, erro/retry/cancelamento e confirmação da branch removida. |
+| REF-06 | Provar cleanup e recuperação do workflow Neon | **Cleanup básico validado** no fechamento do PR #12: run #40158359717 PASS e branch ausente no inventário. Falha, retry, concorrência e cancelamento continuam pendentes. |
 | REF-07 | Revalidar referências dinâmicas | Data de revisão, versão/limite atual e fonte oficial registrada quando qualquer dependência mudar. |
 
 ## Histórico deste catálogo
