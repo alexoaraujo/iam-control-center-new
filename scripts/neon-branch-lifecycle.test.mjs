@@ -189,14 +189,11 @@ test("create rejects duplicate target names and non-ready preview branches", asy
   });
 });
 
-test("create refuses when root branch capacity is reached", () => {
+test("create refuses when the conservative total-branch safety limit is reached", () => {
+  const branches = Array.from({ length: 10 }, (_, index) => branch(`existing-${index}`));
   assert.throws(
-    () => planCreate([
-      branch("production", "ready", null),
-      branch("development", "ready", null),
-      branch("another-root", "ready", null),
-    ], "preview/pr-25"),
-    /allowance reached/,
+    () => planCreate(branches, "preview/pr-25"),
+    /total-branch safety limit reached/,
   );
 });
 
