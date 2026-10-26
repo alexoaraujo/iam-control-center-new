@@ -138,76 +138,7 @@ CREATE INDEX audit_events_tenant_event_occurred_idx
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 
 CREATE TABLE app_private.tenant_context_keys (
-    key_id      text PRIMARY KEY CHECK (key_id ~ '^[a-zA-Z0-9_-]{1,64}
-
-ALTER TABLE iam.memberships ENABLE ROW LEVEL SECURITY;
-ALTER TABLE iam.memberships FORCE ROW LEVEL SECURITY;
-ALTER TABLE iam.roles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE iam.roles FORCE ROW LEVEL SECURITY;
-ALTER TABLE iam.membership_roles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE iam.membership_roles FORCE ROW LEVEL SECURITY;
-ALTER TABLE iam.role_permissions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE iam.role_permissions FORCE ROW LEVEL SECURITY;
-ALTER TABLE audit.events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit.events FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY memberships_tenant_select
-    ON iam.memberships
-    FOR SELECT TO iam_app_runtime
-    USING (tenant_id = app_private.current_tenant_id());
-
-CREATE POLICY roles_tenant_select
-    ON iam.roles
-    FOR SELECT TO iam_app_runtime
-    USING (tenant_id = app_private.current_tenant_id());
-
-CREATE POLICY membership_roles_tenant_select
-    ON iam.membership_roles
-    FOR SELECT TO iam_app_runtime
-    USING (tenant_id = app_private.current_tenant_id());
-
-CREATE POLICY role_permissions_tenant_select
-    ON iam.role_permissions
-    FOR SELECT TO iam_app_runtime
-    USING (
-        EXISTS (
-            SELECT 1
-            FROM iam.roles AS scoped_role
-            WHERE scoped_role.id = role_permissions.role_id
-              AND scoped_role.tenant_id = app_private.current_tenant_id()
-        )
-    );
-
-CREATE POLICY audit_events_tenant_select
-    ON audit.events
-    FOR SELECT TO iam_app_runtime
-    USING (tenant_id = app_private.current_tenant_id());
-
-CREATE POLICY audit_events_tenant_insert
-    ON audit.events
-    FOR INSERT TO iam_app_runtime
-    WITH CHECK (tenant_id = app_private.current_tenant_id());
-
--- Least-privilege starting point. No runtime grants are made for global
--- identities, tenants, permissions, or the migration ledger until bootstrap
--- and catalog-access contracts are reviewed. Membership/role mutation is also
--- withheld pending endpoint-level authorization and a real runtime-login test.
-GRANT USAGE ON SCHEMA iam, audit, app_private TO iam_app_runtime;
-REVOKE ALL ON FUNCTION app_private.current_tenant_id() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app_private.current_tenant_id() TO iam_app_runtime;
-GRANT SELECT ON iam.memberships, iam.roles, iam.membership_roles, iam.role_permissions
-    TO iam_app_runtime;
-GRANT SELECT, INSERT ON audit.events TO iam_app_runtime;
-REVOKE UPDATE, DELETE, TRUNCATE ON audit.events FROM iam_app_runtime;
-
--- Explicitly not included yet:
---   * iam.invitations (invitation/token lifecycle contract not approved);
---   * RLS/access paths for iam.tenants, iam.identities, iam.permissions;
---   * tenant discovery / login bootstrap function or SECURITY DEFINER API;
---   * seed permission/role catalog;
---   * runtime INSERT/UPDATE of membership and role relationships;
---   * changes to existing role membership or owner/runtime credentials.
-),
+    key_id      text PRIMARY KEY CHECK (key_id ~ '^[a-zA-Z0-9_-]{1,64}$'),
     secret      bytea NOT NULL CHECK (octet_length(secret) >= 32),
     active      boolean NOT NULL DEFAULT true,
     created_at  timestamptz NOT NULL DEFAULT clock_timestamp()
