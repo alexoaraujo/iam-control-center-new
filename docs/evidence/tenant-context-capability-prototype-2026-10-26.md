@@ -32,7 +32,7 @@ O checksum acima foi calculado pelo runner sobre os bytes do SQL candidato; não
 ## Limites da evidência
 
 Esta evidência comprova somente o protótipo SQL e seus testes no serviço PostgreSQL descartável no SHA indicado. Ela **não** comprova:
-- que a aplicação Auth0/Next.js já emite capabilities HMAC;
+- que o fluxo Auth0/Next.js valide sessão e membership e emita capabilities pela integração da aplicação. Existe um primitivo server-side em apps/web/src/lib/iam/tenant-context.ts com testes unitários, mas ele ainda não está conectado a rotas/login nem a leitura da chave de produção;
 - que o segredo de produção esteja provisionado/rotacionado no Neon e nas variáveis server-side;
 - que a capability de identidade e o bootstrap/descoberta de tenants funcionem;
 - que a membership seja resolvida/atualizada corretamente em requisições reais ou após revogação;
@@ -40,11 +40,20 @@ Esta evidência comprova somente o protótipo SQL e seus testes no serviço Post
 - que o schema da proposta esteja aplicado em Production, Development ou Preview;
 - que o status Vercel Preview prove conectividade ou isolamento do PostgreSQL.
 
+## Evidência adicional — primitivo de assinatura TypeScript
+
+- SHA do código e dos testes: 7ec85b39d6971f518aa97f8d25d416fdde4d42f7.
+- Workflow PR: https://github.com/alexoaraujo83/iam-control-center/actions/runs/40406877343 — success, incluindo quality, Vitest, PostgreSQL descartável, build e gate Vercel Preview.
+- Arquivos: apps/web/src/lib/iam/tenant-context.ts e apps/web/src/lib/iam/tenant-context.test.ts.
+- Testes unitários: formato de seis segmentos compatível com o verifier SQL, HMAC-SHA-256 determinístico, normalização UUID, validade até 120 segundos e rejeições por TTL expirado/excessivo, chave menor que 32 bytes, key id inválido, UUID inválido e timestamps não inteiros.
+- O módulo implementa apenas o primitivo de assinatura; não consulta Auth0, não valida sessão, não resolve membership, não busca a chave real e não é chamado por uma rota de login.
+
+O resultado mantém a prontidão para promoção em BLOCKED: evidência de assinatura em código e PostgreSQL descartável não equivale à integração real com Auth0/Neon.
 ## Próximos gates
 
 - [ ] Revisão de segurança do \`SECURITY DEFINER\` verifier, owner, \`search_path\`, grants e tratamento de erros.
 - [ ] Aprovar contrato da capability e TTL/revogação.
-- [ ] Implementar emissor de capability no backend após validar OIDC e membership.
+- [ ] Integrar a função issueTenantContextCapability ao fluxo server-side após validar OIDC e membership ativa, com resolução segura da chave por keyId.
 - [ ] Projetar/testar capability de identidade para bootstrap e descoberta sem aceitar identity id arbitrário.
 - [ ] Definir bootstrap, armazenamento e rotação da chave real sem imprimir segredos em logs.
 - [ ] Testar com credencial runtime real num branch Neon isolado e comparar schema.
