@@ -1,6 +1,23 @@
 # Auth0 — configuração de desenvolvimento
 
-**Estado:** preparação revisável; não representa prova de configuração aplicada no tenant nem login E2E.
+**Estado:** configuração local informada pelo operador em 2026-10-26; ainda não é verificação independente do Dashboard nem prova de login E2E.
+
+## Registro de evidência declarada — 2026-10-26
+
+O operador informou que os seguintes valores estão preenchidos no aplicativo Auth0 e que as URLs locais estão configuradas no Dashboard. Este registro documenta a declaração recebida; não substitui captura/consulta independente nem teste real de autenticação.
+
+| Item | Valor declarado | Estado da evidência |
+|---|---|---|
+| `APP_BASE_URL` | `http://localhost:3000` | INFORMADO |
+| `AUTH0_DOMAIN` | `iam-control-center.us.auth0.com` | INFORMADO |
+| `AUTH0_CLIENT_ID` | `yMHxHzRP7YG6QNpGEcRpnmQUj37dYVLB` | INFORMADO |
+| `AUTH0_CLIENT_SECRET` | valor mascarado na conversa | NÃO VERIFICADO; segredo não registrado |
+| `AUTH0_SECRET` | valor mascarado na conversa | NÃO VERIFICADO; segredo não registrado |
+| Allowed Callback URLs | `http://localhost:3000/auth/callback` | INFORMADO COMO CONFIGURADO |
+| Allowed Logout URLs | `http://localhost:3000` | INFORMADO COMO CONFIGURADO |
+| Allowed Web Origins | `http://localhost:3000` | INFORMADO COMO CONFIGURADO |
+
+**Não inferir:** esses dados, isoladamente, não comprovam que a aplicação seja do tipo Regular Web Application, que o SDK v4 esteja instalado, que as rotas existam ou que login/callback/logout funcionem. Não registrar valores reais dos segredos.
 
 ## Recursos informados
 
