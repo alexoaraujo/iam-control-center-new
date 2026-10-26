@@ -192,7 +192,7 @@ BEGIN
   IF (SELECT count(*) FROM iam.roles) <> 1
      OR NOT EXISTS (
        SELECT 1 FROM iam.roles
-       WHERE id = '00000000-0000-0000-0000-000000000202'
+       WHERE id = '00000000-0000-0000-0000-000000000302'
      ) THEN
     RAISE EXCEPTION 'expected GUC-spoofing limitation was not reproduced';
   END IF;
