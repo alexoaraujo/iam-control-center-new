@@ -97,7 +97,7 @@ export async function listBranches({
   throw new Error("Neon branch listing exceeded the pagination safety limit.");
 }
 
-export function planCreate(branches, targetName, maxRootBranches = 3) {
+export function planCreate(branches, targetName, maxTotalBranches = 10) {
   if (!/^preview\/pr-\d+$/.test(targetName)) {
     throw new Error("Refusing create preflight for a non-preview target.");
   }
@@ -109,9 +109,8 @@ export function planCreate(branches, targetName, maxRootBranches = 3) {
     }
     return { shouldCreate: false, reason: "already-ready" };
   }
-  const roots = branches.filter((branch) => branch?.parent_id == null).length;
-  if (roots >= maxRootBranches) {
-    throw new Error("Neon root-branch allowance reached; refusing to create another preview.");
+  if (branches.length >= maxTotalBranches) {
+    throw new Error("Configured total-branch safety limit reached; refusing to create another preview.");
   }
   return { shouldCreate: true, reason: "missing" };
 }
