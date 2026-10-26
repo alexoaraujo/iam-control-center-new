@@ -13,6 +13,10 @@ if [[ "${PGPORT:-5432}" != "5432" ]]; then
   echo "Refusing database tests on unexpected PGPORT=${PGPORT}." >&2
   exit 64
 fi
+if [[ "${GITHUB_ACTIONS:-}" != "true" || "${PGDATABASE:-}" != "postgres" ]]; then
+  echo "Refusing database tests outside the GitHub Actions ephemeral PostgreSQL service (PGDATABASE must be postgres)." >&2
+  exit 64
+fi
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "${ROOT}"
