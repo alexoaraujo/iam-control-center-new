@@ -32,3 +32,14 @@
 Obter um caminho de conexão real para `iam_app_runtime_dev_safe` (ou para a role login runtime oficialmente destinada ao teste) no branch isolado, sem expor credenciais em logs, chat ou commits. Em seguida, executar uma bateria somente de leitura primeiro para confirmar `current_user`, `rolsuper`, `rolbypassrls`, privilégios de schema e tabela; depois, com autorização de teste e fixture isolada, validar as políticas e registrar os resultados.
 
 Até essa evidência existir, a validação runtime/RLS permanece **BLOCKED** e não se deve preparar ou aplicar migration executável.
+
+
+## Revalidação automática — 2026-10-26
+
+- SHA da ADR de descoberta/catálogos: `9188549ad0b11152eba9e33dca01359f0416345c`.
+- GitHub Actions `quality`: duas execuções concluídas com `success` para esse SHA.
+- Vercel Preview Comments: `success`; um check de deployment Preview concluiu `success` e o segundo foi `skipped`.
+- PR #27 permanece aberto, Draft e não mesclado.
+- Nova tentativa de consulta read-only no branch isolado, solicitando `role_name = iam_app_runtime_dev_safe`, retornou explicitamente: `This connection is pinned to Postgres role "Administrador"; role_name "iam_app_runtime_dev_safe" is not allowed.`
+- A tentativa foi recusada antes da execução do SQL. Assim, o bloqueio de autenticação runtime foi reproduzido e continua sem solução por este conector.
+- Não houve alteração de schema, dados, roles, grants ou migrations; Production não foi acessada.
