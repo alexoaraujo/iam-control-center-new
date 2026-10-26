@@ -58,3 +58,39 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  preview-deployment:
+    name: preview-deployment
+    if: github.event_name == 'pull_request'
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment:
+      name: Preview
+    permissions:
+      contents: read
+      statuses: read
+      deployments: write
+    steps:
+      - name: Wait for successful Vercel Preview deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            state="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status" --jq '[.statuses[] | select(.context == "Vercel")] | first | .state // "missing"')"
+            if [ "${state}" = "success" ]; then
+              echo "Vercel status is successful for ${COMMIT_SHA}."
+              exit 0
+            fi
+            if [ "${state}" = "failure" ] || [ "${state}" = "error" ]; then
+              echo "::error::Vercel reported ${state} for ${COMMIT_SHA}."
+              exit 1
+            fi
+            echo "Waiting for Vercel status (attempt ${attempt}/36); current state: ${state}."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for a successful Vercel status for ${COMMIT_SHA}."
+          exit 1
