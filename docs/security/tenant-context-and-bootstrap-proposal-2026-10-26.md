@@ -111,7 +111,7 @@ O teste anterior de spoofing deve tornar-se regressão: espera-se que alterar o 
 
 - [ ] Aprovar explicitamente a opção B ou documentar uma aceitação de risco fundamentada da opção A.
 - [ ] Aprovar contratos de bootstrap, identidade e descoberta da ADR-0003.
-- [ ] Prototipar capability assinada em PostgreSQL descartável, incluindo provisionamento e rotação da chave.
+- [x] Prototipar verificação HMAC, rejeição de campos alterados, expiração e tentativa de spoof do GUC simples em PostgreSQL descartável; provisionamento/rotação ainda pendentes.
 - [ ] Revisar funções privilegiadas, ownership, grants e search_path.
 - [ ] Provar idempotência, concorrência, rollback, recuperação, checksum e testes cross-tenant por SHA.
 - [ ] Validar uma credencial runtime real num branch Neon isolado.
@@ -123,7 +123,7 @@ O teste anterior de spoofing deve tornar-se regressão: espera-se que alterar o 
 
 - RBAC tenant-scoped: aceito em ADR-0002.
 - Bootstrap OIDC, descoberta e acesso aos catálogos globais: pendentes de aprovação final.
-- Capability assinada: recomendação proposta, ainda não implementada/aprovada.
-- SQL candidato 0001: permanece apenas proposta e ainda usa o helper GUC simples; deve ser revisto antes de promoção.
+- Capability assinada: protótipo SQL/teste implementado nesta branch; aprovação de arquitetura e implementação real no backend continuam pendentes.
+- SQL candidato 0001: permanece apenas proposta; foi atualizado para um protótipo de capability tenant assinada, coberto por testes PostgreSQL descartáveis. O emissor da aplicação, o bootstrap de chave e o bootstrap de identidade pré-tenant continuam pendentes.
 - Nenhuma migration foi executada em Neon. Nenhuma role, grant, chave, variável, segredo ou deployment compartilhado foi alterado.
 - Classificação de segurança: **BLOCKED para promoção até revisão e validação da fronteira de confiança**.
