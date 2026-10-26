@@ -13,8 +13,8 @@ concurrency:
 jobs:
   create_preview_branch:
     name: Create isolated schema-only Neon branch
-    # Fail closed by default: no Neon API calls until an operator explicitly enables this variable.
-    if: vars.NEON_PR_BRANCH_LIFECYCLE_ENABLED == 'true' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    # Safety hold for reconciliation: this job is deliberately disabled until mocked lifecycle tests and review are complete.
+    if: false && vars.NEON_PR_BRANCH_LIFECYCLE_ENABLED == 'true' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -80,8 +80,8 @@ jobs:
 
   delete_preview_branch:
     name: Delete Neon PR branch
-    # Cleanup is also opt-in and only applies to same-repository PRs.
-    if: vars.NEON_PR_BRANCH_LIFECYCLE_ENABLED == 'true' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    # Safety hold: cleanup is deliberately disabled until mocked lifecycle tests and review are complete.
+    if: false && vars.NEON_PR_BRANCH_LIFECYCLE_ENABLED == 'true' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
