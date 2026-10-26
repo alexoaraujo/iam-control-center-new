@@ -1,6 +1,6 @@
 {
-  "id": 25821220,
-  "name": "main_ci_quality",
+  "id": 25757502,
+  "name": "main ci quality",
   "target": "branch",
   "source_type": "Repository",
   "source": "alexoaraujo83/iam-control-center",
@@ -14,22 +14,6 @@
     }
   },
   "rules": [
-    {
-      "type": "pull_request",
-      "parameters": {
-        "required_approving_review_count": 0,
-        "dismiss_stale_reviews_on_push": true,
-        "required_reviewers": [],
-        "require_code_owner_review": false,
-        "require_last_push_approval": false,
-        "required_review_thread_resolution": false,
-        "require_extra_approval_for_unattributed_changes": false,
-        "allowed_merge_methods": [
-          "squash",
-          "rebase"
-        ]
-      }
-    },
     {
       "type": "required_status_checks",
       "parameters": {
@@ -50,19 +34,24 @@
       }
     },
     {
-      "type": "non_fast_forward"
-    },
-    {
-      "type": "deletion"
-    },
-    {
-      "type": "required_deployments",
+      "type": "pull_request",
       "parameters": {
-        "required_deployment_environments": [
-          "Development",
-          "Preview"
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": true,
+        "required_reviewers": [],
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true,
+        "require_extra_approval_for_unattributed_changes": false,
+        "allowed_merge_methods": [
+          "merge",
+          "squash",
+          "rebase"
         ]
       }
+    },
+    {
+      "type": "non_fast_forward"
     }
   ],
   "bypass_actors": []
