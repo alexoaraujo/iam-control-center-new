@@ -3,6 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 const API_BASE = "https://console.neon.tech/api/v2";
 const MAX_ATTEMPTS = 3;
+const MAX_PAGES = 100;
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 export function previewBranchName(prNumber) {
@@ -13,18 +14,12 @@ export function previewBranchName(prNumber) {
   return `preview/pr-${value}`;
 }
 
-export async function listBranches({
-  projectId,
-  apiKey,
-  fetchImpl = fetch,
-  timeoutMs = 5000,
-  maxAttempts = MAX_ATTEMPTS,
-  sleepImpl = sleep,
+async function fetchPage({
+  projectId, apiKey, cursor, fetchImpl, timeoutMs, maxAttempts, sleepImpl,
 }) {
-  if (!projectId?.trim() || !apiKey?.trim()) {
-    throw new Error("Neon project configuration is missing.");
-  }
-  const url = `${API_BASE}/projects/${encodeURIComponent(projectId)}/branches?limit=100`;
+  const params = new URLSearchParams({ limit: "100" });
+  if (cursor) params.set("cursor", cursor);
+  const url = `${API_BASE}/projects/${encodeURIComponent(projectId)}/branches?${params}`;
   let lastError;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -47,9 +42,7 @@ export async function listBranches({
 
     if (!response.ok) {
       const error = new Error(`Neon API returned HTTP ${response.status}.`);
-      if (!RETRYABLE_STATUS.has(response.status) || attempt === maxAttempts) {
-        throw error;
-      }
+      if (!RETRYABLE_STATUS.has(response.status) || attempt === maxAttempts) throw error;
       lastError = error;
       await sleepImpl(100 * 2 ** (attempt - 1));
       continue;
@@ -64,9 +57,44 @@ export async function listBranches({
     if (!payload || !Array.isArray(payload.branches)) {
       throw new Error("Neon API response does not contain a branches array.");
     }
-    return payload.branches;
+    if (payload.pagination != null && typeof payload.pagination !== "object") {
+      throw new Error("Neon API returned invalid pagination metadata.");
+    }
+    return payload;
   }
   throw new Error(`Neon API request failed after bounded retries: ${lastError?.name ?? "unknown error"}.`);
+}
+
+export async function listBranches({
+  projectId,
+  apiKey,
+  fetchImpl = fetch,
+  timeoutMs = 5000,
+  maxAttempts = MAX_ATTEMPTS,
+  maxPages = MAX_PAGES,
+  sleepImpl = sleep,
+}) {
+  if (!projectId?.trim() || !apiKey?.trim()) {
+    throw new Error("Neon project configuration is missing.");
+  }
+  const branches = [];
+  const seenCursors = new Set();
+  let cursor;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const payload = await fetchPage({
+      projectId, apiKey, cursor, fetchImpl, timeoutMs, maxAttempts, sleepImpl,
+    });
+    branches.push(...payload.branches);
+    const next = payload.pagination?.next;
+    if (next == null || next === "") return branches;
+    if (typeof next !== "string" || seenCursors.has(next)) {
+      throw new Error("Neon API returned an invalid or repeated pagination cursor.");
+    }
+    seenCursors.add(next);
+    cursor = next;
+  }
+  throw new Error("Neon branch listing exceeded the pagination safety limit.");
 }
 
 export function planCreate(branches, targetName, maxRootBranches = 3) {
