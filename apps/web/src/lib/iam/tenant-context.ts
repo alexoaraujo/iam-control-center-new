@@ -40,8 +40,9 @@ function canonicalUuid(value: string, fieldName: string): string {
 export function issueTenantContextCapability(
   claims: TenantContextClaims,
   signingKey: Uint8Array,
-  nowEpochSeconds = Math.floor(Date.now() / 1000),
 ): string {
+  const nowEpochSeconds = Math.floor(Date.now() / 1000);
+
   if (!KEY_ID_PATTERN.test(claims.keyId)) {
     throw new TypeError("keyId must contain 1-64 letters, digits, underscores, or hyphens");
   }
