@@ -217,8 +217,8 @@ test("delete refuses duplicate preview targets", () => {
 
 test("workflow keeps both lifecycle jobs disabled and rejects fork PRs", async () => {
   const workflow = await readFile(new URL("../.github/workflows/neon-branch.yml", import.meta.url), "utf8");
-  assert.equal((workflow.match(/if: false && vars\\.NEON_PR_BRANCH_LIFECYCLE_ENABLED/g) ?? []).length, 2);
-  assert.equal((workflow.match(/github\\.event\\.pull_request\\.head\\.repo\\.full_name == github\\.repository/g) ?? []).length, 2);
-  assert.match(workflow, /neondatabase\\/delete-branch-action@[0-9a-f]{40}/);
-  assert.match(workflow, /branch: preview\\/pr-\\$\\{\\{ github\\.event\\.pull_request\\.number \\}\\}/);
+  assert.equal(workflow.split("if: false && vars.NEON_PR_BRANCH_LIFECYCLE_ENABLED").length - 1, 2);
+  assert.equal(workflow.split("github.event.pull_request.head.repo.full_name == github.repository").length - 1, 2);
+  assert.ok(workflow.includes("neondatabase/delete-branch-action@4468d825d5a88ef4012f1705a82f02ec3072f776"));
+  assert.ok(workflow.includes("branch: preview/pr-${{ github.event.pull_request.number }}"));
 });
