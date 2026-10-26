@@ -109,6 +109,9 @@ fi
 
 echo "Seeding two tenants and testing composite tenant integrity..."
 psql_admin --dbname=iam_migration_test <<'SQL'
+INSERT INTO app_private.tenant_context_keys (key_id, secret, active)
+VALUES ('test-v1', decode(repeat('42', 32), 'hex'), true);
+
 INSERT INTO iam.tenants (id, slug, name, status) VALUES
   ('00000000-0000-0000-0000-000000000001', 'tenant-a', 'Tenant A', 'active'),
   ('00000000-0000-0000-0000-000000000002', 'tenant-b', 'Tenant B', 'active');
@@ -168,9 +171,33 @@ END;
 $composite_fk$;
 SQL
 
-echo "Running tests over an actual disposable runtime LOGIN..."
+make_context() {
+  local tenant_id="$1"
+  local identity_id="$2"
+  local membership_id="$3"
+  local expires_epoch="$4"
+  local payload signature
+  payload="test-v1|$tenant_id|$identity_id|$membership_id|$expires_epoch"
+  signature="$(psql_admin --dbname=iam_migration_test --tuples-only --no-align \
+    --command="SELECT pg_catalog.encode(public.hmac(pg_catalog.convert_to('$payload', 'UTF8'), secret, 'sha256'), 'hex') FROM app_private.tenant_context_keys WHERE key_id = 'test-v1' AND active = true")"
+  printf '%s|%s' "$payload" "$signature"
+}
+
+NOW_EPOCH="$(date -u +%s)"
+TENANT_A_CONTEXT="$(make_context '00000000-0000-0000-0000-000000000001' '00000000-0000-0000-0000-000000000101' '00000000-0000-0000-0000-000000000201' "$((NOW_EPOCH + 60))")"
+TENANT_B_CONTEXT="$(make_context '00000000-0000-0000-0000-000000000002' '00000000-0000-0000-0000-000000000102' '00000000-0000-0000-0000-000000000202' "$((NOW_EPOCH + 60))")"
+EXPIRED_CONTEXT="$(make_context '00000000-0000-0000-0000-000000000001' '00000000-0000-0000-0000-000000000101' '00000000-0000-0000-0000-000000000201' "$((NOW_EPOCH - 60))")"
+LONG_LIVED_CONTEXT="$(make_context '00000000-0000-0000-0000-000000000001' '00000000-0000-0000-0000-000000000101' '00000000-0000-0000-0000-000000000201' "$((NOW_EPOCH + 3600))")"
+
+echo "Running signed-context tests over an actual disposable runtime LOGIN..."
 PGUSER=iam_runtime_test PGPASSWORD=test-only PGDATABASE=iam_migration_test \
-  psql -X --host="${PGHOST}" --port="${PGPORT}" --set=ON_ERROR_STOP=1 --file="${RUNTIME_TEST}"
+  psql -X --host="${PGHOST}" --port="${PGPORT}" \
+    --set=ON_ERROR_STOP=1 \
+    --set=tenant_a_context="${TENANT_A_CONTEXT}" \
+    --set=tenant_b_context="${TENANT_B_CONTEXT}" \
+    --set=expired_context="${EXPIRED_CONTEXT}" \
+    --set=long_lived_context="${LONG_LIVED_CONTEXT}" \
+    --file="${RUNTIME_TEST}"
 
 echo "Testing changed-checksum refusal..."
 printf '\n-- deliberate checksum drift for negative test only\n' > "${DRIFT_MIGRATION}"
@@ -226,7 +253,7 @@ echo "PASS: valid proposal recovered successfully after failed transaction."
   echo "- PostgreSQL: $(psql_admin --dbname=iam_migration_test --tuples-only --no-align --command='SHOW server_version')"
   echo "- Empty apply, checksum ledger, concurrent/idempotent apply, checksum drift refusal, injected-failure rollback, and forward recovery: **PASS**."
   echo "- Composite tenant FK and disposable real-login RLS tests: **PASS**."
-  echo "- **SECURITY BLOCKER reproduced:** caller-settable app.tenant_id can switch visible tenant under arbitrary SQL. This is not a passing cross-tenant security guarantee."
+  echo "- Signed-context HMAC, tampering/expiry rejection, plain-GUC spoof resistance, and runtime key-table denial: **PASS in disposable prototype only**; real secret provisioning and application signing remain unverified."
   echo "- No shared Neon database was used; this test ran only on a loopback PostgreSQL service."
 } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
