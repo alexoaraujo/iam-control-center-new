@@ -55,11 +55,13 @@ The proposal grants the runtime enough read access to exercise the tenant-scoped
 
 ## 4. RLS limitations — explicit security gate
 
-The helper app_private.current_tenant_id() returns NULL when context is absent, empty, or malformed. Tenant RLS policies compare rows against this value and run with FORCE ROW LEVEL SECURITY.
+The candidate has been revised to use a **signed tenant capability prototype** instead of trusting app.tenant_id. The GUC app.tenant_context carries a short-lived, canonical payload bound to key id, tenant UUID, identity UUID, membership UUID, and expiry. A private SECURITY DEFINER verifier checks HMAC-SHA-256 using app_private.tenant_context_keys; runtime receives EXECUTE on the verifier but no SELECT on the key table. The verifier has an empty search_path and schema-qualified references.
 
-**Important:** app.tenant_id is a caller-settable PostgreSQL custom GUC. If the runtime session is allowed to execute arbitrary SQL, it can set the GUC to another tenant and see that tenant's rows covered by these policies. The automated test suite deliberately reproduces this limitation so a green schema test cannot be mistaken for a complete tenant-isolation security result.
+The disposable CI suite now signs test contexts using a test-only key generated inside the temporary PostgreSQL service, then exercises HMAC tampering, expired and overlong tokens, tenant/identity/membership field changes, direct key-table denial, and an attempt to switch app.tenant_id while retaining a tenant A capability. The expected result is that the simple GUC is ignored and visibility remains tenant A.
 
-Before promotion, the project must decide and test its threat model and trusted context-establishment boundary. OIDC validation and active-membership checks must remain in the server; the GUC cannot be treated as proof of identity. If arbitrary SQL execution with the runtime credential is within the threat model, this proposal's GUC-only RLS design is insufficient and must be redesigned before application.
+This is a **prototype result only**. The application-side token issuer, secret bootstrap/rotation, signed identity capability for pre-tenant discovery, active-membership revocation behavior, and real Neon runtime-login path are not implemented or verified. The runtime key is not present in source control; the CI key is only a disposable fixture.
+
+Before promotion, review the verifier owner/grants, HMAC key provisioning, TTL/revocation window, error handling, OIDC bootstrap, and all SECURITY DEFINER functions. A signed token prevents the SQL caller from changing its tenant fields without the key, but does not defend against compromise of the trusted backend or signing key.
 
 ## 5. Test plan and success semantics
 
@@ -80,7 +82,7 @@ The CI job uses a local ephemeral PostgreSQL 18 service only; it must refuse non
 | Append audit to current tenant | INSERT allowed for matching tenant |
 | Append audit to another tenant | RLS rejects it |
 | Runtime DDL / global table access | Denied |
-| Caller changes the custom GUC | Expected known limitation is reproduced and recorded; this is a **promotion blocker**, not a passing security control |
+| Caller changes app.tenant_id while retaining signed tenant A capability | Query remains scoped to A; changing the simple GUC does not change the verified tenant |
 
 The CI success conclusion means **the candidate SQL and its transactional/contract tests passed on disposable PostgreSQL**. It does not mean the IAM application's login bootstrap, real Neon runtime login, secure context boundary, Auth0, Vercel, or shared-database integration passed.
 
@@ -100,10 +102,10 @@ The CI success conclusion means **the candidate SQL and its transactional/contra
 - [ ] Approve global iam.identities and iam.permissions access strategy.
 - [ ] Approve invitation schema separately or explicitly defer it.
 - [ ] Approve audit event vocabulary, metadata retention, and actor semantics.
-- [ ] Resolve the caller-settable-GUC threat model; do not claim GUC-only isolation protects against arbitrary SQL.
+- [ ] Review the signed-capability verifier, HMAC secret bootstrap/rotation, token TTL and revocation window; keep the signed-identity bootstrap separate from tenant-scoped context.
 - [ ] Validate effective privileges using a real non-owner Neon runtime login in an isolated branch.
 - [ ] Compare proposed schema with the intended iam_control_center databases and record schema diff.
 - [ ] Review migration runner and recovery plan.
 - [ ] Approve a follow-up PR before any shared Development change; Production requires separate explicit approval.
 
-**Current classification:** proposal artifacts only. No shared database was changed. Migration readiness remains **BLOCKED** until the items above are reviewed and security assumptions are resolved.
+**Current classification:** proposal artifacts only. The signed-capability prototype is covered by disposable PostgreSQL tests, but application signing/bootstrap, real Neon runtime authentication, key provisioning/rotation and security review remain pending. No shared database was changed. Migration readiness remains **BLOCKED** until the items above are reviewed and security assumptions are resolved.
