@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   listBranches,
   planCreate,
@@ -212,4 +213,12 @@ test("delete refuses duplicate preview targets", () => {
     () => planDelete([branch("preview/pr-25"), branch("preview/pr-25")], "preview/pr-25"),
     /Duplicate/,
   );
+});
+
+test("workflow keeps both lifecycle jobs disabled and rejects fork PRs", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/neon-branch.yml", import.meta.url), "utf8");
+  assert.equal((workflow.match(/if: false && vars\\.NEON_PR_BRANCH_LIFECYCLE_ENABLED/g) ?? []).length, 2);
+  assert.equal((workflow.match(/github\\.event\\.pull_request\\.head\\.repo\\.full_name == github\\.repository/g) ?? []).length, 2);
+  assert.match(workflow, /neondatabase\\/delete-branch-action@[0-9a-f]{40}/);
+  assert.match(workflow, /branch: preview\\/pr-\\$\\{\\{ github\\.event\\.pull_request\\.number \\}\\}/);
 });
