@@ -114,6 +114,51 @@ test("fails closed on invalid JSON or a missing branches array", async (t) => {
   });
 });
 
+test("follows Neon branch pagination cursor until all pages are collected", async () => {
+  const requested = [];
+  const result = await listBranches({
+    projectId: "project",
+    apiKey: "mock-secret",
+    fetchImpl: async (url) => {
+      requested.push(url);
+      if (requested.length === 1) {
+        return response(200, {
+          branches: [branch("production", "ready", null)],
+          pagination: { next: "cursor-2" },
+        });
+      }
+      assert.match(url, /cursor=cursor-2/);
+      return response(200, {
+        branches: [branch("preview/pr-25")],
+        pagination: {},
+      });
+    },
+    sleepImpl: noWait,
+  });
+  assert.equal(requested.length, 2);
+  assert.deepEqual(result.map((item) => item.name), ["production", "preview/pr-25"]);
+});
+
+test("fails closed when Neon pagination cursor repeats", async () => {
+  let calls = 0;
+  await assert.rejects(
+    listBranches({
+      projectId: "project",
+      apiKey: "mock-secret",
+      fetchImpl: async () => {
+        calls += 1;
+        return response(200, {
+          branches: [],
+          pagination: { next: "same-cursor" },
+        });
+      },
+      sleepImpl: noWait,
+    }),
+    /repeated pagination cursor/,
+  );
+  assert.equal(calls, 2);
+});
+
 test("requires non-empty Neon configuration and never logs API credentials", async () => {
   await assert.rejects(
     listBranches({ projectId: " ", apiKey: "mock-secret" }),
