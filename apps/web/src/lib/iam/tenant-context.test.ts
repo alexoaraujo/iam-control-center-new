@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   issueTenantContextCapability,
   MAX_TENANT_CONTEXT_TTL_SECONDS,
@@ -12,6 +12,15 @@ const IDENTITY_A = "00000000-0000-0000-0000-000000000101";
 const MEMBERSHIP_A = "00000000-0000-0000-0000-000000000201";
 const KEY = Buffer.from("0123456789abcdef0123456789abcdef", "utf8");
 
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(NOW * 1000));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 const claims: TenantContextClaims = {
   keyId: "test-v1",
   tenantId: TENANT_A,
@@ -22,7 +31,7 @@ const claims: TenantContextClaims = {
 
 describe("signed tenant context capability", () => {
   it("produces the SQL verifier's canonical payload and HMAC-SHA-256", () => {
-    const token = issueTenantContextCapability(claims, KEY, NOW);
+    const token = issueTenantContextCapability(claims, KEY);
     const payload = [
       "test-v1",
       TENANT_A,
@@ -47,7 +56,6 @@ describe("signed tenant context capability", () => {
         membershipId: MEMBERSHIP_A.toUpperCase(),
       },
       KEY,
-      NOW,
     );
 
     expect(token.split("|").slice(0, 5)).toEqual([
@@ -64,58 +72,59 @@ describe("signed tenant context capability", () => {
       issueTenantContextCapability(
         { ...claims, expiresAtEpoch: NOW + MAX_TENANT_CONTEXT_TTL_SECONDS },
         KEY,
-        NOW,
       ),
     ).not.toThrow();
   });
 
   it("rejects expired or overlong capabilities", () => {
     expect(() =>
-      issueTenantContextCapability({ ...claims, expiresAtEpoch: NOW }, KEY, NOW),
+      issueTenantContextCapability({ ...claims, expiresAtEpoch: NOW }, KEY),
     ).toThrow(RangeError);
 
     expect(() =>
       issueTenantContextCapability(
         { ...claims, expiresAtEpoch: NOW + MAX_TENANT_CONTEXT_TTL_SECONDS + 1 },
         KEY,
-        NOW,
       ),
     ).toThrow(RangeError);
   });
 
   it("rejects keys shorter than 256 bits", () => {
     expect(() =>
-      issueTenantContextCapability(claims, Buffer.alloc(31, 1), NOW),
+      issueTenantContextCapability(claims, Buffer.alloc(31, 1)),
     ).toThrow(/at least 32 bytes/);
   });
 
   it("rejects invalid key identifiers", () => {
     expect(() =>
-      issueTenantContextCapability({ ...claims, keyId: "invalid|key" }, KEY, NOW),
+      issueTenantContextCapability({ ...claims, keyId: "invalid|key" }, KEY),
     ).toThrow(/keyId/);
     expect(() =>
-      issueTenantContextCapability({ ...claims, keyId: "" }, KEY, NOW),
+      issueTenantContextCapability({ ...claims, keyId: "" }, KEY),
     ).toThrow(/keyId/);
   });
 
   it("rejects non-UUID tenant, identity, or membership identifiers", () => {
     expect(() =>
-      issueTenantContextCapability({ ...claims, tenantId: "tenant-a" }, KEY, NOW),
+      issueTenantContextCapability({ ...claims, tenantId: "tenant-a" }, KEY),
     ).toThrow(/tenantId/);
     expect(() =>
-      issueTenantContextCapability({ ...claims, identityId: "identity-a" }, KEY, NOW),
+      issueTenantContextCapability({ ...claims, identityId: "identity-a" }, KEY),
     ).toThrow(/identityId/);
     expect(() =>
-      issueTenantContextCapability({ ...claims, membershipId: "membership-a" }, KEY, NOW),
+      issueTenantContextCapability({ ...claims, membershipId: "membership-a" }, KEY),
     ).toThrow(/membershipId/);
   });
 
   it("rejects non-safe integer timestamps", () => {
     expect(() =>
-      issueTenantContextCapability({ ...claims, expiresAtEpoch: Number.NaN }, KEY, NOW),
+      issueTenantContextCapability({ ...claims, expiresAtEpoch: Number.NaN }, KEY),
     ).toThrow(/safe integer/);
     expect(() =>
-      issueTenantContextCapability(claims, KEY, Number.POSITIVE_INFINITY),
+      issueTenantContextCapability(
+        { ...claims, expiresAtEpoch: Number.POSITIVE_INFINITY },
+        KEY,
+      ),
     ).toThrow(/safe integer/);
   });
 });
