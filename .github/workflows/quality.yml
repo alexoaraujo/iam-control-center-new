@@ -16,6 +16,19 @@ jobs:
     name: quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout repository
@@ -55,6 +68,17 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Test proposed database schema in disposable PostgreSQL
+        env:
+          IAM_ALLOW_DISPOSABLE_DB_TESTS: '1'
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: postgres
+          REVIEWED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bash database/proposals/tests/run-postgres-tests.sh
 
       - name: Build
         run: pnpm build
