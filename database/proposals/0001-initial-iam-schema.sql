@@ -131,26 +131,161 @@ CREATE INDEX audit_events_tenant_occurred_idx
 CREATE INDEX audit_events_tenant_event_occurred_idx
     ON audit.events (tenant_id, event_key, occurred_at DESC);
 
--- Tenant context is a query-scope hint, NOT proof of OIDC identity or authority.
--- Invalid/missing values fail closed to NULL. A caller able to execute arbitrary
--- SQL can set a custom GUC; the test suite deliberately demonstrates that limit.
+-- Signed tenant context prototype. Runtime may read this GUC, but cannot
+-- change tenant/membership/expiry and retain a valid signature without the key.
+-- The HMAC key is provisioned out-of-band by a migrator/secret-bootstrap step;
+-- no key bytes are committed to this SQL file or exposed to runtime.
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+
+CREATE TABLE app_private.tenant_context_keys (
+    key_id      text PRIMARY KEY CHECK (key_id ~ '^[a-zA-Z0-9_-]{1,64}
+
+ALTER TABLE iam.memberships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE iam.memberships FORCE ROW LEVEL SECURITY;
+ALTER TABLE iam.roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE iam.roles FORCE ROW LEVEL SECURITY;
+ALTER TABLE iam.membership_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE iam.membership_roles FORCE ROW LEVEL SECURITY;
+ALTER TABLE iam.role_permissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE iam.role_permissions FORCE ROW LEVEL SECURITY;
+ALTER TABLE audit.events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit.events FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY memberships_tenant_select
+    ON iam.memberships
+    FOR SELECT TO iam_app_runtime
+    USING (tenant_id = app_private.current_tenant_id());
+
+CREATE POLICY roles_tenant_select
+    ON iam.roles
+    FOR SELECT TO iam_app_runtime
+    USING (tenant_id = app_private.current_tenant_id());
+
+CREATE POLICY membership_roles_tenant_select
+    ON iam.membership_roles
+    FOR SELECT TO iam_app_runtime
+    USING (tenant_id = app_private.current_tenant_id());
+
+CREATE POLICY role_permissions_tenant_select
+    ON iam.role_permissions
+    FOR SELECT TO iam_app_runtime
+    USING (
+        EXISTS (
+            SELECT 1
+            FROM iam.roles AS scoped_role
+            WHERE scoped_role.id = role_permissions.role_id
+              AND scoped_role.tenant_id = app_private.current_tenant_id()
+        )
+    );
+
+CREATE POLICY audit_events_tenant_select
+    ON audit.events
+    FOR SELECT TO iam_app_runtime
+    USING (tenant_id = app_private.current_tenant_id());
+
+CREATE POLICY audit_events_tenant_insert
+    ON audit.events
+    FOR INSERT TO iam_app_runtime
+    WITH CHECK (tenant_id = app_private.current_tenant_id());
+
+-- Least-privilege starting point. No runtime grants are made for global
+-- identities, tenants, permissions, or the migration ledger until bootstrap
+-- and catalog-access contracts are reviewed. Membership/role mutation is also
+-- withheld pending endpoint-level authorization and a real runtime-login test.
+GRANT USAGE ON SCHEMA iam, audit, app_private TO iam_app_runtime;
+REVOKE ALL ON FUNCTION app_private.current_tenant_id() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_private.current_tenant_id() TO iam_app_runtime;
+GRANT SELECT ON iam.memberships, iam.roles, iam.membership_roles, iam.role_permissions
+    TO iam_app_runtime;
+GRANT SELECT, INSERT ON audit.events TO iam_app_runtime;
+REVOKE UPDATE, DELETE, TRUNCATE ON audit.events FROM iam_app_runtime;
+
+-- Explicitly not included yet:
+--   * iam.invitations (invitation/token lifecycle contract not approved);
+--   * RLS/access paths for iam.tenants, iam.identities, iam.permissions;
+--   * tenant discovery / login bootstrap function or SECURITY DEFINER API;
+--   * seed permission/role catalog;
+--   * runtime INSERT/UPDATE of membership and role relationships;
+--   * changes to existing role membership or owner/runtime credentials.
+),
+    secret      bytea NOT NULL CHECK (octet_length(secret) >= 32),
+    active      boolean NOT NULL DEFAULT true,
+    created_at  timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+REVOKE ALL ON app_private.tenant_context_keys FROM PUBLIC, iam_app_runtime;
+
+-- Capability format:
+-- key_id|tenant_uuid|identity_uuid|membership_uuid|expires_epoch|hex_hmac
+-- Signature covers the canonical first five fields. The application signs only
+-- after validating OIDC and the active tenant membership. Maximum lifetime: 120s.
 CREATE FUNCTION app_private.current_tenant_id()
 RETURNS uuid
 LANGUAGE plpgsql
 STABLE
-SECURITY INVOKER
-SET search_path = pg_catalog
+SECURITY DEFINER
+SET search_path = ''
 AS $function$
 DECLARE
     context_value text;
+    parts text[];
+    key_secret bytea;
+    tenant_value uuid;
+    identity_value uuid;
+    membership_value uuid;
+    expires_value bigint;
+    canonical_payload text;
+    expected_signature text;
+    now_epoch bigint;
 BEGIN
-    context_value := NULLIF(current_setting('app.tenant_id', true), '');
+    context_value := NULLIF(pg_catalog.current_setting('app.tenant_context', true), '');
     IF context_value IS NULL THEN
         RETURN NULL;
     END IF;
-    RETURN context_value::uuid;
+
+    parts := pg_catalog.string_to_array(context_value, '|');
+    IF pg_catalog.array_length(parts, 1) IS DISTINCT FROM 6 THEN
+        RETURN NULL;
+    END IF;
+
+    tenant_value := parts[2]::uuid;
+    identity_value := parts[3]::uuid;
+    membership_value := parts[4]::uuid;
+    expires_value := parts[5]::bigint;
+
+    now_epoch := floor(extract(epoch FROM pg_catalog.statement_timestamp()))::bigint;
+    IF expires_value <= now_epoch OR expires_value > now_epoch + 120 THEN
+        RETURN NULL;
+    END IF;
+
+    SELECT key.secret
+      INTO key_secret
+      FROM app_private.tenant_context_keys AS key
+     WHERE key.key_id = parts[1]
+       AND key.active = true;
+
+    IF key_secret IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    canonical_payload :=
+        parts[1] || '|' ||
+        tenant_value::text || '|' ||
+        identity_value::text || '|' ||
+        membership_value::text || '|' ||
+        expires_value::text;
+
+    expected_signature := pg_catalog.encode(
+        public.hmac(pg_catalog.convert_to(canonical_payload, 'UTF8'), key_secret, 'sha256'),
+        'hex'
+    );
+
+    IF expected_signature IS DISTINCT FROM parts[6] THEN
+        RETURN NULL;
+    END IF;
+
+    RETURN tenant_value;
 EXCEPTION
-    WHEN invalid_text_representation THEN
+    WHEN invalid_text_representation OR numeric_value_out_of_range OR array_subscript_error THEN
         RETURN NULL;
 END;
 $function$;
