@@ -33,6 +33,9 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Neon lifecycle mocked tests
+        run: node --test scripts/neon-branch-lifecycle.test.mjs
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
