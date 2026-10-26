@@ -53,12 +53,12 @@ SELECT to_regclass('iam.schema_migrations') IS NOT NULL AS ledger_exists \gset
     WHERE version = '0001_initial_iam_schema' \gset
     \if :checksum_matches
       \echo "IDEMPOTENCE: existing version and checksum match; skipping apply."
-      \quit 0
+      \quit
     \else
-      DO $ BEGIN RAISE EXCEPTION 'proposal version exists with a different checksum; refusing to apply'; END $;
+      DO LANGUAGE plpgsql 'BEGIN RAISE EXCEPTION ''proposal version exists with a different checksum; refusing to apply''; END';
     \endif
   \else
-    DO $ BEGIN RAISE EXCEPTION 'migration ledger exists but has no baseline row; manual reconciliation is required'; END $;
+    DO LANGUAGE plpgsql 'BEGIN RAISE EXCEPTION ''migration ledger exists but has no baseline row; manual reconciliation is required''; END';
   \endif
 \else
   SELECT (
@@ -77,7 +77,7 @@ SELECT to_regclass('iam.schema_migrations') IS NOT NULL AS ledger_exists \gset
     )
   ) AS existing_objects \gset
   \if :existing_objects
-    DO $ BEGIN RAISE EXCEPTION 'application objects exist without a verified ledger; refusing baseline'; END $;
+    DO LANGUAGE plpgsql 'BEGIN RAISE EXCEPTION ''application objects exist without a verified ledger; refusing baseline''; END';
   \endif
 \endif
 
