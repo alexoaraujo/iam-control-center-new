@@ -25,7 +25,7 @@ const UUID_PATTERN =
 
 function canonicalUuid(value: string, fieldName: string): string {
   if (!UUID_PATTERN.test(value)) {
-    throw new TypeError(\`${fieldName} must be a canonical UUID\`);
+    throw new TypeError(`${fieldName} must be a canonical UUID`);
   }
 
   return value.toLowerCase();
@@ -80,5 +80,5 @@ export function issueTenantContextCapability(
     .update(payload, "utf8")
     .digest("hex");
 
-  return \`${payload}|${signature}\`;
+  return `${payload}|${signature}`;
 }
