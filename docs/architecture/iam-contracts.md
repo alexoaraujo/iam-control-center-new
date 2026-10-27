@@ -39,7 +39,7 @@ Status: **proposta para revisão; não aprovada para Production**.
 ## 7. Papéis PostgreSQL
 - `iam_owner`/owner equivalente: administração controlada, nunca usado pela aplicação.
 - `iam_migrator`: execução de migrations em pipeline controlado; não é identidade de runtime.
-- `iam_app_runtime`: privilégios mínimos de execução, sem `BYPASSRLS`, `CREATEDB`, `CREATEROLE` ou ownership.
+- `iam_app_runtime`: privilégios mínimos de execução, sem `BYPASSRLS`, `CREATEDB`, `CREATEROLE` ou ownership. No schema inicial, pode ler tenants/roles/role assignments/permission catalog; pode gerenciar memberships e invitations conforme as policies; não pode criar tenants, alterar roles, atribuir roles ou alterar o catálogo de permissões diretamente. Essas operações exigem endpoints/rotinas confiáveis e restritas, ainda não implementadas.
 - Roles de login específicas por ambiente podem herdar privilégios da role runtime, sem grants administrativos.
 - Não reduzir ou alterar privilégios existentes automaticamente nesta migration; a reconciliação de roles é uma etapa separada e revisável.
 
@@ -48,6 +48,6 @@ Status: **proposta para revisão; não aprovada para Production**.
 2. Constraints e chaves compostas verificadas.
 3. Testes positivos e negativos executados com role efetiva de runtime.
 4. Prova de que uma membership/role de tenant A não autoriza acesso a tenant B.
-5. Prova de que o runtime não consegue alterar tabelas de catálogo/migrations nem modificar/excluir auditoria.
+5. Prova de que o runtime não consegue escrever em tenants/roles/role assignments/permission catalog nem alterar migrations; confirmar que não pode modificar/excluir auditoria.
 6. CI PASS para o SHA da PR; Preview não substitui os testes SQL.
 7. Production somente após revisão humana explícita, plano de recuperação e aprovação do deploy.
