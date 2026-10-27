@@ -51,8 +51,7 @@ jobs:
           host="$(python3 - <<'PY'
           import os
           from urllib.parse import urlparse
-          url = urlparse(os.environ["NEON_REVIEW_DATABASE_URL"])
-          print(url.hostname or "")
+          print(urlparse(os.environ["NEON_REVIEW_DATABASE_URL"]).hostname or "")
           PY
           )"
 
@@ -81,29 +80,63 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install --yes postgresql-client
 
-      - name: Assert database identity
+      - name: Verify direct connection, runtime role, and RLS metadata
         shell: bash
-        env:
-          PGPASSWORD_URL: ${{ secrets.NEON_REVIEW_DATABASE_URL }}
         run: |
           set -euo pipefail
-          db="$(psql "$PGPASSWORD_URL" --no-psqlrc --no-align --tuples-only --set=ON_ERROR_STOP=1 --command='SELECT current_database();' | tr -d '\r\n')"
-          user="$(psql "$PGPASSWORD_URL" --no-psqlrc --no-align --tuples-only --set=ON_ERROR_STOP=1 --command='SELECT current_user;' | tr -d '\r\n')"
-          test "$db" = "iam_control_center" || {
+          umask 077
+          PGPASSFILE="$(mktemp)"
+          trap 'rm -f "$PGPASSFILE"' EXIT
+          export PGPASSFILE
+
+          eval "$(python3 - <<'PY'
+          import os
+          import shlex
+          from urllib.parse import unquote, urlparse
+
+          u = urlparse(os.environ["NEON_REVIEW_DATABASE_URL"])
+          host = u.hostname or ""
+          port = u.port or 5432
+          user = unquote(u.username or "")
+          password = unquote(u.password or "")
+          path_db = unquote((u.path or "").lstrip("/"))
+          expected_hosts = {
+              "ep-curly-shape-b6hv2xd4.c-2.sa-east-1.aws.neon.tech",
+              "ep-curly-shape-b6hv2xd4-ypq.c-2.sa-east-1.aws.neon.tech",
+          }
+          if host not in expected_hosts or host.endswith("-pooler.c-2.sa-east-1.aws.neon.tech"):
+              raise SystemExit("Connection host is not allowlisted")
+          if path_db != "iam_control_center" or user != "Administrador" or not password:
+              raise SystemExit("Connection identity does not match the review allowlist")
+          def pgpass_escape(s):
+              return s.replace("\\", "\\\\").replace(":", "\\:")
+          with open(os.environ["PGPASSFILE"], "w", encoding="utf-8") as f:
+              f.write(":".join(map(pgpass_escape, [host, str(port), path_db, user, password])) + "\n")
+          os.chmod(os.environ["PGPASSFILE"], 0o600)
+          for key, value in {
+              "PGHOST": host,
+              "PGPORT": str(port),
+              "PGUSER": user,
+              "PGDATABASE": path_db,
+              "PGSSLMODE": "require",
+          }.items():
+              print(f"export {key}={shlex.quote(value)}")
+          PY
+          )"
+          unset NEON_REVIEW_DATABASE_URL
+
+          actual_db="$(psql --no-psqlrc --no-align --tuples-only --set=ON_ERROR_STOP=1 --command='SELECT current_database();' | tr -d '\r\n')"
+          actual_user="$(psql --no-psqlrc --no-align --tuples-only --set=ON_ERROR_STOP=1 --command='SELECT current_user;' | tr -d '\r\n')"
+          test "$actual_db" = "iam_control_center" || {
             echo "::error::Connected database does not match the review database."
             exit 1
           }
-          test "$user" = "Administrador" || {
+          test "$actual_user" = "Administrador" || {
             echo "::error::Connection role is not the expected review-branch administrator."
             exit 1
           }
-          echo "Database identity checks passed; connection details omitted."
 
-      - name: Verify runtime role and RLS metadata
-        shell: bash
-        run: |
-          set -euo pipefail
-          psql "$NEON_REVIEW_DATABASE_URL" --dbname=iam_control_center --no-psqlrc --set=ON_ERROR_STOP=1 <<'SQL'
+          psql --dbname="iam_control_center" --no-psqlrc --set=ON_ERROR_STOP=1 <<'SQL'
           BEGIN;
           SET LOCAL ROLE iam_app_runtime;
 
