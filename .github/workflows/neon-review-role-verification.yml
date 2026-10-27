@@ -1,0 +1,160 @@
+name: Neon review branch - runtime role verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_review_branch:
+        description: "Execute somente na branch Neon de revisão br-fancy-bird-b6j7etpp"
+        required: true
+        type: choice
+        options:
+          - NO
+          - RUN_REVIEW_CHECK
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neon-review-runtime-role-verification
+  cancel-in-progress: false
+
+jobs:
+  verify-runtime-role:
+    if: github.repository == 'alexoaraujo83/iam-control-center' && github.ref == 'refs/heads/main' && inputs.confirm_review_branch == 'RUN_REVIEW_CHECK'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: neon-review-maintenance
+    env:
+      NEON_REVIEW_DATABASE_URL: ${{ secrets.NEON_REVIEW_DATABASE_URL }}
+      NEON_REVIEW_BRANCH_ID: ${{ vars.NEON_REVIEW_BRANCH_ID }}
+      NEON_REVIEW_DATABASE: ${{ vars.NEON_REVIEW_DATABASE }}
+
+    steps:
+      - name: Validate review-only target without printing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "${NEON_REVIEW_BRANCH_ID:-}" = "br-fancy-bird-b6j7etpp" || {
+            echo "::error::NEON_REVIEW_BRANCH_ID must identify the allowlisted review branch."
+            exit 1
+          }
+          test "${NEON_REVIEW_DATABASE:-}" = "iam_control_center" || {
+            echo "::error::NEON_REVIEW_DATABASE must identify the allowlisted review database."
+            exit 1
+          }
+          test -n "${NEON_REVIEW_DATABASE_URL:-}" || {
+            echo "::error::Set NEON_REVIEW_DATABASE_URL as an environment secret."
+            exit 1
+          }
+
+          host="$(python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          url = urlparse(os.environ["NEON_REVIEW_DATABASE_URL"])
+          print(url.hostname or "")
+          PY
+          )"
+
+          case "$host" in
+            ep-curly-shape-b6hv2xd4.c-2.sa-east-1.aws.neon.tech|ep-curly-shape-b6hv2xd4-ypq.c-2.sa-east-1.aws.neon.tech)
+              ;;
+            *)
+              echo "::error::Connection host is not the allowlisted Neon review endpoint."
+              exit 1
+              ;;
+          esac
+
+          case "$host" in
+            *-pooler.*)
+              echo "::error::Use a direct, non-pooled connection for this check."
+              exit 1
+              ;;
+          esac
+
+          echo "Target guard passed: allowlisted review endpoint; credentials were not printed."
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install --yes postgresql-client
+
+      - name: Assert database identity
+        shell: bash
+        env:
+          PGPASSWORD_URL: ${{ secrets.NEON_REVIEW_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          db="$(psql "$PGPASSWORD_URL" --no-psqlrc --no-align --tuples-only --set=ON_ERROR_STOP=1 --command='SELECT current_database();' | tr -d '\r\n')"
+          user="$(psql "$PGPASSWORD_URL" --no-psqlrc --no-align --tuples-only --set=ON_ERROR_STOP=1 --command='SELECT current_user;' | tr -d '\r\n')"
+          test "$db" = "iam_control_center" || {
+            echo "::error::Connected database does not match the review database."
+            exit 1
+          }
+          test "$user" = "Administrador" || {
+            echo "::error::Connection role is not the expected review-branch administrator."
+            exit 1
+          }
+          echo "Database identity checks passed; connection details omitted."
+
+      - name: Verify runtime role and RLS metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$NEON_REVIEW_DATABASE_URL" --dbname=iam_control_center --no-psqlrc --set=ON_ERROR_STOP=1 <<'SQL'
+          BEGIN;
+          SET LOCAL ROLE iam_app_runtime;
+
+          DO $$
+          DECLARE
+            unsafe_role boolean;
+            bad_rls_tables integer;
+          BEGIN
+            IF current_user <> 'iam_app_runtime' THEN
+              RAISE EXCEPTION 'Runtime role switch did not take effect';
+            END IF;
+
+            SELECT (rolcanlogin OR rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole)
+              INTO unsafe_role
+            FROM pg_roles
+            WHERE rolname = 'iam_app_runtime';
+
+            IF unsafe_role IS DISTINCT FROM false THEN
+              RAISE EXCEPTION 'iam_app_runtime has unsafe role attributes or is missing';
+            END IF;
+
+            WITH expected(schema_name, table_name) AS (
+              VALUES
+                ('audit', 'events'),
+                ('iam', 'invitations'),
+                ('iam', 'membership_roles'),
+                ('iam', 'memberships'),
+                ('iam', 'role_permissions'),
+                ('iam', 'roles'),
+                ('iam', 'tenants')
+            )
+            SELECT count(*)
+              INTO bad_rls_tables
+            FROM expected e
+            LEFT JOIN pg_namespace n ON n.nspname = e.schema_name
+            LEFT JOIN pg_class c ON c.relnamespace = n.oid AND c.relname = e.table_name
+            WHERE COALESCE(c.relrowsecurity, false) IS NOT TRUE
+               OR COALESCE(c.relforcerowsecurity, false) IS NOT TRUE;
+
+            IF bad_rls_tables <> 0 THEN
+              RAISE EXCEPTION 'Expected tenant-scoped RLS tables are missing, not enabled, or not forced: %', bad_rls_tables;
+            END IF;
+          END
+          $$;
+
+          SELECT current_user AS active_role,
+                 rolcanlogin, rolsuper, rolbypassrls, rolcreatedb, rolcreaterole
+          FROM pg_roles
+          WHERE rolname = current_user;
+
+          ROLLBACK;
+          SQL
+
+          echo "Role and RLS metadata check passed. This is not a positive/negative cross-tenant isolation test."
