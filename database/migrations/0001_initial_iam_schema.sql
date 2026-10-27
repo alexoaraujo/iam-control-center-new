@@ -196,7 +196,10 @@ BEGIN
       EXECUTE format('GRANT USAGE ON SCHEMA iam, audit, app_private TO %I', runtime_role);
       EXECUTE format('GRANT SELECT, INSERT, UPDATE ON iam.identities TO %I', runtime_role);
       EXECUTE format('GRANT SELECT ON iam.permissions TO %I', runtime_role);
-      EXECUTE format('GRANT SELECT, INSERT, UPDATE ON iam.tenants, iam.memberships, iam.roles, iam.membership_roles, iam.role_permissions, iam.invitations TO %I', runtime_role);
+      -- Runtime may manage memberships/invitations, but tenant provisioning and role/permission administration
+      -- are intentionally withheld until trusted, narrowly-scoped server-side operations are implemented.
+      EXECUTE format('GRANT SELECT ON iam.tenants, iam.roles, iam.membership_roles, iam.role_permissions TO %I', runtime_role);
+      EXECUTE format('GRANT SELECT, INSERT, UPDATE ON iam.memberships, iam.invitations TO %I', runtime_role);
       EXECUTE format('GRANT SELECT, INSERT ON audit.events TO %I', runtime_role);
       EXECUTE format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA audit TO %I', runtime_role);
       EXECUTE format('GRANT EXECUTE ON FUNCTION app_private.current_tenant_id() TO %I', runtime_role);
