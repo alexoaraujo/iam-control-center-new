@@ -5,9 +5,9 @@ Migrations are versioned in this directory and must be reviewed before use.
 ## Required sequence
 1. Review `docs/architecture/iam-contracts.md`.
 2. Apply the proposed initial schema only to a clean isolated branch/database.
-3. Verify table definitions, composite tenant foreign keys, RLS enabled and forced, and effective runtime grants.
+3. Verify table definitions, composite tenant foreign keys, RLS enabled and forced, and effective runtime grants; runtime must not write tenants, roles, membership-role assignments, role-permission mappings, or the permission catalog directly.
 4. Run positive and negative tenant-isolation tests using the actual runtime login/role, not only the owner.
-5. Record SHA, migration checksum, SQL test output, and CI evidence in the PR.
+5. Record SHA, migration checksum, SQL test output, and CI evidence in the PR. The Neon connector may be pinned to an administrative role; if it cannot execute as the effective runtime login, mark runtime/RLS verification BLOCKED and do not substitute owner-session results.
 6. Apply to Development only after review; then validate Preview. Production requires explicit approval and a recovery plan.
 
 ## Important RLS limitation
