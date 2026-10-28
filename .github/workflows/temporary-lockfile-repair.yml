@@ -21,14 +21,13 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: pnpm
       - uses: pnpm/action-setup@v4
         with:
           version: 10.12.1
           run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - name: Regenerate lockfile with project package manifests
         run: pnpm install --lockfile-only --ignore-scripts
       - name: Commit lockfile if changed
