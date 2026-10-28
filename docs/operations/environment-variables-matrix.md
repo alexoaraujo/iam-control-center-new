@@ -39,7 +39,7 @@ O código atual `apps/web/src/lib/auth0.ts` usa `@auth0/nextjs-auth0/server` e l
 | `AUTH0_DOMAIN` | Presente | Presente | Presente | CONFIGURADA; ainda não prova login |
 | `AUTH0_CLIENT_ID` | Presente | Presente | Presente | CONFIGURADA; ainda não prova login |
 | `AUTH0_CLIENT_SECRET` | Entrada sensível presente | Entrada sensível presente | Não apareceu no inventário | BLOQUEADA para E2E/Production até confirmar segredo válido no Auth0 e cadastrar em Production |
-| `AUTH0_SECRET` | Entrada sensível presente | Entrada sensível presente | Não apareceu no inventário | BLOQUEADA para login completo em Production; valores sensíveis não foram lidos nem sobrescritos |
+| `AUTH0_SECRET` | Entrada sensível presente | Entrada sensível presente | Criada nesta execução como secret sensível exclusivo de Production | CONFIGURED_UNVERIFIED em Production; valor não é reexibido e ainda não comprova login |
 | `APP_BASE_URL` | `http://localhost:3000` | Valor específico da branch `feat/auth0-nextjs-sdk-integration` | `https://iam-control-center.vercel.app` | CONFIGURADA; confirmar a URL de Preview real usada por cada deploy |
 | `AUTH0_ISSUER_BASE_URL` | Presente | Presente | Presente | LEGADA/REDUNDANTE para o código atual |
 | `AUTH0_AUDIENCE` | Não confirmada | Não confirmada | Não confirmada | Não necessária até API/Audience serem confirmadas |
@@ -139,10 +139,10 @@ Para cada item, registrar: nome da variável, destino, ambiente/branch, tipo (co
 ## 11. Bloqueios e próximos passos rastreáveis
 
 1. **BLOCKED — governança:** a API do GitHub reportou o repositório como `public`, enquanto o README e a documentação dizem privado. Confirmar e corrigir a visibilidade no GitHub antes de armazenar credenciais ou depender de controles específicos de repositório privado. Esta alteração não muda a visibilidade.
-2. **BLOCKED — Auth0:** confirmar/cadastrar secrets de Production e registrar Allowed Callback URLs, Allowed Logout URLs e Allowed Web Origins para o domínio real; depois executar login/callback/logout E2E.
+2. **BLOCKED — Auth0:** `AUTH0_SECRET` de Production foi criado como secret sensível e verificado por metadados. Ainda falta obter/cadastrar `AUTH0_CLIENT_SECRET` válido em Production e registrar Allowed Callback URLs, Allowed Logout URLs e Allowed Web Origins para o domínio real; depois executar login/callback/logout E2E.
 3. **BLOCKED — Neon:** criar/confirmar roles de runtime com LOGIN e privilégio mínimo, emitir URLs por branch sem usar role administrativa, configurar Preview/Production e testar conexão real.
 4. **BLOCKED — GitHub Actions settings:** cadastrar secrets/variables somente quando houver workflow consumidor; a ferramenta de escrita desses settings não está disponível nesta sessão.
 5. **PENDING — evidência de entrega:** abrir PR para esta documentação, aguardar checks para o SHA exato e manter o PR Draft até revisão e evidências aprovadas.
 6. **PENDING — Production:** não executar deployment/promote de Production sem aprovação explícita e pacote de evidências de Preview.
 
-Nenhuma migration foi executada e nenhuma credencial sensível foi exibida ou sobrescrita nesta entrega.
+Nenhuma migration foi executada. Foi criado um novo `AUTH0_SECRET` sensível em Vercel Production sem sobrescrever valores existentes; seu conteúdo não foi exibido ao usuário. Nenhum outro segredo foi lido ou sobrescrito.
