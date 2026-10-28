@@ -14,23 +14,18 @@ export default async function HomePage() {
         Base inicial de uma plataforma IAM multi-tenant, com segurança e evidências como critérios de entrega.
       </p>
       <section style={{ marginTop: 32, background: "#fff", border: "1px solid #dfe4e8", borderRadius: 12, padding: 24 }}>
-        <h2 style={{ marginTop: 0 }}>Sessão Auth0</h2>
-        {session?.user ? (
-          <>
-            <p>Autenticado como: {session.user.email ?? session.user.sub}</p>
-            <p><Link href="/auth/profile">Consultar perfil retornado pelo SDK</Link></p>
-            <p><Link href="/auth/logout">Encerrar sessão</Link></p>
-          </>
-        ) : (
-          <>
-            <p>Nenhuma sessão ativa.</p>
-            <p><Link href="/auth/login">Entrar com Auth0</Link></p>
-            <p><Link href="/auth/login?screen_hint=signup">Criar conta</Link></p>
-          </>
-        )}
-        <p style={{ marginTop: 24, fontSize: 14, lineHeight: 1.6 }}>
-          A autenticação não substitui a autorização por tenant, membership e permissões. A persistência e os controles de acesso ainda precisam ser implementados e validados.
+        <h2 style={{ marginTop: 0 }}>Autenticação</h2>
+        <p>O fluxo de login é fornecido pelo SDK Auth0 v4. A conclusão do fluxo depende das variáveis de ambiente e das URLs permitidas no tenant.</p>
+        <p style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <a href="/auth/login">Entrar com Auth0</a>
+          <a href="/auth/logout">Sair</a>
         </p>
+        <h2>Estado do projeto</h2>
+        <ul style={{ lineHeight: 1.9 }}>
+          <li>SDK Auth0 v4 e middleware registrados.</li>
+          <li>Login/callback/logout ainda precisam de teste E2E real.</li>
+          <li>Não considerar o scaffold pronto para produção.</li>
+        </ul>
       </section>
     </main>
   );
