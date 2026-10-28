@@ -4064,7 +4064,6 @@ snapshots:
     dependencies:
       react: 19.1.10
 
-  vite@7.3.7(@types/node@24.0.10):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
