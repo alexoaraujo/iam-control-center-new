@@ -35,6 +35,15 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Verify toolchain versions
+        run: |
+          set -euo pipefail
+          node --version
+          pnpm --version
+          corepack --version
+          pnpm config get manage-package-manager-versions
+          pnpm store path
+
       - name: Restore Next.js build cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
