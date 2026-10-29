@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -103,5 +104,5 @@ jobs:
             echo "Waiting for Vercel status (attempt ${attempt}/36); current state: ${state}."
             sleep 20
           done
-          echo "::error::Timed out waiting for a successful Vercel status for ${COMMIT_SHA}."
+          echo "::error::Timed out waiting for a successful Vercel Preview status for ${COMMIT_SHA}."
           exit 1
