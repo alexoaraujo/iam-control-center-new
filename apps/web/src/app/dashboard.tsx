@@ -133,7 +133,7 @@ export default function Dashboard({ userLabel, authenticated, authConfigured, da
             <h1>Visão geral do projeto</h1>
             <p>Acompanhe validações, evidências, resultados e gates de segurança em um único lugar.</p>
           </div>
-          <button className={styles.secondaryButton} onClick={runHealthCheck} disabled={checking}>{checking ? "Verificando…" : "↻ Atualizar diagnóstico"}</button>
+          <div className={styles.welcomeActions}><a className={styles.secondaryButton} href="https://iam-control-center-preview.vercel.app" target="_blank" rel="noreferrer">Abrir Preview ↗</a><button className={styles.secondaryButton} onClick={runHealthCheck} disabled={checking}>{checking ? "Verificando…" : "↻ Atualizar diagnóstico"}</button></div>
         </section>
 
         <section className={styles.metrics} aria-label="Resumo do projeto">
