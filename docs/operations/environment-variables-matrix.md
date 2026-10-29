@@ -138,11 +138,12 @@ Para cada item, registrar: nome da variável, destino, ambiente/branch, tipo (co
 
 ## 11. Bloqueios e próximos passos rastreáveis
 
-1. **BLOCKED — governança:** a API do GitHub reportou o repositório como `public`, enquanto o README e a documentação dizem privado. Confirmar e corrigir a visibilidade no GitHub antes de armazenar credenciais ou depender de controles específicos de repositório privado. Esta alteração não muda a visibilidade.
+1. **RECONCILIADO — governança:** a leitura atual da API do GitHub confirma o repositório como `private`. Uma leitura anterior nesta execução havia retornado `public`; a divergência não é reproduzida na leitura atual. A visibilidade não foi alterada por esta tarefa.
 2. **BLOCKED — Auth0:** `AUTH0_SECRET` de Production foi criado como secret sensível e verificado por metadados. Ainda falta obter/cadastrar `AUTH0_CLIENT_SECRET` válido em Production e registrar Allowed Callback URLs, Allowed Logout URLs e Allowed Web Origins para o domínio real; depois executar login/callback/logout E2E.
 3. **BLOCKED — Neon:** criar/confirmar roles de runtime com LOGIN e privilégio mínimo, emitir URLs por branch sem usar role administrativa, configurar Preview/Production e testar conexão real.
 4. **BLOCKED — GitHub Actions settings:** cadastrar secrets/variables somente quando houver workflow consumidor; a ferramenta de escrita desses settings não está disponível nesta sessão.
-5. **PENDING — evidência de entrega:** abrir PR para esta documentação, aguardar checks para o SHA exato e manter o PR Draft até revisão e evidências aprovadas.
-6. **PENDING — Production:** não executar deployment/promote de Production sem aprovação explícita e pacote de evidências de Preview.
+5. **PASS — CI do SHA anterior:** workflow `CI` run `40790490253` concluiu `success` para o SHA `c81dae11f3a9be206005f280e6c05028356fd687`; os jobs `quality` e `preview-deployment` foram concluídos com sucesso. Essa evidência é do SHA anterior, não deste commit de reconciliação.
+6. **PENDING — revisão:** PR continua Draft; após o novo commit, aguardar checks do SHA atualizado e revisar a matriz antes de qualquer merge.
+7. **PENDING — Production:** não executar deployment/promote de Production sem aprovação explícita e pacote de evidências de Preview.
 
 Nenhuma migration foi executada. Foi criado um novo `AUTH0_SECRET` sensível em Vercel Production sem sobrescrever valores existentes; seu conteúdo não foi exibido ao usuário. Nenhum outro segredo foi lido ou sobrescrito.
