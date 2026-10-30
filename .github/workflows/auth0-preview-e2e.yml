@@ -1,6 +1,9 @@
 name: Auth0 Preview E2E
 
 on:
+  push:
+    branches:
+      - test/auth0-playwright-preview-e2e
   pull_request:
     branches:
       - fix/production-auth-runtime-diagnostics
@@ -33,6 +36,10 @@ jobs:
       (
         github.event.pull_request.head.repo.full_name == github.repository &&
         github.event.pull_request.head.ref == 'test/auth0-playwright-preview-e2e'
+      ) ||
+      (
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/test/auth0-playwright-preview-e2e'
       )
     runs-on: ubuntu-latest
     timeout-minutes: 20
