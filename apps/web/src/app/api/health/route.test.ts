@@ -9,6 +9,7 @@ describe("GET /api/health", () => {
     vi.stubEnv("AUTH0_CLIENT_ID", "public-client-id");
     vi.stubEnv("AUTH0_CLIENT_SECRET", "must-not-appear-client-secret");
     vi.stubEnv("AUTH0_SECRET", "must-not-appear-session-secret");
+    vi.stubEnv("APP_BASE_URL", "https://example.com");
     vi.stubEnv(
       "DATABASE_URL",
       "postgres://iam_user:must-not-appear-db-password@localhost/iam",
@@ -34,7 +35,10 @@ describe("GET /api/health", () => {
 
   it("reports each integration independently when configuration is partial", async () => {
     vi.stubEnv("AUTH0_DOMAIN", "example.auth0.com");
-    vi.stubEnv("AUTH0_CLIENT_ID", "");
+    vi.stubEnv("AUTH0_CLIENT_ID", "public-client-id");
+    vi.stubEnv("AUTH0_CLIENT_SECRET", "");
+    vi.stubEnv("AUTH0_SECRET", "session-secret");
+    vi.stubEnv("APP_BASE_URL", "https://example.com");
     vi.stubEnv("DATABASE_URL", "postgres://user:password@localhost/iam");
 
     const response = GET();
@@ -49,6 +53,9 @@ describe("GET /api/health", () => {
   it("reports integrations as unconfigured when required values are absent", async () => {
     vi.stubEnv("AUTH0_DOMAIN", "");
     vi.stubEnv("AUTH0_CLIENT_ID", "");
+    vi.stubEnv("AUTH0_CLIENT_SECRET", "");
+    vi.stubEnv("AUTH0_SECRET", "");
+    vi.stubEnv("APP_BASE_URL", "");
     vi.stubEnv("DATABASE_URL", "");
 
     const response = GET();
