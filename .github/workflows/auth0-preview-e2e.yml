@@ -1,6 +1,10 @@
 name: Auth0 Preview E2E
 
 on:
+  pull_request:
+    branches:
+      - fix/production-auth-runtime-diagnostics
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
     inputs:
       preview_url:
@@ -15,6 +19,7 @@ on:
 
 permissions:
   contents: read
+  statuses: read
 
 concurrency:
   group: auth0-preview-e2e-${{ github.ref }}
@@ -23,32 +28,65 @@ concurrency:
 jobs:
   auth0-preview-e2e:
     name: auth0-preview-e2e
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.head.ref == 'test/auth0-playwright-preview-e2e'
+      )
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment:
       name: Preview
     steps:
       - name: Checkout tested revision
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
 
-      - name: Validate target is an isolated Vercel Preview
+      - name: Validate isolated Preview target
         id: target
         env:
+          EVENT_NAME: ${{ github.event_name }}
           PREVIEW_URL_INPUT: ${{ inputs.preview_url }}
         run: |
           set -euo pipefail
-          node <<'NODE'
-          const value = process.env.PREVIEW_URL_INPUT;
-          const url = new URL(value);
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            candidate="$PREVIEW_URL_INPUT"
+          else
+            candidate="https://iam-control-center-git-test-8f0072-alexoaraujo83-8387s-projects.vercel.app"
+          fi
+          node - "$candidate" <<'NODE' >> "$GITHUB_OUTPUT"
+          const url = new URL(process.argv[2]);
           const allowedHost = url.hostname.endsWith("-alexoaraujo83-8387s-projects.vercel.app")
             && url.hostname.startsWith("iam-control-center-")
             && url.hostname !== "iam-control-center.vercel.app";
           if (url.protocol !== "https:" || !allowedHost || url.pathname !== "/" || url.search || url.hash) {
             throw new Error("Target must be the exact isolated IAM Control Center Vercel Preview origin.");
           }
-          process.stdout.write(`PREVIEW_URL=${url.origin}\n`);
+          process.stdout.write(`url=${url.origin}\n`);
           NODE
-          echo "url=$(node -e 'process.stdout.write(new URL(process.env.PREVIEW_URL_INPUT).origin)')" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Vercel Preview of this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            state="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status" --jq '[.statuses[] | select(.context == "Vercel")] | first | .state // "missing"')"
+            if [ "${state}" = "success" ]; then
+              echo "Vercel Preview is successful for the exact tested SHA."
+              exit 0
+            fi
+            if [ "${state}" = "failure" ] || [ "${state}" = "error" ]; then
+              echo "::error::Vercel Preview failed for the tested SHA."
+              exit 1
+            fi
+            echo "Waiting for Vercel Preview (attempt ${attempt}/36)."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for Vercel Preview."
+          exit 1
 
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -68,7 +106,7 @@ jobs:
         env:
           CI: "true"
           PREVIEW_URL: ${{ steps.target.outputs.url }}
-          IAM_TEST_USER: ${{ inputs.test_user }}
+          IAM_TEST_USER: ${{ github.event_name == 'workflow_dispatch' && inputs.test_user || 'teste@teste.com' }}
           IAM_TEST_USER_PASSWORD: ${{ secrets.IAM_TEST_USER_PASSWORD }}
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
@@ -83,7 +121,7 @@ jobs:
         if: always()
         env:
           PREVIEW_URL: ${{ steps.target.outputs.url }}
-          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
