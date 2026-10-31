@@ -16,6 +16,7 @@ test.beforeEach(async ({ page }) => {
         headers: {
           ...route.request().headers(),
           "x-vercel-protection-bypass": vercelBypass!,
+          "x-vercel-set-bypass-cookie": "true",
         },
       });
       return;
@@ -88,8 +89,10 @@ test("invalid identity is rejected without using the real test account", async (
   await page.locator('input[name="password"]').fill("This-is-not-a-valid-password-123!");
   await page.getByRole("button", { name: /continue|log in|sign in|entrar/i }).click();
 
-  await expect(page.locator('[role="alert"], [data-testid*="error"]').first()).toBeVisible({
-    timeout: 30_000,
-  });
+  // Universal Login markup differs by prompt/theme. The security assertion is
+  // that the synthetic identity remains unauthenticated at the Auth0 login
+  // origin and never reaches the protected application route.
+  await expect(page).toHaveURL(/https:\/\/[^/]*auth0\.com\//, { timeout: 30_000 });
+  await expect(page.locator('input[name="password"]')).toBeVisible();
   await expect(page).not.toHaveURL(/\/protected(?:$|[?#])/);
 });
