@@ -2,6 +2,27 @@ import { expect, test } from "@playwright/test";
 
 const username = process.env.IAM_TEST_USER;
 const password = process.env.IAM_TEST_USER_PASSWORD;
+const vercelBypass = process.env.VERCEL_AUTOMATION_BYPASS;
+const previewOrigin = new URL(process.env.PREVIEW_URL ?? "https://invalid.example").origin;
+
+test.beforeEach(async ({ page }) => {
+  expect(vercelBypass, "VERCEL_AUTOMATION_BYPASS must be configured as a Preview secret").toBeTruthy();
+
+  const previewHost = new URL(previewOrigin).hostname;
+  await page.route("**/*", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    if (requestUrl.hostname === previewHost) {
+      await route.continue({
+        headers: {
+          ...route.request().headers(),
+          "x-vercel-protection-bypass": vercelBypass!,
+        },
+      });
+      return;
+    }
+    await route.continue();
+  });
+});
 
 test("Auth0 login, callback, protected session and logout", async ({ page }) => {
   expect(username, "IAM_TEST_USER must be supplied as a workflow input").toBeTruthy();
@@ -28,7 +49,10 @@ test("Auth0 login, callback, protected session and logout", async ({ page }) => 
   await expect(page.getByTestId("protected-page")).toBeVisible();
   expect(callbackRequested, "The Auth0 callback endpoint must be reached").toBe(true);
 
-  const authenticated = await page.request.get("/api/e2e/session");
+  const bypassHeaders = { "x-vercel-protection-bypass": vercelBypass! };
+  const authenticated = await page.request.get(new URL("/api/e2e/session", previewOrigin).toString(), {
+    headers: bypassHeaders,
+  });
   expect(authenticated.ok()).toBe(true);
   await expect(authenticated.json()).resolves.toEqual({
     authenticated: true,
@@ -38,7 +62,9 @@ test("Auth0 login, callback, protected session and logout", async ({ page }) => 
   await page.goto("/auth/logout?returnTo=%2F");
   await expect(page).toHaveURL(/\/$/, { timeout: 30_000 });
 
-  const anonymous = await page.request.get("/api/e2e/session");
+  const anonymous = await page.request.get(new URL("/api/e2e/session", previewOrigin).toString(), {
+    headers: bypassHeaders,
+  });
   expect(anonymous.ok()).toBe(true);
   await expect(anonymous.json()).resolves.toEqual({
     authenticated: false,
