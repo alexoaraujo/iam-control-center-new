@@ -1,3 +1,4 @@
+import React from "react";
 import { redirect } from "next/navigation";
 
 import { auth0 } from "../../lib/auth0";
