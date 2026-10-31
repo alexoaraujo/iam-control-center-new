@@ -1,0 +1,440 @@
+{
+  "generated_at": "2026-10-31",
+  "repository": "alexoaraujo83/iam-control-center",
+  "baseline": {
+    "branch": "main",
+    "sha": "c0323194be7962cd9a641418e0746715a8bf2b82"
+  },
+  "branches": [
+    {
+      "name": "alexoaraujo83-patch-1",
+      "sha": "74f313d42493e358044d1268acb97e98201e85ea",
+      "archive_ref": "archive/2026-10-31/alexoaraujo83-patch-1",
+      "archive_verified": true
+    },
+    {
+      "name": "archive/2026-10-31/alexoaraujo83-patch-1",
+      "sha": "74f313d42493e358044d1268acb97e98201e85ea",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/alexoaraujo83-patch-1",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/audit/github-governance-reconciliation",
+      "sha": "f98ceb1c5fd182126de6429e4ebba8703aecb7e6",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/audit/github-governance-reconciliation",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/audit/neon-tenant-isolation-2026-10-26",
+      "sha": "c2fbfcbe3c015257c90ed73caddac5db91baff96",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/audit/neon-tenant-isolation-2026-10-26",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/chore/ci-bootstrap",
+      "sha": "0203f1858cab06697ee30df75e01f01f3d153471",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/chore/ci-bootstrap",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/chore/iam-env-matrix-status",
+      "sha": "8c8719ff28c028df2ce70f3a0cbd830861dd5d94",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/chore/iam-env-matrix-status",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/chore/neon-pr-branching",
+      "sha": "52d62aad6a764a9be04a5d9262ddc55e4979a377",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/chore/neon-pr-branching",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/docs/auth0-user-lifecycle-contract",
+      "sha": "3df4e49e063427005385eaed8554d658baf6618c",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/docs/auth0-user-lifecycle-contract",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/docs/github-actions-reference",
+      "sha": "8498743080cb78fa2f4104157ca6d8a000ed3955",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/docs/github-actions-reference",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/docs/neon-database-reference",
+      "sha": "724000e61497aa1561a3cf5b4c78fd1bffc23540",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/docs/neon-database-reference",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/feat/auth0-nextjs-sdk-integration",
+      "sha": "5e5669496bdecce170ad64d7ea356e76dc84c591",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/feat/auth0-nextjs-sdk-integration",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/feat/interactive-control-dashboard",
+      "sha": "9179f58047f2a1a9613700b802104e14ace7396e",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/feat/interactive-control-dashboard",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/feat/selective-iam-db-docs",
+      "sha": "a04dd89c999a334bd831d167e7265307b186a4c6",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/feat/selective-iam-db-docs",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/fix/health-runtime-config",
+      "sha": "a2f66444b0bbb3dfcb5c980220243f4321af3ad5",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/fix/health-runtime-config",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/fix/preview-options-preflight",
+      "sha": "65d212dc2a0e954fa1f55fdb4c79b5ecf332d607",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/fix/preview-options-preflight",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/fix/production-auth-runtime-diagnostics",
+      "sha": "c4d9d377f3de043312bf2a388eca6f23a8660a8a",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/fix/production-auth-runtime-diagnostics",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/fix/ruleset-export-snapshot",
+      "sha": "28f7c0e8cac269b8d555770f7f33e245e6271a53",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/fix/ruleset-export-snapshot",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/fix/security-minimatch-eslintrc-interop",
+      "sha": "7b08b711eb33e8c0327409042079b28e5c13a823",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/fix/security-minimatch-eslintrc-interop",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/fix/security-minimatch-ghsa-g3hv-75wg-m249",
+      "sha": "4bc71edda7ffa508f09e1a2f920b4dafedab8c30",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/fix/security-minimatch-ghsa-g3hv-75wg-m249",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/proposal/initial-iam-schema",
+      "sha": "17c95b7a7a87ab678b69c7c7ed050599f2bf0630",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/proposal/initial-iam-schema",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/reconcile/neon-pr-lifecycle-from-main",
+      "sha": "af05bc8015d7bc24d7584e1b26fd8702e87bf510",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/reconcile/neon-pr-lifecycle-from-main",
+      "archive_verified": false
+    },
+    {
+      "name": "archive/2026-10-31/test/auth0-playwright-preview-e2e",
+      "sha": "7a6fd2aabdbd0058bca13ae7fb22966b0feee709",
+      "archive_ref": "archive/2026-10-31/archive/2026-10-31/test/auth0-playwright-preview-e2e",
+      "archive_verified": false
+    },
+    {
+      "name": "audit/github-governance-reconciliation",
+      "sha": "f98ceb1c5fd182126de6429e4ebba8703aecb7e6",
+      "archive_ref": "archive/2026-10-31/audit/github-governance-reconciliation",
+      "archive_verified": true
+    },
+    {
+      "name": "audit/neon-tenant-isolation-2026-10-26",
+      "sha": "c2fbfcbe3c015257c90ed73caddac5db91baff96",
+      "archive_ref": "archive/2026-10-31/audit/neon-tenant-isolation-2026-10-26",
+      "archive_verified": true
+    },
+    {
+      "name": "chore/ci-bootstrap",
+      "sha": "0203f1858cab06697ee30df75e01f01f3d153471",
+      "archive_ref": "archive/2026-10-31/chore/ci-bootstrap",
+      "archive_verified": true
+    },
+    {
+      "name": "chore/iam-env-matrix-status",
+      "sha": "8c8719ff28c028df2ce70f3a0cbd830861dd5d94",
+      "archive_ref": "archive/2026-10-31/chore/iam-env-matrix-status",
+      "archive_verified": true
+    },
+    {
+      "name": "chore/neon-pr-branching",
+      "sha": "52d62aad6a764a9be04a5d9262ddc55e4979a377",
+      "archive_ref": "archive/2026-10-31/chore/neon-pr-branching",
+      "archive_verified": true
+    },
+    {
+      "name": "docs/auth0-user-lifecycle-contract",
+      "sha": "3df4e49e063427005385eaed8554d658baf6618c",
+      "archive_ref": "archive/2026-10-31/docs/auth0-user-lifecycle-contract",
+      "archive_verified": true
+    },
+    {
+      "name": "docs/github-actions-reference",
+      "sha": "8498743080cb78fa2f4104157ca6d8a000ed3955",
+      "archive_ref": "archive/2026-10-31/docs/github-actions-reference",
+      "archive_verified": true
+    },
+    {
+      "name": "docs/neon-database-reference",
+      "sha": "724000e61497aa1561a3cf5b4c78fd1bffc23540",
+      "archive_ref": "archive/2026-10-31/docs/neon-database-reference",
+      "archive_verified": true
+    },
+    {
+      "name": "feat/auth0-nextjs-sdk-integration",
+      "sha": "5e5669496bdecce170ad64d7ea356e76dc84c591",
+      "archive_ref": "archive/2026-10-31/feat/auth0-nextjs-sdk-integration",
+      "archive_verified": true
+    },
+    {
+      "name": "feat/interactive-control-dashboard",
+      "sha": "9179f58047f2a1a9613700b802104e14ace7396e",
+      "archive_ref": "archive/2026-10-31/feat/interactive-control-dashboard",
+      "archive_verified": true
+    },
+    {
+      "name": "feat/selective-iam-db-docs",
+      "sha": "a04dd89c999a334bd831d167e7265307b186a4c6",
+      "archive_ref": "archive/2026-10-31/feat/selective-iam-db-docs",
+      "archive_verified": true
+    },
+    {
+      "name": "fix/health-runtime-config",
+      "sha": "a2f66444b0bbb3dfcb5c980220243f4321af3ad5",
+      "archive_ref": "archive/2026-10-31/fix/health-runtime-config",
+      "archive_verified": true
+    },
+    {
+      "name": "fix/preview-options-preflight",
+      "sha": "65d212dc2a0e954fa1f55fdb4c79b5ecf332d607",
+      "archive_ref": "archive/2026-10-31/fix/preview-options-preflight",
+      "archive_verified": true
+    },
+    {
+      "name": "fix/production-auth-runtime-diagnostics",
+      "sha": "c4d9d377f3de043312bf2a388eca6f23a8660a8a",
+      "archive_ref": "archive/2026-10-31/fix/production-auth-runtime-diagnostics",
+      "archive_verified": true
+    },
+    {
+      "name": "fix/ruleset-export-snapshot",
+      "sha": "28f7c0e8cac269b8d555770f7f33e245e6271a53",
+      "archive_ref": "archive/2026-10-31/fix/ruleset-export-snapshot",
+      "archive_verified": true
+    },
+    {
+      "name": "fix/security-minimatch-eslintrc-interop",
+      "sha": "7b08b711eb33e8c0327409042079b28e5c13a823",
+      "archive_ref": "archive/2026-10-31/fix/security-minimatch-eslintrc-interop",
+      "archive_verified": true
+    },
+    {
+      "name": "fix/security-minimatch-ghsa-g3hv-75wg-m249",
+      "sha": "4bc71edda7ffa508f09e1a2f920b4dafedab8c30",
+      "archive_ref": "archive/2026-10-31/fix/security-minimatch-ghsa-g3hv-75wg-m249",
+      "archive_verified": true
+    },
+    {
+      "name": "proposal/initial-iam-schema",
+      "sha": "17c95b7a7a87ab678b69c7c7ed050599f2bf0630",
+      "archive_ref": "archive/2026-10-31/proposal/initial-iam-schema",
+      "archive_verified": true
+    },
+    {
+      "name": "reconcile/neon-pr-lifecycle-from-main",
+      "sha": "af05bc8015d7bc24d7584e1b26fd8702e87bf510",
+      "archive_ref": "archive/2026-10-31/reconcile/neon-pr-lifecycle-from-main",
+      "archive_verified": true
+    },
+    {
+      "name": "test/auth0-playwright-preview-e2e",
+      "sha": "7a6fd2aabdbd0058bca13ae7fb22966b0feee709",
+      "archive_ref": "archive/2026-10-31/test/auth0-playwright-preview-e2e",
+      "archive_verified": true
+    }
+  ],
+  "open_pull_requests": [
+    {
+      "number": 43,
+      "title": "fix(security): patch vulnerable minimatch dependency",
+      "head_ref": "fix/security-minimatch-ghsa-g3hv-75wg-m249",
+      "head_sha": "4bc71edda7ffa508f09e1a2f920b4dafedab8c30",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/43"
+    },
+    {
+      "number": 41,
+      "title": "[Draft] Implementar Playwright E2E do Auth0 no Preview",
+      "head_ref": "test/auth0-playwright-preview-e2e",
+      "head_sha": "7a6fd2aabdbd0058bca13ae7fb22966b0feee709",
+      "base_ref": "fix/production-auth-runtime-diagnostics",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/41"
+    },
+    {
+      "number": 40,
+      "title": "[Draft] Corrigir diagnóstico de runtime e preflight Auth0",
+      "head_ref": "fix/production-auth-runtime-diagnostics",
+      "head_sha": "c4d9d377f3de043312bf2a388eca6f23a8660a8a",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/40"
+    },
+    {
+      "number": 39,
+      "title": "[Draft] Tratar OPTIONS antes do middleware Auth0",
+      "head_ref": "fix/preview-options-preflight",
+      "head_sha": "65d212dc2a0e954fa1f55fdb4c79b5ecf332d607",
+      "base_ref": "feat/interactive-control-dashboard",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/39"
+    },
+    {
+      "number": 38,
+      "title": "[Draft] Criar dashboard principal interativo com testes e evidências",
+      "head_ref": "feat/interactive-control-dashboard",
+      "head_sha": "9179f58047f2a1a9613700b802104e14ace7396e",
+      "base_ref": "feat/auth0-nextjs-sdk-integration",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/38"
+    },
+    {
+      "number": 37,
+      "title": "[Draft] Documentar contrato de registro e login Auth0",
+      "head_ref": "docs/auth0-user-lifecycle-contract",
+      "head_sha": "3df4e49e063427005385eaed8554d658baf6618c",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/37"
+    },
+    {
+      "number": 36,
+      "title": "docs: consolidate environment variable matrix and status policy",
+      "head_ref": "chore/iam-env-matrix-status",
+      "head_sha": "8c8719ff28c028df2ce70f3a0cbd830861dd5d94",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/36"
+    },
+    {
+      "number": 34,
+      "title": "[Draft] Integrar SDK oficial Auth0 ao Next.js",
+      "head_ref": "feat/auth0-nextjs-sdk-integration",
+      "head_sha": "5e5669496bdecce170ad64d7ea356e76dc84c591",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/34"
+    },
+    {
+      "number": 30,
+      "title": "proposal(db): initial IAM schema with signed tenant-context prototype",
+      "head_ref": "proposal/initial-iam-schema",
+      "head_sha": "17c95b7a7a87ab678b69c7c7ed050599f2bf0630",
+      "base_ref": "audit/neon-tenant-isolation-2026-10-26",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/30"
+    },
+    {
+      "number": 27,
+      "title": "docs(security): record Neon tenant isolation audit",
+      "head_ref": "audit/neon-tenant-isolation-2026-10-26",
+      "head_sha": "c2fbfcbe3c015257c90ed73caddac5db91baff96",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/27"
+    },
+    {
+      "number": 25,
+      "title": "ci(neon): reconcile PR lifecycle workflow from main",
+      "head_ref": "reconcile/neon-pr-lifecycle-from-main",
+      "head_sha": "af05bc8015d7bc24d7584e1b26fd8702e87bf510",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/25"
+    },
+    {
+      "number": 24,
+      "title": "chore: reconcile GitHub governance snapshot and project status",
+      "head_ref": "audit/github-governance-reconciliation",
+      "head_sha": "f98ceb1c5fd182126de6429e4ebba8703aecb7e6",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/24"
+    },
+    {
+      "number": 23,
+      "title": "feat(iam): selectively reconcile IAM contracts and PostgreSQL design",
+      "head_ref": "feat/selective-iam-db-docs",
+      "head_sha": "a04dd89c999a334bd831d167e7265307b186a4c6",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/23"
+    },
+    {
+      "number": 22,
+      "title": "docs(neon): add database management reference",
+      "head_ref": "docs/neon-database-reference",
+      "head_sha": "724000e61497aa1561a3cf5b4c78fd1bffc23540",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/22"
+    },
+    {
+      "number": 20,
+      "title": "fix: align ruleset JSON with active main ruleset",
+      "head_ref": "fix/ruleset-export-snapshot",
+      "head_sha": "28f7c0e8cac269b8d555770f7f33e245e6271a53",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/20"
+    },
+    {
+      "number": 19,
+      "title": "docs: document GitHub Actions references and validation criteria",
+      "head_ref": "docs/github-actions-reference",
+      "head_sha": "8498743080cb78fa2f4104157ca6d8a000ed3955",
+      "base_ref": "main",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/19"
+    },
+    {
+      "number": 10,
+      "title": "ci(neon): add isolated schema-only PR branches",
+      "head_ref": "chore/neon-pr-branching",
+      "head_sha": "52d62aad6a764a9be04a5d9262ddc55e4979a377",
+      "base_ref": "fix/health-runtime-config",
+      "draft": true,
+      "url": "https://github.com/alexoaraujo83/iam-control-center/pull/10"
+    }
+  ],
+  "missing_archive_refs": [
+    "archive/2026-10-31/alexoaraujo83-patch-1",
+    "archive/2026-10-31/audit/github-governance-reconciliation",
+    "archive/2026-10-31/audit/neon-tenant-isolation-2026-10-26",
+    "archive/2026-10-31/chore/ci-bootstrap",
+    "archive/2026-10-31/chore/iam-env-matrix-status",
+    "archive/2026-10-31/chore/neon-pr-branching",
+    "archive/2026-10-31/docs/auth0-user-lifecycle-contract",
+    "archive/2026-10-31/docs/github-actions-reference",
+    "archive/2026-10-31/docs/neon-database-reference",
+    "archive/2026-10-31/feat/auth0-nextjs-sdk-integration",
+    "archive/2026-10-31/feat/interactive-control-dashboard",
+    "archive/2026-10-31/feat/selective-iam-db-docs",
+    "archive/2026-10-31/fix/health-runtime-config",
+    "archive/2026-10-31/fix/preview-options-preflight",
+    "archive/2026-10-31/fix/production-auth-runtime-diagnostics",
+    "archive/2026-10-31/fix/ruleset-export-snapshot",
+    "archive/2026-10-31/fix/security-minimatch-eslintrc-interop",
+    "archive/2026-10-31/fix/security-minimatch-ghsa-g3hv-75wg-m249",
+    "archive/2026-10-31/proposal/initial-iam-schema",
+    "archive/2026-10-31/reconcile/neon-pr-lifecycle-from-main",
+    "archive/2026-10-31/test/auth0-playwright-preview-e2e"
+  ]
+}
