@@ -59,15 +59,13 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             candidate="$PREVIEW_URL_INPUT"
           else
-            candidate="https://iam-control-center-git-test-8f0072-alexoaraujo83-8387s-projects.vercel.app"
+            candidate="https://iam-control-center-preview.vercel.app"
           fi
           node - "$candidate" <<'NODE' >> "$GITHUB_OUTPUT"
           const url = new URL(process.argv[2]);
-          const allowedHost = url.hostname.endsWith("-alexoaraujo83-8387s-projects.vercel.app")
-            && url.hostname.startsWith("iam-control-center-")
-            && url.hostname !== "iam-control-center.vercel.app";
+          const allowedHost = url.hostname === "iam-control-center-preview.vercel.app";
           if (url.protocol !== "https:" || !allowedHost || url.pathname !== "/" || url.search || url.hash) {
-            throw new Error("Target must be the exact isolated IAM Control Center Vercel Preview origin.");
+            throw new Error("Target must be the verified isolated IAM Control Center Preview alias.");
           }
           process.stdout.write(`url=${url.origin}\\n`);
           NODE
