@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - fix/security-minimatch-ghsa-g3hv-75wg-m249
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
