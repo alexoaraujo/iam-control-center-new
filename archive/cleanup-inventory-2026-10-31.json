@@ -288,5 +288,34 @@
       "url": "https://github.com/alexoaraujo83/iam-control-center/pull/10"
     }
   ],
-  "preservation_check": true
+  "preservation_check": true,
+  "cleanup_execution": {
+    "pull_requests": {
+      "before": 17,
+      "open_after": 0,
+      "status": "closed_and_verified",
+      "verified_at": "2026-10-31"
+    },
+    "branch_archives": {
+      "expected": 21,
+      "verified": 21,
+      "matching_sha": true,
+      "status": "verified"
+    },
+    "source_branch_deletion": {
+      "expected": 21,
+      "deleted": 0,
+      "status": "pending_user_local_git_push",
+      "note": "GitHub connector supports GET and ref creation/update, but no branch-ref deletion operation is available in this session."
+    },
+    "infrastructure": {
+      "neon_production": "preserved",
+      "neon_development": "preserved",
+      "neon_preview": "preserved",
+      "auth0": "untouched",
+      "vercel": "untouched",
+      "database_migrations": "not_applied",
+      "production_deploy": "not_run"
+    }
+  }
 }
