@@ -67,7 +67,7 @@ jobs:
           if (url.protocol !== "https:" || !allowedHost || url.pathname !== "/" || url.search || url.hash) {
             throw new Error("Target must be the verified isolated IAM Control Center Preview alias.");
           }
-          process.stdout.write(`url=${url.origin}\\n`);
+          process.stdout.write(`url=${url.origin}\n`);
           NODE
 
       - name: Wait for Vercel Preview of this exact commit
@@ -125,6 +125,14 @@ jobs:
             echo "::error::VERCEL_AUTOMATION_BYPASS is not available in the Preview environment."
             exit 1
           fi
+          probe="$(curl --silent --show-error --location --max-redirs 5 --output /dev/null --write-out '%{http_code} %{url_effective}' --header \"x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS}\" \"${PREVIEW_URL}/api/health\")"
+          http_status="${probe%% *}"
+          effective_url="${probe#* }"
+          if [ "${http_status}" != "200" ] || [ "${effective_url}" != "${PREVIEW_URL}/api/health" ]; then
+            echo "::error::Vercel Preview bypass check failed (HTTP ${http_status}); verify the current bypass secret in GitHub Environment Preview."
+            exit 1
+          fi
+          echo "Vercel Preview bypass preflight passed for the verified alias."
           npx playwright test --config=playwright.config.ts
 
       - name: Record non-sensitive execution metadata
@@ -137,8 +145,8 @@ jobs:
         run: |
           {
             echo "## Auth0 Preview E2E"
-            printf '%s\\n' "- Commit SHA: \`$COMMIT_SHA\`"
-            printf '%s\\n' "- Run ID: \`$RUN_ID\` (attempt \`$RUN_ATTEMPT\`)"
-            printf '%s\\n' "- Preview: \`$PREVIEW_URL\`"
+            printf '%s\n' "- Commit SHA: \`$COMMIT_SHA\`"
+            printf '%s\n' "- Run ID: \`$RUN_ID\` (attempt \`$RUN_ATTEMPT\`)"
+            printf '%s\n' "- Preview: \`$PREVIEW_URL\`"
             echo "- Credential values, cookies, tokens and browser traces: not recorded."
           } >> "$GITHUB_STEP_SUMMARY"
