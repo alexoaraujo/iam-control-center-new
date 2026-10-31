@@ -5,6 +5,10 @@ on:
     branches:
       - chore/dependencies-refresh-reconciled
       - fix/r1-node-types-24
+  pull_request:
+    branches:
+      - fix/ci-dependency-security
+      - chore/dependencies-refresh-reconciled
 
 permissions:
   contents: read
