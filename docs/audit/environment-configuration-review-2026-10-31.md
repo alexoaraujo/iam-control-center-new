@@ -59,7 +59,7 @@ Variáveis observadas sem descriptografar valores:
 2. Corrigir/remover a associação do domínio `iam-control-center-preview.vercel.app` à branch antiga; não reatribuir até existir branch Git ativa e URL aprovada.
 3. Conferir que os valores de `DATABASE_URL` apontam para a branch Neon correta em cada target. A listagem sem descriptografia confirma nomes/escopos, não validade nem destino das conexões.
 4. Não remover variáveis legadas nem alterar secrets sem teste do consumidor e plano de rollback.
-5. Não usar Vercel Hobby para produção comercial. Confirmar finalidade pessoal/não comercial ou migrar a hospedagem para alternativa elegível a uso comercial antes de qualquer release.
+5. **Decisão do projeto em 31/10/2026:** o IAM Control Center não será oferecido como SaaS comercial neste momento; a possibilidade poderá ser reavaliada futuramente. Manter o plano Vercel Hobby somente enquanto o uso permanecer pessoal/não comercial. Antes de qualquer oferta comercial, reavaliar elegibilidade e migrar para plano/hospedagem compatível.
 
 ### Neon
 
@@ -117,7 +117,7 @@ Não cadastrar `NEON_API_KEY`, `VERCEL_API_TOKEN`, `AUTH0_CLIENT_SECRET`, `AUTH0
 
 ## 5. Bloqueios antes de aplicar alterações externas
 
-- Confirmar se o uso do IAM Control Center será pessoal/não comercial. Se for SaaS comercial, Vercel Hobby não é elegível segundo a referência do projeto.
+- A decisão atual é uso não comercial; reavaliar a elegibilidade da hospedagem antes de eventual comercialização futura.
 - Confirmar URL/branch de Preview que substituirá a branch de teste arquivada.
 - Validar callbacks, logout URLs, Web Origins e configuração da API no Auth0 Dashboard.
 - Verificar valores e destinos das connection strings sem exibi-los, além dos grants reais no Neon.
