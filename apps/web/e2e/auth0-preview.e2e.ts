@@ -60,8 +60,9 @@ test("Auth0 login, callback, protected session and logout", async ({ page }) => 
     subjectPresent: true,
   });
 
-  await page.goto("/auth/logout?returnTo=%2F");
-  await expect(page).toHaveURL(/\/$/, { timeout: 30_000 });
+  const logoutReturnTo = new URL("/", previewOrigin).toString();
+  await page.goto(`/auth/logout?returnTo=${encodeURIComponent(logoutReturnTo)}`);
+  await expect(page).toHaveURL(logoutReturnTo, { timeout: 30_000 });
 
   const anonymous = await page.request.get(new URL("/api/e2e/session", previewOrigin).toString(), {
     headers: bypassHeaders,
