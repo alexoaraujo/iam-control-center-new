@@ -125,7 +125,7 @@ jobs:
             echo "::error::VERCEL_AUTOMATION_BYPASS is not available in the Preview environment."
             exit 1
           fi
-          probe="$(curl --silent --show-error --location --max-redirs 5 --output /dev/null --write-out '%{http_code} %{url_effective}' --header \"x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS}\" \"${PREVIEW_URL}/api/health\")"
+          probe="$(curl --silent --show-error --location --max-redirs 5 --output /dev/null --write-out '%{http_code} %{url_effective}' --header "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS}" "${PREVIEW_URL}/api/health")"
           http_status="${probe%% *}"
           effective_url="${probe#* }"
           if [ "${http_status}" != "200" ] || [ "${effective_url}" != "${PREVIEW_URL}/api/health" ]; then
