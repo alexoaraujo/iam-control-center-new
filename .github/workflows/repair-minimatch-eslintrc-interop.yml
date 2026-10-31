@@ -1,0 +1,65 @@
+name: Repair minimatch ESM interop
+
+on:
+  push:
+    branches:
+      - fix/security-minimatch-eslintrc-interop
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/security-minimatch-eslintrc-interop
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Patch legacy minimatch import in @eslint/eslintrc
+        shell: bash
+        run: |
+          pnpm patch @eslint/eslintrc@3.3.1 --edit-dir /tmp/eslintrc-patch
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("/tmp/eslintrc-patch/lib/config-array/override-tester.js")
+          source = path.read_text()
+          source = source.replace('import minimatch from "minimatch";', 'import { Minimatch } from "minimatch";')
+          source = source.replace('const { Minimatch } = minimatch;\n', '')
+          if 'import { Minimatch } from "minimatch";' not in source or 'const { Minimatch } = minimatch;' in source:
+              raise SystemExit("Expected minimatch import was not patched exactly")
+          path.write_text(source)
+          PY
+          pnpm patch-commit /tmp/eslintrc-patch
+          pnpm install --lockfile-only
+      - name: Verify frozen install
+        run: pnpm install --frozen-lockfile
+      - name: Dependency audit
+        run: pnpm audit
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Tests
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+      - name: Commit generated patch and lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json pnpm-lock.yaml patches
+          if git diff --cached --quiet; then
+            echo "No generated patch changes to commit"
+          else
+            git commit -m "fix(deps): preserve minimatch 11 compatibility with ESLint"
+            git push origin HEAD:fix/security-minimatch-eslintrc-interop
+          fi
