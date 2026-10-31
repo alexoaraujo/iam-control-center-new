@@ -43,19 +43,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml') }}-
 
-      - name: Regenerate lockfile for isolated R1 PR (temporary)
-        if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'chore/dependencies-refresh-reconciled'
-        run: pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
-
-      - name: Upload regenerated R1 lockfile (temporary)
-        if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'chore/dependencies-refresh-reconciled'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: r1-regenerated-pnpm-lock
-          path: pnpm-lock.yaml
-          if-no-files-found: error
-          retention-days: 1
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
