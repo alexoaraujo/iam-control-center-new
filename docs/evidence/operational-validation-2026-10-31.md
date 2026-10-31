@@ -28,6 +28,7 @@ Ambiente local desta execução: Node v22.16.0, Corepack 0.32.0, pnpm indisponí
 - A execução 40133195417 passou em todos os passos de qualidade, mas corresponde ao SHA antigo `c0b0d19a9bc95d888a8ee77cd986da80e78cdf6d`; não é evidência para o SHA atual.
 - Para o SHA atual `c0323194be7962cd9a641418e0746715a8bf2b82`, a consulta de status retornou apenas o contexto Vercel success; não foi obtida evidência GitHub Actions vinculada a esse SHA.
 - O PR #43 tentou corrigir minimatch, mas as execuções 41231833311 e 41231976780 falharam no passo `pnpm install --frozen-lockfile` com `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`. Audit, lint, typecheck, testes e build foram skipped nesses runs.
+- O PR Draft #44, criado para registrar esta auditoria, disparou o CI run 41235846695. A instalação congelada passou; `pnpm audit` falhou com duas vulnerabilidades moderadas de minimatch (caminhos transitivos por `@eslint/eslintrc` e `@typescript-eslint/typescript-estree`). Lint, typecheck, Vitest e build foram skipped pelo `set -e` do workflow. Isso confirma a vulnerabilidade no lockfile atual sem depender de inferência estática.
 
 ## 3. Dependência vulnerável — BLOQUEIO
 
@@ -63,7 +64,7 @@ A consulta de domínios Vercel associou `iam-control-center-preview.vercel.app` 
 - Existe deployment Production READY para o mesmo SHA; foi apenas inspecionado, não acessado nem alterado.
 - O build da `main` concluiu, incluindo lint/type validation e geração estática, mas registrou warnings do SDK Auth0/Jose: uso de `DecompressionStream` não suportado no Edge Runtime e dependência dinâmica crítica. Requer validação de runtime.
 - O build também reporta scripts de instalação ignorados para `esbuild` e `unrs-resolver`; manter bloqueados até revisão específica e evidência de necessidade.
-- Nenhum deploy, promoção, rollback, alteração de domínio ou variável foi executado.
+- Nenhum deploy, promoção, rollback, alteração de domínio ou variável foi executado. A abertura do PR Draft #44 acionou automaticamente a integração Git Vercel e iniciou um deployment Preview para a branch documental; ele estava em estado BUILDING na última consulta. Não é deployment Production.
 
 O plano Hobby é limitado a uso pessoal/não comercial; confirmar elegibilidade antes de qualquer operação comercial.
 
@@ -124,7 +125,7 @@ O `apps/web/package.json` não declara driver PostgreSQL/Neon, ORM ou camada de 
 
 ## 10. Ações executadas e não executadas
 
-Executado: leitura do GitHub, consulta de metadados Vercel/Neon, leitura de catálogo PostgreSQL e duas requisições HTTP GET no deployment não-production da main (`/api/health` e `/auth/login`). O acesso HTTP criou/reutilizou link temporário de compartilhamento do deployment Preview, sujeito à expiração automática do provedor.
+Executado: leitura do GitHub, consulta de metadados Vercel/Neon, leitura de catálogo PostgreSQL e duas requisições HTTP GET no deployment não-production da main (`/api/health` e `/auth/login`); inspeção do CI run 41235846695 no PR Draft #44. O acesso HTTP criou/reutilizou link temporário de compartilhamento do deployment Preview, sujeito à expiração automática do provedor. A criação do PR acionou automaticamente o Preview do próprio branch documental; na última consulta ainda estava BUILDING.
 
 Não executado: instalação local, comandos de teste locais, login OIDC completo, consulta PostgreSQL pela aplicação, migrations, escrita de dados, alteração de secrets/configurações, criação/exclusão de recursos, deploy/rollback ou acesso ao deployment Production.
 
