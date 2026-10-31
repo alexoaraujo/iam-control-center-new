@@ -1,3 +1,6 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+patchedDependencies:
+  '@eslint/eslintrc@3.3.1': patches/@eslint__eslintrc@3.3.1.patch
