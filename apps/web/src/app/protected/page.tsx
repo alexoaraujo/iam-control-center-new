@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { auth0 } from "../../../lib/auth0";
+import { auth0 } from "../../lib/auth0";
 
 export default async function ProtectedPage() {
   const session = await auth0.getSession();

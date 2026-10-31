@@ -6,7 +6,7 @@ const { getSession, redirect } = vi.hoisted(() => ({
   redirect: vi.fn(),
 }));
 
-vi.mock("../../../lib/auth0", () => ({
+vi.mock("../../lib/auth0", () => ({
   auth0: { getSession },
 }));
 
