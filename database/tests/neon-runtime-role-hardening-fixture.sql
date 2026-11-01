@@ -1,5 +1,5 @@
 -- CI ONLY: disposable PostgreSQL fixture; never point this at Neon or persistent DBs.
-\\set ON_ERROR_STOP on
+\set ON_ERROR_STOP on
 
 DO $create_fixture_roles$
 BEGIN
