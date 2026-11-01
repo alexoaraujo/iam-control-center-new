@@ -56,7 +56,7 @@ The Neon API inspection connected as `Administrador`; it does not prove the appl
 
 ## Capacity and cost
 
-The workflow creates a branch without a compute endpoint. It does not automatically provide a per-PR `DATABASE_URL` to Vercel. That is a separate integration and must be designed with scoped credentials and explicit environment handling. The Free-plan ceiling is 10 branches per project; the workflow fails closed when the ceiling is reached.
+The workflow creates a branch without a compute endpoint. It does not automatically provide a per-PR `DATABASE_URL` to Vercel. That is a separate integration and must be designed with scoped credentials and explicit environment handling. The Free-plan ceiling is 10 branches per project; the workflow checks the current count before creation and Neon remains the authoritative quota enforcement if concurrent PR events race. A rejected create operation fails the job; no permanent branch is removed. API requests have bounded connection and total timeouts.
 
 Development currently has an active read-write compute endpoint. The lifecycle workflow does not create additional endpoints for PR branches.
 
