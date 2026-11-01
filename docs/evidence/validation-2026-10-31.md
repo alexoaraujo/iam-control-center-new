@@ -134,3 +134,58 @@ Esses commits documentais ainda precisam de CI vinculado ao HEAD mais recente. N
 ## Estado da PR após a atualização
 
 PR #55 permanece aberta, Draft, não mergeada. O HEAD informado após a inclusão dos dois guias é `7b452a4409922619ebc33ac0a33c3c32479cd6cb`. A branch não deve ser marcada Ready até CI completo e revisão técnica dos bloqueios Auth0/RLS. Nenhuma alteração em Production foi autorizada ou realizada.
+
+
+## Atualização de evidências — 01/11/2026 (CI #41302301307)
+
+### Identificação
+| Item | Resultado |
+|---|---|
+| PR | [#55 — migração Auth0 para proxy do Next.js 16](https://github.com/alexoaraujo83/iam-control-center/pull/55) |
+| Branch | `fix/next16-proxy-r2` |
+| SHA do código de teste | `ac9f06b7848827b50570c3dfb024cf98b97aa810` |
+| Workflow | [CI #41302301307](https://github.com/alexoaraujo83/iam-control-center/actions/runs/41302301307) |
+| Job quality | SUCCESS — install congelado, audit, lint, typecheck, testes e build |
+| Job preview-deployment | SUCCESS — reutilizou o Preview existente; o commit só alterou o teste E2E |
+| Job auth0-e2e | SUCCESS — 1 teste aprovado |
+| Deployment Preview usado | `dpl_4uY5zn2DMhotkX5vpkGmkAsAQoof` |
+| SHA do deployment usado | `9d00b0d88a219c5c39fa2ae7a11c3569fa4ba9e2` |
+| Alias | https://iam-control-center-preview.vercel.app |
+
+### Auth0 E2E — resultado real
+
+O teste Playwright executou e aprovou:
+1. acesso anônimo a `/protected` e redirecionamento ao Universal Login;
+2. autenticação com o usuário dedicado de E2E;
+3. retorno à rota protegida com estado autenticado confirmado pelo servidor;
+4. persistência da sessão após reload;
+5. logout e rejeição de novo acesso protegido sem sessão.
+
+O preflight enviou o token OIDC GitHub no header `x-vercel-trusted-oidc-idp-token` e confirmou que a requisição chegou ao endpoint de autorização Auth0. O JWT foi mascarado; nenhum valor de token foi gravado no repositório ou exibido nos logs.
+
+**Limite de interpretação:** a leitura atual do projeto Vercel pela API informa `ssoProtection.enabled = false`. Portanto, o resultado prova que o fluxo Auth0 E2E passou no Preview e que a rota alcançou Auth0 com o header presente. Não prova que a política Trusted Sources foi efetivamente aplicada, pois a proteção SSO estava desabilitada no estado consultado. Reabilitar Deployment Protection e validar novamente o Trusted Source GitHub Actions → Preview antes de declarar esse controle PASS. Nenhuma configuração Vercel foi alterada nesta execução.
+
+### Correções no harness E2E
+- Removida a asserção não determinística que dependia de observar `framenavigated` em `/auth/callback`; a confirmação passou a usar a rota protegida e o estado autenticado retornado pela aplicação.
+- Restaurada a variável `previewHost` necessária para enviar o header OIDC somente ao hostname Preview.
+- Adicionado preflight para identificar separadamente bloqueio de Deployment Protection e fluxo Auth0.
+- O workflow agora detecta alterações por commit e reutiliza o Preview existente quando os inputs de build da aplicação não mudam.
+- Execuções obsoletas de PR são canceladas para evitar que um run antigo bloqueie a validação do HEAD mais recente.
+
+### Matriz de aceitação atualizada
+| Requisito | Estado | Evidência |
+|---|---|---|
+| Quality CI | PASS | Run #41302301307, SHA `ac9f06b` |
+| Preview disponível | PASS | Deployment READY #`dpl_4uY5zn2DMhotkX5vpkGmkAsAQoof`, SHA `9d00b0d` |
+| Auth0 login interativo | PASS | Playwright E2E #41302301307 |
+| Callback e sessão persistente | PASS | Retorno a `/protected`, status autenticado e reload |
+| Logout e bloqueio após logout | PASS | Mesmo teste E2E |
+| GitHub OIDC claims | PASS | Issuer, audience, subject imutável e ambiente Preview validados |
+| Vercel Trusted Sources com proteção SSO ativa | BLOCKED / NOT VERIFIED | API informa `ssoProtection.enabled=false`; requer proteção ativa e novo teste |
+| Runtime Neon e query real | PENDENTE | Driver ainda não integrado |
+| Migration aplicada | PENDENTE | Nenhuma migration executada |
+| Isolamento RLS com role runtime efetiva | BLOQUEADO | Role runtime e contexto confiável ainda não validados |
+| Promoção para `main` | BLOQUEADA | PR #48 e PRs filhas permanecem Draft |
+| Deploy Production | BLOQUEADO | Não autorizado |
+
+A PR #55 permanece Draft, aberta e não mergeada. Nenhuma alteração em `main`, Auth0, Neon, secrets, migrations ou Production foi realizada.
