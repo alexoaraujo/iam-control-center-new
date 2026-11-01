@@ -107,11 +107,11 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      id-token: write
     env:
       E2E_BASE_URL: https://iam-control-center-preview.vercel.app
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
-      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
@@ -120,6 +120,20 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+
+      - name: Request Vercel Trusted Source OIDC token
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error \
+            --get \
+            --data-urlencode "audience=https://vercel.com" \
+            --header "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}")"
+          token="$(jq -er '.value | select(type == "string" and length > 0)' <<< "$response")"
+          echo "::add-mask::${token}"
+          printf 'VERCEL_TRUSTED_OIDC_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          unset token response
 
       - name: Install isolated Playwright runner
         run: |
