@@ -10,7 +10,7 @@ GRANT iam_migrator TO iam_migrator_login
 
 DO $assert_role_attributes$
 BEGIN
-  IF (SELECT rolcanlogin OR rolinherit OR rolbypassrls
+  IF (SELECT NOT rolcanlogin OR rolinherit OR rolbypassrls
       FROM pg_roles WHERE rolname='iam_migrator_login') THEN
     RAISE EXCEPTION 'migrator login must be LOGIN, NOINHERIT, NOBYPASSRLS';
   END IF;
@@ -30,8 +30,6 @@ BEGIN
   END IF;
 END $assert_role_attributes$;
 
--- Simulate the authenticated dedicated login within this disposable superuser session.
--- SET SESSION AUTHORIZATION changes session_user; it does not expose a password.
 SET SESSION AUTHORIZATION iam_migrator_login;
 SET ROLE iam_migrator;
 DO $assert_migrator_role$
@@ -53,5 +51,3 @@ BEGIN
     RAISE EXCEPTION 'iam_owner must not have BYPASSRLS';
   END IF;
 END $assert_owner_role$;
-
--- This process exits after the test; no Neon connection or persistent role is touched.
