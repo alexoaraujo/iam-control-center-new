@@ -1,5 +1,5 @@
 -- CI ONLY: contract assertion after applying the proposal to disposable PostgreSQL.
-\\set ON_ERROR_STOP on
+\set ON_ERROR_STOP on
 
 DO $assert_runtime_role_contract$
 DECLARE
