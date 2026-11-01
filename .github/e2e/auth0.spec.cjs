@@ -4,9 +4,9 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   const baseURL = process.env.E2E_BASE_URL;
   const username = process.env.AUTH0_E2E_USERNAME;
   const password = process.env.AUTH0_E2E_PASSWORD;
-  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const trustedOidcToken = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
 
-  if (!baseURL || !username || !password || !bypassSecret) {
+  if (!baseURL || !username || !password || !trustedOidcToken) {
     throw new Error("Required Auth0 E2E configuration is missing.");
   }
 
@@ -21,8 +21,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
     if (requestUrl.hostname === previewHost) {
       const headers = {
         ...route.request().headers(),
-        "x-vercel-protection-bypass": bypassSecret,
-        "x-vercel-set-bypass-cookie": "samesite=lax",
+        "x-vercel-trusted-oidc-idp-token": trustedOidcToken,
       };
       await route.continue({ headers });
       return;
@@ -32,7 +31,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
 
   // Anonymous access must enter the Auth0 Authorization Code + PKCE flow.
   await page.goto("/protected");
-  await expect(page).toHaveURL(/auth0\.com/);
+  await expect(page).toHaveURL(/auth0\\.com/);
 
   const identifier = page.locator('input[name="username"], input[name="email"]').first();
   await expect(identifier).toBeVisible();
@@ -59,5 +58,5 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   await page.goto("/auth/logout");
   await expect(page).toHaveURL((url) => url.origin === new URL(baseURL).origin, { timeout: 60000 });
   await page.goto("/protected");
-  await expect(page).toHaveURL(/auth0\.com/, { timeout: 30000 });
+  await expect(page).toHaveURL(/auth0\\.com/, { timeout: 30000 });
 });
