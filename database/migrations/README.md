@@ -20,7 +20,7 @@ Migrations are versioned, checksum-verified proposals. This PR replaces the unsa
 - `slug` is optional and unique when present.
 - Identity key is exact `(issuer, subject)`; email is not an authorization key.
 - Tenant-scoped relations use composite foreign keys.
-- RLS is enabled and forced on all IAM/audit tables.
+- RLS is enabled and forced on business and audit tables. The migration ledger `iam.schema_migrations` is excluded from RLS as privileged control metadata and receives no runtime or PUBLIC grants.
 - **No RLS policies and no runtime grants are created.** This is deliberate default-deny until trusted context and policy/grant model are approved.
 - No source IP/User-Agent is collected in this initial audit proposal.
 - Clean database only; never apply over prototype objects or data.
