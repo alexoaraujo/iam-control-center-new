@@ -125,6 +125,18 @@ jobs:
         with:
           node-version: 24
 
+
+      - name: Install isolated Playwright runner
+        run: |
+          mkdir -p "$RUNNER_TEMP/playwright"
+          cd "$RUNNER_TEMP/playwright"
+          npm init -y >/dev/null
+          npm install --save-exact --no-audit --no-fund @playwright/test@1.64.1
+          npm audit --audit-level=high
+
+      - name: Install Chromium
+        run: "$RUNNER_TEMP/playwright/node_modules/.bin/playwright install --with-deps chromium"
+
       - name: Request Vercel Trusted Source OIDC token
         shell: bash
         run: |
@@ -160,22 +172,18 @@ jobs:
             ref: claims.ref ?? null,
             environment: claims.environment ?? null,
             event_name: claims.event_name ?? null,
+            issued_at: claims.iat ?? null,
+            expires_at: claims.exp ?? null,
+            token_age_seconds: Number.isFinite(claims.iat) ? Math.floor(Date.now() / 1000) - claims.iat : null,
+            seconds_until_expiry: Number.isFinite(claims.exp) ? claims.exp - Math.floor(Date.now() / 1000) : null,
           }));
+          const now = Math.floor(Date.now() / 1000);
+          if (!Number.isFinite(claims.iat) || !Number.isFinite(claims.exp)) throw new Error("OIDC token is missing iat/exp claims.");
+          if (claims.iat > now + 60 || claims.exp <= now) throw new Error("OIDC token is not currently valid.");
           if (claims.iss !== expectedIssuer) throw new Error("Unexpected OIDC issuer.");
           if (!audience.includes("https://github.com/alexoaraujo83")) throw new Error("Unexpected OIDC audience.");
           if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
           NODE
-
-      - name: Install isolated Playwright runner
-        run: |
-          mkdir -p "$RUNNER_TEMP/playwright"
-          cd "$RUNNER_TEMP/playwright"
-          npm init -y >/dev/null
-          npm install --save-exact --no-audit --no-fund @playwright/test@1.64.1
-          npm audit --audit-level=high
-
-      - name: Install Chromium
-        run: "$RUNNER_TEMP/playwright/node_modules/.bin/playwright install --with-deps chromium"
 
       - name: Run Auth0 end-to-end flow
         run: |
