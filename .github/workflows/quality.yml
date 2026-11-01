@@ -105,6 +105,10 @@ jobs:
       - preview-deployment
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Must match the GitHub Actions environment configured in Vercel Trusted Sources.
+    # Without this, GitHub issues a ref-based OIDC subject instead of environment:Preview.
+    environment:
+      name: Preview
     permissions:
       contents: read
       id-token: write
@@ -134,6 +138,25 @@ jobs:
           echo "::add-mask::${token}"
           printf 'VERCEL_TRUSTED_OIDC_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
           unset token response
+
+      - name: Verify GitHub OIDC claims for Vercel Trusted Sources
+        env:
+          OIDC_TOKEN: ${{ env.VERCEL_TRUSTED_OIDC_TOKEN }}
+        run: |
+          node <<'NODE'
+          const token = process.env.OIDC_TOKEN;
+          if (!token) throw new Error("OIDC token missing from job environment.");
+          const parts = token.split(".");
+          if (parts.length !== 3) throw new Error("OIDC token is not a JWT.");
+          const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+          const expectedIssuer = "https://token.actions.githubusercontent.com";
+          const expectedSubject = "repo:alexoaraujo83/iam-control-center:environment:Preview";
+          const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+          if (claims.iss !== expectedIssuer) throw new Error("Unexpected OIDC issuer.");
+          if (!audience.includes("https://github.com/alexoaraujo83")) throw new Error("Unexpected OIDC audience.");
+          if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
+          console.log(JSON.stringify({ issuer: claims.iss, audience, subject: claims.sub, verified: true }));
+          NODE
 
       - name: Install isolated Playwright runner
         run: |
