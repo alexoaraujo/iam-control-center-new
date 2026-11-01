@@ -50,21 +50,30 @@ BEGIN
   END IF;
 
   IF EXISTS (
-    WITH RECURSIVE runtime_memberships(member_oid, granted_oid) AS (
-      SELECT m.member, m.roleid
+    WITH RECURSIVE runtime_memberships(member_oid, granted_oid, depth) AS (
+      SELECT m.member, m.roleid, 1
       FROM pg_auth_members m
       JOIN pg_roles member_role ON member_role.oid=m.member
       WHERE member_role.rolname IN
         ('app_runtime','app_runtime_login','iam_app_runtime','iam_app_runtime_login')
       UNION
-      SELECT rm.member_oid, m.roleid
+      SELECT rm.member_oid, m.roleid, rm.depth + 1
       FROM runtime_memberships rm
       JOIN pg_auth_members m ON m.member=rm.granted_oid
     )
     SELECT 1
     FROM runtime_memberships rm
+    JOIN pg_roles member_role ON member_role.oid=rm.member_oid
     JOIN pg_roles granted_role ON granted_role.oid=rm.granted_oid
     WHERE granted_role.rolname IN ('neon_superuser','iam_owner','iam_migrator')
+      -- The two observed direct legacy -> neon_superuser edges are the exact
+      -- memberships this proposal revokes below. Any other direct/transitive
+      -- administrative path remains a hard stop.
+      AND NOT (
+        rm.depth=1
+        AND member_role.rolname IN ('app_runtime','app_runtime_login')
+        AND granted_role.rolname='neon_superuser'
+      )
   ) THEN
     RAISE EXCEPTION 'runtime reaches an administrative role transitively; stop and review';
   END IF;
