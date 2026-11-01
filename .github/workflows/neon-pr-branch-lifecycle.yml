@@ -1,0 +1,212 @@
+name: Neon PR branch lifecycle
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - closed
+
+# This privileged workflow uses only the event payload and Neon Management API.
+# It intentionally does not check out, download, build, or execute PR content.
+permissions: {}
+
+concurrency:
+  group: neon-pr-lifecycle-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  manage-neon-branch:
+    name: Manage isolated Neon branch
+    if: >-
+      github.repository == 'alexoaraujo83/iam-control-center' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_ACTION: ${{ github.event.action }}
+      NEON_API_ROOT: https://console.neon.tech/api/v2
+
+    steps:
+      - name: Validate trusted inputs and required configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]] || {
+            echo "::error::Invalid pull request number."
+            exit 1
+          }
+          [[ "${NEON_PROJECT_ID}" =~ ^[a-z0-9-]{1,60}$ ]] || {
+            echo "::error::NEON_PROJECT_ID is missing or invalid."
+            exit 1
+          }
+          [[ -n "${NEON_API_KEY:-}" ]] || {
+            echo "::error::NEON_API_KEY secret is not configured."
+            exit 1
+          }
+          case "${PR_ACTION}" in
+            opened|reopened|synchronize|closed) ;;
+            *) echo "::error::Unsupported pull request action."; exit 1 ;;
+          esac
+          echo "Validated same-repository PR event; credentials are not displayed."
+
+      - name: Create, reuse, or clean up the PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+
+          BRANCH_NAME="preview/pr-${PR_NUMBER}"
+          BRANCHES_URL="${NEON_API_ROOT}/projects/${NEON_PROJECT_ID}/branches"
+
+          api_get_branches() {
+            curl --fail-with-body --silent --show-error \
+              --header "Authorization: Bearer ${NEON_API_KEY}" \
+              --header "Accept: application/json" \
+              "${BRANCHES_URL}?limit=100"
+          }
+
+          api_get_branch() {
+            local branch_id="$1"
+            curl --fail-with-body --silent --show-error \
+              --header "Authorization: Bearer ${NEON_API_KEY}" \
+              --header "Accept: application/json" \
+              "${BRANCHES_URL}/${branch_id}"
+          }
+
+          BRANCHES_JSON="$(api_get_branches)"
+
+          # Resolve and validate the permanent Development -> Production lineage.
+          PRODUCTION_JSON="$(jq -ce '[.branches[] | select(.default == true)] |
+            if length == 1 then .[0] else error("Expected exactly one default Production branch") end' <<< "${BRANCHES_JSON}")"
+          PRODUCTION_ID="$(jq -r '.id' <<< "${PRODUCTION_JSON}")"
+          DEVELOPMENT_JSON="$(jq -ce --arg parent "${PRODUCTION_ID}" '
+            [.branches[] | select(.name == "development" and .parent_id == $parent)] |
+            if length == 1 then .[0] else error("Expected exactly one Development branch whose parent is Production") end
+          ' <<< "${BRANCHES_JSON}")"
+          DEVELOPMENT_ID="$(jq -r '.id' <<< "${DEVELOPMENT_JSON}")"
+          DEVELOPMENT_STATE="$(jq -r '.current_state // empty' <<< "${DEVELOPMENT_JSON}")"
+          [[ "${DEVELOPMENT_STATE}" == "ready" ]] || {
+            echo "::error::Development branch is not ready."
+            exit 1
+          }
+
+          EXISTING="$(jq -c --arg name "${BRANCH_NAME}" '[.branches[] | select(.name == $name)]' <<< "${BRANCHES_JSON}")"
+          EXISTING_COUNT="$(jq -r 'length' <<< "${EXISTING}")"
+
+          if [[ "${PR_ACTION}" == "closed" ]]; then
+            if [[ "${EXISTING_COUNT}" == "0" ]]; then
+              echo "No temporary Neon branch exists for this PR; cleanup is already complete."
+              exit 0
+            fi
+            [[ "${EXISTING_COUNT}" == "1" ]] || {
+              echo "::error::More than one branch matched the exact PR branch name."
+              exit 1
+            }
+            TARGET_ID="$(jq -r '.[0].id' <<< "${EXISTING}")"
+            TARGET_PARENT="$(jq -r '.[0].parent_id // empty' <<< "${EXISTING}")"
+            [[ "${TARGET_PARENT}" == "${DEVELOPMENT_ID}" ]] || {
+              echo "::error::Refusing to delete a branch outside the expected Development parent."
+              exit 1
+            }
+
+            CHILDREN="$(jq -c --arg id "${TARGET_ID}" '[.branches[] | select(.parent_id == $id)]' <<< "${BRANCHES_JSON}")"
+            [[ "$(jq -r 'length' <<< "${CHILDREN}")" == "0" ]] || {
+              echo "::error::Refusing to delete a PR branch that has child branches."
+              exit 1
+            }
+
+            curl --fail-with-body --silent --show-error --request DELETE \
+              --header "Authorization: Bearer ${NEON_API_KEY}" \
+              --header "Accept: application/json" \
+              "${BRANCHES_URL}/${TARGET_ID}" >/dev/null
+
+            AFTER_DELETE="$(api_get_branches)"
+            [[ "$(jq -r --arg name "${BRANCH_NAME}" '[.branches[] | select(.name == $name)] | length' <<< "${AFTER_DELETE}")" == "0" ]] || {
+              echo "::error::Neon branch deletion could not be verified."
+              exit 1
+            }
+            echo "Temporary Neon branch deleted and absence verified."
+            exit 0
+          fi
+
+          if [[ "${EXISTING_COUNT}" == "0" ]]; then
+            BRANCH_COUNT="$(jq -r '.branches | length' <<< "${BRANCHES_JSON}")"
+            if (( BRANCH_COUNT >= 10 )); then
+              echo "::error::Neon Free plan branch limit (10) reached; no permanent branch will be removed."
+              exit 1
+            fi
+
+            CREATE_BODY="$(jq -cn --arg name "${BRANCH_NAME}" --arg parent "${DEVELOPMENT_ID}" \
+              '{branch:{name:$name,parent_id:$parent}}')"
+            CREATE_RESPONSE="$(curl --fail-with-body --silent --show-error --request POST \
+              --header "Authorization: Bearer ${NEON_API_KEY}" \
+              --header "Accept: application/json" \
+              --header "Content-Type: application/json" \
+              --data "${CREATE_BODY}" \
+              "${BRANCHES_URL}")"
+            CREATED_ID="$(jq -r '.branch.id // empty' <<< "${CREATE_RESPONSE}")"
+            [[ -n "${CREATED_ID}" ]] || {
+              echo "::error::Neon did not return the created branch ID."
+              exit 1
+            }
+            echo "Created temporary branch without provisioning a compute endpoint."
+          else
+            [[ "${EXISTING_COUNT}" == "1" ]] || {
+              echo "::error::More than one branch matched the exact PR branch name."
+              exit 1
+            }
+            CREATED_ID="$(jq -r '.[0].id' <<< "${EXISTING}")"
+            EXISTING_PARENT="$(jq -r '.[0].parent_id // empty' <<< "${EXISTING}")"
+            [[ "${EXISTING_PARENT}" == "${DEVELOPMENT_ID}" ]] || {
+              echo "::error::Existing branch has an unexpected parent; refusing to reuse or replace it."
+              exit 1
+            }
+            echo "Reusing the existing PR branch; no branch replacement performed."
+          fi
+
+          # Wait for Neon to finish provisioning before applying the 14-day TTL.
+          READY="false"
+          for attempt in $(seq 1 36); do
+            CURRENT="$(api_get_branch "${CREATED_ID}")"
+            CURRENT_STATE="$(jq -r '.branch.current_state // empty' <<< "${CURRENT}")"
+            CURRENT_PARENT="$(jq -r '.branch.parent_id // empty' <<< "${CURRENT}")"
+            [[ "${CURRENT_PARENT}" == "${DEVELOPMENT_ID}" ]] || {
+              echo "::error::Branch parent changed during provisioning."
+              exit 1
+            }
+            if [[ "${CURRENT_STATE}" == "ready" ]]; then
+              READY="true"
+              break
+            fi
+            echo "Waiting for Neon branch readiness (attempt ${attempt}/36)."
+            sleep 10
+          done
+          [[ "${READY}" == "true" ]] || {
+            echo "::error::Neon branch did not reach ready state within six minutes."
+            exit 1
+          }
+
+          EXPIRES_AT="$(date -u -d '+14 days' '+%Y-%m-%dT%H:%M:%SZ')"
+          PATCH_BODY="$(jq -cn --arg expiry "${EXPIRES_AT}" '{branch:{expires_at:$expiry}}')"
+          curl --fail-with-body --silent --show-error --request PATCH \
+            --header "Authorization: Bearer ${NEON_API_KEY}" \
+            --header "Accept: application/json" \
+            --header "Content-Type: application/json" \
+            --data "${PATCH_BODY}" \
+            "${BRANCHES_URL}/${CREATED_ID}" >/dev/null
+
+          VERIFIED="$(api_get_branch "${CREATED_ID}")"
+          VERIFIED_NAME="$(jq -r '.branch.name // empty' <<< "${VERIFIED}")"
+          VERIFIED_PARENT="$(jq -r '.branch.parent_id // empty' <<< "${VERIFIED}")"
+          VERIFIED_EXPIRY="$(jq -r '.branch.expires_at // empty' <<< "${VERIFIED}")"
+          [[ "${VERIFIED_NAME}" == "${BRANCH_NAME}" && "${VERIFIED_PARENT}" == "${DEVELOPMENT_ID}" && -n "${VERIFIED_EXPIRY}" ]] || {
+            echo "::error::Branch identity, parent, or expiration verification failed."
+            exit 1
+          }
+          echo "PR branch is ready, parent-verified, and has a 14-day expiration."
+          echo "No database migration or compute endpoint was provisioned."
