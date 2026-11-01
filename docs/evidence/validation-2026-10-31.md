@@ -106,3 +106,31 @@ A conexão do conector Neon estava fixada na role `Administrador`; a tentativa d
 - **SKIPPED / NOT RUN**: teste não executado; nunca equivale a PASS.
 - **PENDENTE**: falta evidência ou implementação.
 - **BLOQUEADO**: existe risco ou dependência de segurança que impede prosseguir.
+
+
+## Atualização de evidências — 01/11/2026
+
+A atualização abaixo corrige o status do último workflow conhecido e diferencia o commit validado do material documental adicionado posteriormente.
+
+| Item | Resultado |
+|---|---|
+| Commit validado pelo workflow | `6f5d625201d1cfea17364ecada000f897075948a` |
+| Workflow | [CI #41257983546](https://github.com/alexoaraujo83/iam-control-center/actions/runs/41257983546) |
+| Job quality | SUCCESS — install, audit, lint, typecheck, testes e build |
+| Job preview-deployment | SKIPPED |
+| Job auth0-e2e | SKIPPED |
+| Deployment Vercel | READY — Preview, SHA `6f5d625201d1cfea17364ecada000f897075948a` |
+| URL Preview | https://iam-control-center-ebfjk5e2b-alexoaraujo83-8387s-projects.vercel.app |
+| Alias Preview | https://iam-control-center-preview.vercel.app |
+
+O status READY foi consultado diretamente no deployment Vercel e está associado ao SHA acima. O job preview-deployment do workflow #41257983546 foi SKIPPED; não o classificar como PASS. O job auth0-e2e também foi SKIPPED. Assim, somente o job quality foi aprovado neste workflow.
+
+Depois desse SHA foram adicionados os guias:
+- `docs/auth/auth0-free-nextjs16.md`
+- `docs/database/neon-free-nextjs.md`
+
+Esses commits documentais ainda precisam de CI vinculado ao HEAD mais recente. Não inferir que o CI #41257983546 validou esses arquivos. A documentação não instalou o driver Neon, não alterou runtime, não aplicou migrations e não configurou tenant/secrets Auth0.
+
+## Estado da PR após a atualização
+
+PR #55 permanece aberta, Draft, não mergeada. O HEAD informado após a inclusão dos dois guias é `7b452a4409922619ebc33ac0a33c3c32479cd6cb`. A branch não deve ser marcada Ready até CI completo e revisão técnica dos bloqueios Auth0/RLS. Nenhuma alteração em Production foi autorizada ou realizada.
