@@ -40,13 +40,25 @@ The workflow is deliberately privileged because it uses the Neon Management API 
 
 Do not add checkout, scripts, artifacts, package installation, or commands sourced from PR content to this workflow.
 
-## Parent-branch data requirement
+## Parent-branch data audit
 
-Neon branches inherit the parent branch's data and Postgres roles. Development must therefore contain only synthetic or properly anonymized data before this lifecycle is enabled. The current audit found no application tables, views, materialized views, or large objects in `iam_control_center` on Development. It did not validate all databases, external object storage, role password reuse, or the effective runtime login. Treat the parent-data safety gate as **NOT VERIFIED** until those checks are complete.
+Read-only audit of Development branch `br-bitter-rain-b6j4sexv`:
+
+| Database | Finding | Interpretation |
+|---|---|---|
+| `iam_control_center` | No user tables, views, materialized views, or large objects | No application data objects found in this database |
+| `postgres` | Platform schemas `neon` and `neon_migration`; `public.health_check` (1 row) and `public.lakebase_attributes` (0 rows), all inspected relations owned by `cloud_admin` | Appears to be Neon-managed metadata; row contents were not inspected |
+| Neon Object Storage | API reports unavailable in `aws-sa-east-1` | Branchable Object Storage is not available in this project's region |
+
+The application database has no user data objects in the inspected catalogs. However, the parent-data safety gate remains **NOT VERIFIED**: the health-check row was not inspected, role password reuse from the parent is inherent to Neon branching, and the audit does not prove the absence of sensitive data in every possible platform object. Do not use Development as a production-data clone. Keep it synthetic-only.
+
+The Neon API inspection connected as `Administrador`; it does not prove the application's effective runtime login or its effective grants/RLS behavior.
 
 ## Capacity and cost
 
 The workflow creates a branch without a compute endpoint. It does not automatically provide a per-PR `DATABASE_URL` to Vercel. That is a separate integration and must be designed with scoped credentials and explicit environment handling. The Free-plan ceiling is 10 branches per project; the workflow fails closed when the ceiling is reached.
+
+Development currently has an active read-write compute endpoint. The lifecycle workflow does not create additional endpoints for PR branches.
 
 ## Activation and acceptance
 
