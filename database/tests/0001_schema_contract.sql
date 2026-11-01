@@ -22,8 +22,13 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname IN ('iam','audit') AND c.relkind='r'
+      AND NOT (n.nspname='iam' AND c.relname='schema_migrations')
       AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity)
-  ) THEN RAISE EXCEPTION 'RLS must be enabled and forced on every IAM/audit table'; END IF;
+  ) THEN RAISE EXCEPTION 'RLS must be enabled and forced on every business/audit table'; END IF;
+  IF (SELECT relrowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='iam' AND c.relname='schema_migrations') THEN
+    RAISE EXCEPTION 'migration ledger must remain outside RLS';
+  END IF;
   IF EXISTS (
     SELECT 1 FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid
     JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('iam','audit')
@@ -34,6 +39,10 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ('iam_owner','iam_migrator','iam_app_runtime')
              AND (rolcanlogin OR rolbypassrls))
   THEN RAISE EXCEPTION 'IAM group roles must be NOLOGIN/NOBYPASSRLS'; END IF;
+  IF has_table_privilege('iam_app_runtime','iam.schema_migrations','SELECT')
+     OR has_table_privilege('iam_app_runtime','iam.schema_migrations','INSERT') THEN
+    RAISE EXCEPTION 'runtime must not access migration ledger';
+  END IF;
 END $assert_schema$;
 
 -- Composite FK must reject a membership from tenant A assigned a role from tenant B.
@@ -66,7 +75,7 @@ ROLLBACK;
 
 -- Test-only grants isolate RLS behavior from ordinary SQL privilege errors.
 GRANT USAGE ON SCHEMA iam,audit TO iam_app_runtime;
-GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA iam,audit TO iam_app_runtime;
+GRANT SELECT,INSERT,UPDATE,DELETE ON iam.tenants TO iam_app_runtime;
 BEGIN;
 INSERT INTO iam.tenants(id,slug,display_name)
 VALUES ('00000000-0000-4000-8000-000000000101','owner-fixture','Owner fixture');
