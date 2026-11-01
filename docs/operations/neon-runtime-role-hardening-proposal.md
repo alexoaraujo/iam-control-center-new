@@ -24,7 +24,8 @@ A consulta SQL também confirmou que `app_runtime_login` conecta e tem `CREATE` 
 - `iam_app_runtime`: role de grupo, `NOLOGIN NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION`.
 - `iam_app_runtime_login`: login dedicado, `LOGIN NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION`, membro apenas de `iam_app_runtime` para as capacidades runtime explicitamente aprovadas.
 - `app_runtime` e `app_runtime_login`: retirar associação a `neon_superuser`, remover atributos administrativos e colocar ambos em `NOLOGIN` (quarentena, sem DROP).
-- Nenhuma role runtime pode ser membro de `iam_owner`, `iam_migrator` ou `neon_superuser`.
+- Nenhuma role runtime pode alcançar `neon_superuser`, `iam_owner` ou `iam_migrator` por membership direta ou transitiva.
+- Allowlist de memberships diretas: `iam_app_runtime_login → iam_app_runtime`; as demais roles runtime não podem ter memberships.
 - Roles owner/migrator permanecem isoladas do runtime.
 - Não conceder policies, grants de tabelas ou permissões funcionais nesta proposta.
 
@@ -32,18 +33,19 @@ A proposta não decide senha, rotação, conexão de produção, grants de objet
 
 ## 3. SQL proposto — somente após revisão e autorização separada
 
-O arquivo `database/proposals/neon-runtime-role-hardening.sql` é uma proposta explícita. Antes de qualquer aplicação real, confirmar branch, database, existência e membership atuais, dependências, grants, credenciais e plano de rollback. Executar inicialmente apenas em Development após autorização específica. Preview somente após evidência de Development. Production exige aprovação independente.
+O arquivo `database/proposals/neon-runtime-role-hardening.sql` é uma proposta explícita. O preflight falha de modo fechado se encontrar memberships diretas fora do snapshot revisado ou qualquer caminho transitivo até role administrativa. Antes de qualquer aplicação real, confirmar branch, database, existência e membership atuais, dependências, grants, credenciais e plano de rollback. Executar inicialmente apenas em Development após autorização específica. Preview somente após evidência de Development. Production exige aprovação independente.
 
 O SQL de proposta é testado apenas em PostgreSQL descartável no CI; o CI não o executa no Neon.
 
 ## 4. Contrato de segurança exigido
 
 1. Nenhuma role runtime com `BYPASSRLS`, `CREATEDB`, `CREATEROLE` ou `REPLICATION`.
-2. Nenhuma role runtime membro de `neon_superuser`, `iam_owner` ou `iam_migrator`.
+2. Nenhuma role runtime alcança `neon_superuser`, `iam_owner` ou `iam_migrator` por membership direta ou transitiva.
 3. Role de grupo runtime permanece `NOLOGIN`.
 4. Login runtime dedicado permanece `LOGIN`, NOBYPASSRLS e sem atributos administrativos.
-5. Login runtime só recebe a membership de `iam_app_runtime`; nenhum privilégio administrativo transitivo.
-6. Roles antigas `app_runtime*` ficam sem login e sem membership administrativa até uma decisão posterior de descarte.
+5. Allowlist de membership direta é exata: somente `iam_app_runtime_login` membro de `iam_app_runtime`.
+6. Roles antigas `app_runtime*` ficam sem login e sem memberships até decisão posterior de descarte.
+7. O teste negativo cria uma cadeia transitiva runtime → role intermediária → `neon_superuser` e comprova que o detector a identifica.
 
 ## 5. Divergência API Neon × catálogo PostgreSQL
 
