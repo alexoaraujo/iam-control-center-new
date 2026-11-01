@@ -72,8 +72,14 @@ Projeto `floral-surf-85783683`, database `iam_control_center`. Nenhuma instruç�
 
 Para desbloquear, é necessária uma decisão revisável sobre a cadeia de assunção de roles e um método de teste que autentique efetivamente como os logins dedicados, sem revelar ou reutilizar credenciais administrativas. Qualquer mudança de membership/role no Neon exige autorização separada.
 
-### Questão adicional de integridade para revisão
+### Integridade da identidade do ator em auditoria — corrigida na proposta
 
-A tabela `audit.events` possui FK composta de `(actor_membership_id, tenant_id)` para `iam.memberships(id, tenant_id)`, mas não garante que `actor_identity_id` corresponda à identidade daquela membership. Revisar se o contrato de auditoria exige essa correlação e, se sim, acrescentar uma FK composta com chave única correspondente em `iam.memberships` antes de aprovar a migration.
+A revisão identificou que a FK original correlacionava membership e tenant, mas não garantia que `actor_identity_id` fosse a identidade daquela membership. A proposta foi corrigida no head atual:
+- `iam.memberships` agora declara chave única `(id, tenant_id, identity_id)`.
+- `audit.events` exige `actor_identity_id` quando `actor_membership_id` está preenchido.
+- A FK de auditoria agora referencia `(actor_membership_id, tenant_id, actor_identity_id)` para a membership.
+- O teste de contrato rejeita identidade divergente e identidade ausente, e aceita o par correspondente.
+
+Evidência automatizada dessa correção ainda está **PENDENTE** até concluir o workflow PostgreSQL 18 no head atual da PR #57.
 
 Nenhuma migration foi aplicada em production, development ou preview. As três branches continuam sem tabelas de aplicação.
