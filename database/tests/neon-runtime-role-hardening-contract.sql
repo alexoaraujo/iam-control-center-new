@@ -77,6 +77,21 @@ BEGIN
   IF NOT pg_has_role('iam_app_runtime_login','iam_app_runtime','MEMBER') THEN
     RAISE EXCEPTION 'iam_app_runtime_login must remain a member of iam_app_runtime';
   END IF;
+
+  -- PostgreSQL 16+ exposes the membership options in pg_auth_members.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid=m.member
+    JOIN pg_roles granted_role ON granted_role.oid=m.roleid
+    WHERE member_role.rolname='iam_app_runtime_login'
+      AND granted_role.rolname='iam_app_runtime'
+      AND m.inherit_option
+      AND m.set_option
+      AND NOT m.admin_option
+  ) THEN
+    RAISE EXCEPTION 'runtime membership options must be INHERIT TRUE, SET TRUE, ADMIN FALSE';
+  END IF;
 END
 $assert_runtime_role_contract$;
 
