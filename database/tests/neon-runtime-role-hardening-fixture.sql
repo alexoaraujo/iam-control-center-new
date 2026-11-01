@@ -25,4 +25,4 @@ ALTER ROLE app_runtime LOGIN CREATEDB CREATEROLE REPLICATION BYPASSRLS;
 ALTER ROLE app_runtime_login LOGIN CREATEDB CREATEROLE REPLICATION BYPASSRLS;
 GRANT neon_superuser TO app_runtime;
 GRANT neon_superuser TO app_runtime_login;
-GRANT iam_app_runtime TO iam_app_runtime_login;
+GRANT iam_app_runtime TO iam_app_runtime_login WITH INHERIT TRUE, SET TRUE, ADMIN FALSE;
