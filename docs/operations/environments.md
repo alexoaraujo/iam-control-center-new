@@ -10,7 +10,17 @@ Configure values directly in each provider's secret/environment UI. Never paste 
 
 Required later:
 - Auth0: domain, client ID, client secret, session secret, callback/logout URLs.
-- PostgreSQL: connection string with TLS and a least-privileged runtime role.
+- PostgreSQL runtime: `DATABASE_URL` with TLS, Neon pooled hostname (`-pooler`), and a least-privileged runtime login role.
+- PostgreSQL migrations: `DATABASE_MIGRATION_URL` with TLS and a direct (non-pooled) endpoint, restricted to a protected migration job/environment. Do not expose it to the web application runtime.
 - Optional provider administration: restricted Auth0 Management API credentials and Vercel API token, only if automation requires them.
 
-Do not point Preview at production data. Do not run migrations against production during bootstrap.
+## Neon connection contract
+See [Neon connection pooling](../architecture/neon-connection-pooling.md) for the runtime/direct split, transaction-pooler restrictions, health-check requirements, and evidence gates.
+
+- Runtime uses the pooled connection and short transactions; do not depend on session state.
+- Migrations and schema administration use a direct connection and a dedicated migration identity.
+- Never place credentials in source control, CI logs, browser bundles, or public health responses.
+- Do not point Preview at production data. Do not run migrations against Production during bootstrap.
+
+## Rollout gate
+The variables above are a target contract, not evidence that provider configuration has been completed. Verify the actual role, branch, endpoint type, Vercel environment scope, and successful database query separately. Production requires separate explicit approval.
