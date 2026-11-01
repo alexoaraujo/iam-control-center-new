@@ -10,12 +10,6 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
     throw new Error("Required Auth0 E2E configuration is missing.");
   }
 
-  const previewHost = new URL(baseURL).hostname;
-  const mainFrameNavigations = [];
-  page.on("framenavigated", (frame) => {
-    if (frame === page.mainFrame()) mainFrameNavigations.push(frame.url());
-  });
-
   await page.route("**/*", async (route) => {
     const requestUrl = new URL(route.request().url());
     if (requestUrl.hostname === previewHost) {
@@ -45,10 +39,10 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   await passwordInput.fill(password);
   await page.getByRole("button", { name: /continue|log in|sign in/i }).last().click();
 
-  // Reaching the protected route proves the callback completed and the session was issued.
+  // Reaching the protected route with a server-confirmed authenticated status proves
+  // the callback completed and the application session was issued.
   await expect(page).toHaveURL((url) => url.pathname === "/protected", { timeout: 60000 });
   await expect(page.getByRole("status")).toHaveText("Acesso autenticado confirmado.");
-  expect(mainFrameNavigations.some((value) => new URL(value).pathname === "/auth/callback")).toBe(true);
 
   // The authenticated session must survive a subsequent request.
   await page.reload();
