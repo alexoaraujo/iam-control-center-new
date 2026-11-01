@@ -56,6 +56,7 @@ CREATE TABLE iam.memberships (
   status text NOT NULL DEFAULT 'invited' CHECK (status IN ('invited','active','suspended','revoked')),
   created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT memberships_id_tenant_id_key UNIQUE (id, tenant_id),
+  CONSTRAINT memberships_id_tenant_identity_key UNIQUE (id, tenant_id, identity_id),
   CONSTRAINT memberships_tenant_identity_key UNIQUE (tenant_id, identity_id)
 );
 
@@ -114,9 +115,11 @@ CREATE TABLE audit.events (
   target_type text, target_id text,
   outcome text NOT NULL CHECK (outcome IN ('success','denied','failure')),
   request_id text, metadata jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(metadata)='object'),
-  CONSTRAINT events_actor_membership_tenant_pair CHECK (actor_membership_id IS NULL OR tenant_id IS NOT NULL),
-  CONSTRAINT events_actor_membership_tenant_fk FOREIGN KEY (actor_membership_id, tenant_id)
-    REFERENCES iam.memberships(id, tenant_id) ON DELETE RESTRICT
+  CONSTRAINT events_actor_membership_identity_required
+    CHECK (actor_membership_id IS NULL OR (tenant_id IS NOT NULL AND actor_identity_id IS NOT NULL)),
+  CONSTRAINT events_actor_membership_tenant_identity_fk
+    FOREIGN KEY (actor_membership_id, tenant_id, actor_identity_id)
+    REFERENCES iam.memberships(id, tenant_id, identity_id) ON DELETE RESTRICT
 );
 
 -- Administrative migration ledger: no runtime/PUBLIC grants, so RLS is not needed here.
