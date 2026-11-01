@@ -2,6 +2,14 @@
 
 Migrations are versioned in this directory and must be reviewed before use.
 
+## Connection contract
+- Application runtime uses `DATABASE_URL` with the Neon pooled hostname (`-pooler`) and the least-privileged runtime login.
+- Migration execution uses `DATABASE_MIGRATION_URL` with a direct Neon hostname (no `-pooler`) and a dedicated migration identity.
+- The migration URL must exist only in a protected migration runner/environment. Never expose it to the web application runtime.
+- Do not execute schema migrations through the transaction pooler.
+- The repository currently has no implemented PostgreSQL runtime client or migration runner. These variable names document the intended boundary; they are not evidence of working connectivity or execution.
+- See [Neon connection pooling](../../docs/architecture/neon-connection-pooling.md).
+
 ## Required sequence
 1. Review `docs/architecture/iam-contracts.md`.
 2. Apply the proposed initial schema only to a clean isolated branch/database.
