@@ -13,19 +13,17 @@ Os testes Playwright validam, no Preview da branch `fix/next16-proxy-r2`:
 
 O teste não cobre autorização IAM, RBAC, isolamento de tenant ou RLS.
 
-## Configuração Vercel
+## Configuração Vercel — Trusted Sources
 
-Variável não secreta, já criada exclusivamente para a branch da PR #55:
+A configuração de Deployment Protection foi inspecionada visualmente e já apresenta **GitHub Actions** como Trusted Source para o repositório `alexoaraujo83/iam-control-center`, autorizado para o ambiente `preview`.
 
-| Chave | Ambiente | Branch | Valor |
-|---|---|---|---|
-| `APP_BASE_URL` | Preview | `fix/next16-proxy-r2` | `https://iam-control-center-preview.vercel.app` |
+O job solicita um token GitHub Actions OIDC com audience `https://vercel.com` e o envia por meio do header `x-vercel-trusted-oidc-idp-token` somente às requisições destinadas ao hostname configurado em `E2E_BASE_URL`. O token é mascarado nos logs e não é enviado ao Auth0 nem a outros hosts.
 
-A próxima implantação da branch deve consumir essa variável. Nenhuma variável Production foi alterada.
+A presença da Trusted Source no painel não prova, por si só, que a troca OIDC funcionará. A validação depende de execução real do job.
 
 ## Configuração Auth0 a verificar
 
-No Regular Web Application do tenant `iam-control-center.us.auth0.com`, verificar sem presumir que já estejam salvas:
+No Regular Web Application do tenant `iam-control-center.us.auth0.com`, verificar sem presumir que estejam salvas:
 
 - Allowed Callback URLs: `https://iam-control-center-preview.vercel.app/auth/callback`
 - Allowed Logout URLs: `https://iam-control-center-preview.vercel.app`
@@ -33,21 +31,20 @@ No Regular Web Application do tenant `iam-control-center.us.auth0.com`, verifica
 
 Usar origens exatas, sem wildcards. A conexão esperada é `Username-Password-Authentication`; não usar Google OAuth.
 
-A validação do tenant não foi realizada por esta automação e permanece pendente.
+A inspeção visual anterior encontrou os endereços Preview nas allowlists, Username-Password-Authentication habilitada e Google OAuth desabilitada. Isso não comprova login E2E.
 
 ## GitHub Actions — ativação controlada
 
 O job `auth0-e2e` só executa em eventos `pull_request` quando a variável de repositório `AUTH0_E2E_ENABLED` estiver definida como `true`.
 
-Antes de ativá-lo, configurar manualmente, como GitHub Actions repository secrets:
+Configurar manualmente, como GitHub Actions repository secrets:
 
 - `AUTH0_E2E_USERNAME`: usuário dedicado exclusivamente aos testes.
 - `AUTH0_E2E_PASSWORD`: senha desse usuário de teste.
-- `VERCEL_AUTOMATION_BYPASS_SECRET`: token de bypass da proteção SSO do Preview.
 
-O bypass é enviado somente às requisições destinadas ao hostname do Preview; não é enviado ao Auth0. O workflow não imprime credenciais e desativa screenshots, vídeos e traces.
+O workflow não cria, lê, substitui ou rotaciona esses secrets. O token OIDC é obtido durante a execução e não exige um secret Vercel estático.
 
-A automação não cria, lê, substitui ou rotaciona esses secrets. Enquanto a variável `AUTH0_E2E_ENABLED` não estiver habilitada, o job fica `skipped`; isso significa **BLOCKED / NOT RUN**, nunca PASS.
+Enquanto a variável `AUTH0_E2E_ENABLED` não estiver habilitada, o job fica `skipped`; isso significa **BLOCKED / NOT RUN**, nunca PASS.
 
 ## Dependência de teste
 
