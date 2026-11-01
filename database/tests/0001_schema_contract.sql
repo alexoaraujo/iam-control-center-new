@@ -19,6 +19,21 @@ BEGIN
   IF actual_count <> expected_count THEN
     RAISE EXCEPTION 'expected % tables, found %',expected_count,actual_count;
   END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_namespace n
+    WHERE n.nspname IN ('iam','audit','app_private')
+      AND n.nspowner <> (SELECT oid FROM pg_roles WHERE rolname='iam_owner')
+  ) THEN
+    RAISE EXCEPTION 'all IAM schemas must be owned by iam_owner';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname IN ('iam','audit') AND c.relkind='r'
+      AND c.relowner <> (SELECT oid FROM pg_roles WHERE rolname='iam_owner')
+  ) THEN
+    RAISE EXCEPTION 'all IAM tables must be owned by iam_owner';
+  END IF;
   IF EXISTS (
     SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname IN ('iam','audit') AND c.relkind='r'
