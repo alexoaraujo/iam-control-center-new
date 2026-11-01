@@ -31,7 +31,10 @@ BEGIN
   JOIN pg_roles member_role ON member_role.oid=m.member
   JOIN pg_roles granted_role ON granted_role.oid=m.roleid
   WHERE member_role.rolname='iam_migrator' AND granted_role.rolname='iam_owner';
-  IF NOT FOUND OR membership.admin_option OR membership.inherit_option OR NOT membership.set_option THEN
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'iam_migrator -> iam_owner membership is missing';
+  END IF;
+  IF membership.admin_option OR membership.inherit_option OR NOT membership.set_option THEN
     RAISE EXCEPTION 'iam_migrator -> iam_owner membership must be ADMIN FALSE, INHERIT FALSE, SET TRUE';
   END IF;
 
@@ -40,7 +43,10 @@ BEGIN
   JOIN pg_roles member_role ON member_role.oid=m.member
   JOIN pg_roles granted_role ON granted_role.oid=m.roleid
   WHERE member_role.rolname='iam_migrator_login' AND granted_role.rolname='iam_migrator';
-  IF NOT FOUND OR membership.admin_option OR membership.inherit_option OR NOT membership.set_option THEN
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'iam_migrator_login -> iam_migrator membership is missing';
+  END IF;
+  IF membership.admin_option OR membership.inherit_option OR NOT membership.set_option THEN
     RAISE EXCEPTION 'iam_migrator_login -> iam_migrator membership must be ADMIN FALSE, INHERIT FALSE, SET TRUE';
   END IF;
 
