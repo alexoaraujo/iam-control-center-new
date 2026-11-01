@@ -9,6 +9,7 @@ GRANT iam_migrator TO iam_migrator_login
   WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
 
 DO $assert_role_attributes$
+DECLARE membership record;
 BEGIN
   IF (SELECT NOT rolcanlogin OR rolinherit OR rolbypassrls
       FROM pg_roles WHERE rolname='iam_migrator_login') THEN
@@ -20,6 +21,36 @@ BEGIN
       AND (rolcanlogin OR rolbypassrls)
   ) THEN
     RAISE EXCEPTION 'group roles must remain NOLOGIN/NOBYPASSRLS';
+  END IF;
+  IF NOT has_database_privilege('iam_owner',current_database(),'CREATE') THEN
+    RAISE EXCEPTION 'iam_owner must have CREATE on the target database';
+  END IF;
+
+  SELECT m.admin_option,m.inherit_option,m.set_option INTO membership
+  FROM pg_auth_members m
+  JOIN pg_roles member_role ON member_role.oid=m.member
+  JOIN pg_roles granted_role ON granted_role.oid=m.roleid
+  WHERE member_role.rolname='iam_migrator' AND granted_role.rolname='iam_owner';
+  IF NOT FOUND OR membership.admin_option OR membership.inherit_option OR NOT membership.set_option THEN
+    RAISE EXCEPTION 'iam_migrator -> iam_owner membership must be ADMIN FALSE, INHERIT FALSE, SET TRUE';
+  END IF;
+
+  SELECT m.admin_option,m.inherit_option,m.set_option INTO membership
+  FROM pg_auth_members m
+  JOIN pg_roles member_role ON member_role.oid=m.member
+  JOIN pg_roles granted_role ON granted_role.oid=m.roleid
+  WHERE member_role.rolname='iam_migrator_login' AND granted_role.rolname='iam_migrator';
+  IF NOT FOUND OR membership.admin_option OR membership.inherit_option OR NOT membership.set_option THEN
+    RAISE EXCEPTION 'iam_migrator_login -> iam_migrator membership must be ADMIN FALSE, INHERIT FALSE, SET TRUE';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid=m.member
+    JOIN pg_roles granted_role ON granted_role.oid=m.roleid
+    WHERE member_role.rolname='iam_migrator_login' AND granted_role.rolname='iam_owner'
+  ) THEN
+    RAISE EXCEPTION 'migrator login must use the intermediary iam_migrator role';
   END IF;
   IF pg_has_role('iam_migrator_login','iam_owner','USAGE') THEN
     RAISE EXCEPTION 'migrator login must not inherit owner privileges';
