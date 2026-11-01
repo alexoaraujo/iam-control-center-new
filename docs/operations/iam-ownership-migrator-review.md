@@ -6,7 +6,7 @@ Status: **análise arquitetural para revisão; nenhuma alteração aplicada ao N
 
 A migration exige `current_user = iam_owner`, cria os schemas `iam`, `audit` e `app_private` com `AUTHORIZATION iam_owner`, e cria as tabelas sob essa identidade efetiva. O ledger `iam.schema_migrations` fica sem FORCE RLS e sem grants ao runtime. As tabelas de negócio/auditoria recebem ENABLE + FORCE RLS, sem policies nem grants de runtime na baseline.
 
-O bootstrap PostgreSQL descartável concede `CREATE` no database a `iam_owner`. A introspecção Neon registrada na checklist não demonstrou ainda que esse privilégio está presente no database real. A migration atual não faz preflight explícito de `has_database_privilege(current_user, current_database(), 'CREATE')`.
+O bootstrap PostgreSQL descartável concede `CREATE` no database a `iam_owner`. A migration atual também faz preflight explícito de `has_database_privilege(current_user, current_database(), 'CREATE')` antes de criar os schemas. A introspecção Neon registrada na checklist ainda não demonstrou que esse privilégio está presente no database real; portanto, a execução permanece bloqueada até confirmação read-only no alvo.
 
 ## Alternativas
 
@@ -30,7 +30,7 @@ A Alternativa B não é recomendada para a baseline atual porque deixa o role de
 
 ## Preflight e testes adicionais obrigatórios antes de qualquer execução Neon
 
-1. Confirmar no database alvo que `iam_owner` tem `CREATE` no database; o preflight deve falhar com mensagem clara se não tiver.
+1. Confirmar no database alvo que `iam_owner` tem `CREATE` no database; o preflight já verifica esse privilégio e deve falhar com mensagem clara se não tiver.
 2. Confirmar que as duas memberships existem com `SET TRUE`, `INHERIT FALSE` e `ADMIN FALSE`, sem memberships alternativas que contornem a cadeia.
 3. Confirmar `session_user = iam_migrator_login` e `current_user = iam_owner` na sessão real, sem usar `Administrador`.
 4. Confirmar que os schemas e objetos criados pertencem a `iam_owner`.
