@@ -1,8 +1,8 @@
 -- CI ONLY: prove the contract detector catches a transitive admin membership.
 \set ON_ERROR_STOP on
 
-GRANT runtime_membership_bridge TO iam_app_runtime;
-GRANT neon_superuser TO runtime_membership_bridge;
+GRANT runtime_membership_bridge TO iam_app_runtime WITH INHERIT TRUE, SET TRUE, ADMIN FALSE;
+GRANT neon_superuser TO runtime_membership_bridge WITH INHERIT TRUE, SET TRUE, ADMIN FALSE;
 
 DO $assert_transitive_membership_is_detected$
 BEGIN
