@@ -119,6 +119,8 @@ CREATE TABLE audit.events (
     REFERENCES iam.memberships(id, tenant_id) ON DELETE RESTRICT
 );
 
+-- Administrative migration ledger: no runtime/PUBLIC grants, so RLS is not needed here.
+-- Keeping FORCE RLS off permits the migration principal (iam_owner) to verify/write checksums.
 CREATE TABLE iam.schema_migrations (
   version text PRIMARY KEY, name text NOT NULL,
   checksum text NOT NULL CHECK (checksum ~ '^[0-9a-f]{64}$'),
@@ -133,14 +135,15 @@ CREATE INDEX invitations_tenant_status_expiry_idx ON iam.invitations(tenant_id, 
 CREATE INDEX audit_events_tenant_time_idx ON audit.events(tenant_id, occurred_at DESC);
 CREATE INDEX audit_events_actor_time_idx ON audit.events(actor_identity_id, occurred_at DESC);
 
--- Every IAM/audit table is RLS-enabled and forced. No policy = default deny.
+-- Business/audit tables are RLS-enabled and forced. No policy = default deny.
+-- schema_migrations is intentionally excluded as privileged migration metadata.
 DO $rls$
 DECLARE item record;
 BEGIN
   FOR item IN SELECT * FROM (VALUES
     ('iam','tenants'),('iam','identities'),('iam','memberships'),('iam','roles'),
     ('iam','permissions'),('iam','membership_roles'),('iam','role_permissions'),
-    ('iam','invitations'),('iam','schema_migrations'),('audit','events')
+    ('iam','invitations'),('audit','events')
   ) AS t(schema_name,table_name)
   LOOP
     EXECUTE format('ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY',item.schema_name,item.table_name);
