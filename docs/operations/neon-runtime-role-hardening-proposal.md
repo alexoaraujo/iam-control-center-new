@@ -33,7 +33,7 @@ A proposta não decide senha, rotação, conexão de produção, grants de objet
 
 ## 3. SQL proposto — somente após revisão e autorização separada
 
-O arquivo `database/proposals/neon-runtime-role-hardening.sql` é uma proposta explícita. O preflight falha de modo fechado se encontrar memberships diretas fora do snapshot revisado ou qualquer caminho transitivo até role administrativa. Antes de qualquer aplicação real, confirmar branch, database, existência e membership atuais, dependências, grants, credenciais e plano de rollback. Executar inicialmente apenas em Development após autorização específica. Preview somente após evidência de Development. Production exige aprovação independente.
+O arquivo `database/proposals/neon-runtime-role-hardening.sql` é uma proposta explícita. O preflight falha de modo fechado se encontrar memberships diretas fora do snapshot revisado, opções de membership divergentes ou qualquer caminho transitivo até role administrativa. As duas memberships diretas observadas de roles antigas para `neon_superuser` são a única exceção: são precisamente as associações que o SQL revoga; caminhos indiretos continuam bloqueados. Antes de qualquer aplicação real, confirmar branch, database, existência e membership atuais, dependências, grants, credenciais e plano de rollback. Executar inicialmente apenas em Development após autorização específica. Preview somente após evidência de Development. Production exige aprovação independente.
 
 O SQL de proposta é testado apenas em PostgreSQL descartável no CI; o CI não o executa no Neon.
 
