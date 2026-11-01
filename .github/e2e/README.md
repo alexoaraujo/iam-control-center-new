@@ -17,7 +17,7 @@ O teste não cobre autorização IAM, RBAC, isolamento de tenant ou RLS.
 
 A configuração de Deployment Protection foi inspecionada visualmente e já apresenta **GitHub Actions** como Trusted Source para o repositório `alexoaraujo83/iam-control-center`, autorizado para o ambiente `preview`.
 
-O job solicita um token GitHub Actions OIDC com audience `https://vercel.com` e o envia por meio do header `x-vercel-trusted-oidc-idp-token` somente às requisições destinadas ao hostname configurado em `E2E_BASE_URL`. O token é mascarado nos logs e não é enviado ao Auth0 nem a outros hosts.
+O job solicita um token GitHub Actions OIDC com audience padrão do GitHub Actions (`https://github.com/alexoaraujo83`) e o envia por meio do header `x-vercel-trusted-oidc-idp-token` somente às requisições destinadas ao hostname configurado em `E2E_BASE_URL`. O token é mascarado nos logs e não é enviado ao Auth0 nem a outros hosts.
 
 A presença da Trusted Source no painel não prova, por si só, que a troca OIDC funcionará. A validação depende de execução real do job.
 
