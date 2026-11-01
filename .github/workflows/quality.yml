@@ -7,11 +7,11 @@ on:
 permissions:
   contents: read
 
-# Serialize CI per ref without interrupting an active run.
-# Note: GitHub concurrency keeps at most one pending run per group.
+# Keep the latest PR revision moving; do not cancel push validation on long-lived refs.
+# GitHub concurrency keeps at most one pending run per group.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
