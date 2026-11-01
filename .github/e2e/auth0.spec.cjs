@@ -31,7 +31,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
 
   // Anonymous access must enter the Auth0 Authorization Code + PKCE flow.
   await page.goto("/protected");
-  await expect(page).toHaveURL(/auth0\\.com/);
+  await expect(page).toHaveURL(/auth0\.com/);
 
   const identifier = page.locator('input[name="username"], input[name="email"]').first();
   await expect(identifier).toBeVisible();
@@ -58,5 +58,5 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   await page.goto("/auth/logout");
   await expect(page).toHaveURL((url) => url.origin === new URL(baseURL).origin, { timeout: 60000 });
   await page.goto("/protected");
-  await expect(page).toHaveURL(/auth0\\.com/, { timeout: 30000 });
+  await expect(page).toHaveURL(/auth0\.com/, { timeout: 30000 });
 });
