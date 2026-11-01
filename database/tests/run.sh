@@ -7,4 +7,6 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/0001_schema_contract.s
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/neon-runtime-role-hardening-fixture.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/proposals/neon-runtime-role-hardening.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/neon-runtime-role-hardening-contract.sql
-echo "PASS: IAM schema, RLS default-deny, and Neon runtime least-privilege contract"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/neon-runtime-role-hardening-transitive-negative.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/neon-runtime-role-hardening-contract.sql
+echo "PASS: IAM schema, RLS default-deny, and Neon runtime direct/transitive membership contract"
