@@ -74,7 +74,32 @@ jobs:
       statuses: read
       deployments: write
     steps:
+      - name: Detect whether this commit requires a new Preview deployment
+        id: preview-impact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          files="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}" --jq '.files[].filename')"
+          required=false
+          while IFS= read -r file; do
+            case "${file}" in
+              apps/web/*|packages/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.npmrc|vercel.json|next.config.*)
+                required=true
+                ;;
+            esac
+          done <<< "${files}"
+          echo "required=${required}" >> "$GITHUB_OUTPUT"
+          if [ "${required}" = "true" ]; then
+            echo "This commit changes application/build inputs; a fresh Vercel Preview is required."
+          else
+            echo "This commit changes no application/build inputs; the existing Preview remains the test target."
+          fi
+
       - name: Wait for successful Vercel Preview deployment
+        if: steps.preview-impact.outputs.required == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -96,6 +121,10 @@ jobs:
           done
           echo "::error::Timed out waiting for a successful Vercel status for ${COMMIT_SHA}."
           exit 1
+
+      - name: Reuse the last Preview when application inputs are unchanged
+        if: steps.preview-impact.outputs.required != 'true'
+        run: echo "Preview deployment skipped because this commit changes only workflow or documentation files."
 
   auth0-e2e:
     name: auth0-e2e
