@@ -10,6 +10,8 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
     throw new Error("Required Auth0 E2E configuration is missing.");
   }
 
+  const previewHost = new URL(baseURL).hostname;
+
   await page.route("**/*", async (route) => {
     const requestUrl = new URL(route.request().url());
     if (requestUrl.hostname === previewHost) {
