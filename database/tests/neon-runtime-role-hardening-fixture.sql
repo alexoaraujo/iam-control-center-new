@@ -1,6 +1,5 @@
--- CI ONLY: create a disposable fixture that reproduces the observed unsafe roles.
--- This must never be pointed at a Neon branch or any persistent database.
-\set ON_ERROR_STOP on
+-- CI ONLY: disposable PostgreSQL fixture; never point this at Neon or persistent DBs.
+\\set ON_ERROR_STOP on
 
 DO $create_fixture_roles$
 BEGIN
@@ -15,6 +14,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='iam_app_runtime_login') THEN
     CREATE ROLE iam_app_runtime_login LOGIN NOBYPASSRLS;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='runtime_membership_bridge') THEN
+    CREATE ROLE runtime_membership_bridge NOLOGIN;
   END IF;
 END
 $create_fixture_roles$;
