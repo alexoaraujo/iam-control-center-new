@@ -31,7 +31,7 @@ BEGIN
     FROM pg_auth_members m
     JOIN pg_roles member_role ON member_role.oid=m.member
     JOIN pg_roles granted_role ON granted_role.oid=m.roleid
-    WHERE member_role.rolname IN ('app_runtime','app_runtime_login','iam_app_runtime')
+    WHERE member_role.rolname IN ('app_runtime','app_runtime_login','iam_app_runtime','iam_app_runtime_login')
       AND granted_role.rolname IN ('neon_superuser','iam_owner','iam_migrator')
   ) THEN
     RAISE EXCEPTION 'runtime role has forbidden administrative membership';
@@ -51,6 +51,17 @@ BEGIN
 
   IF NOT pg_has_role('iam_app_runtime_login','iam_app_runtime','MEMBER') THEN
     RAISE EXCEPTION 'iam_app_runtime_login must remain a member of iam_app_runtime';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid=m.member
+    JOIN pg_roles granted_role ON granted_role.oid=m.roleid
+    WHERE member_role.rolname='iam_app_runtime_login'
+      AND granted_role.rolname <> 'iam_app_runtime'
+  ) THEN
+    RAISE EXCEPTION 'iam_app_runtime_login has an unexpected additional role membership';
   END IF;
 END
 $assert_runtime_role_contract$;
