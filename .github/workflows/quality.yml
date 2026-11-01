@@ -140,11 +140,9 @@ jobs:
           unset token response
 
       - name: Verify GitHub OIDC claims for Vercel Trusted Sources
-        env:
-          OIDC_TOKEN: ${{ env.VERCEL_TRUSTED_OIDC_TOKEN }}
         run: |
           node <<'NODE'
-          const token = process.env.OIDC_TOKEN;
+          const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
           if (!token) throw new Error("OIDC token missing from job environment.");
           const parts = token.split(".");
           if (parts.length !== 3) throw new Error("OIDC token is not a JWT.");
