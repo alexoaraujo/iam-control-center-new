@@ -150,10 +150,19 @@ jobs:
           const expectedIssuer = "https://token.actions.githubusercontent.com";
           const expectedSubject = "repo:alexoaraujo83/iam-control-center:environment:Preview";
           const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+          // These claims are non-secret diagnostics; never print or persist the JWT.
+          console.log(JSON.stringify({
+            issuer: claims.iss ?? null,
+            audience,
+            subject: claims.sub ?? null,
+            repository: claims.repository ?? null,
+            ref: claims.ref ?? null,
+            environment: claims.environment ?? null,
+            event_name: claims.event_name ?? null,
+          }));
           if (claims.iss !== expectedIssuer) throw new Error("Unexpected OIDC issuer.");
           if (!audience.includes("https://github.com/alexoaraujo83")) throw new Error("Unexpected OIDC audience.");
           if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
-          console.log(JSON.stringify({ issuer: claims.iss, audience, subject: claims.sub, verified: true }));
           NODE
 
       - name: Install isolated Playwright runner
