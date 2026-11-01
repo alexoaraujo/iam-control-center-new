@@ -25,7 +25,7 @@ A consulta SQL também confirmou que `app_runtime_login` conecta e tem `CREATE` 
 - `iam_app_runtime_login`: login dedicado, `LOGIN NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION`, membro apenas de `iam_app_runtime` para as capacidades runtime explicitamente aprovadas.
 - `app_runtime` e `app_runtime_login`: retirar associação a `neon_superuser`, remover atributos administrativos e colocar ambos em `NOLOGIN` (quarentena, sem DROP).
 - Nenhuma role runtime pode alcançar `neon_superuser`, `iam_owner` ou `iam_migrator` por membership direta ou transitiva.
-- Allowlist de memberships diretas: `iam_app_runtime_login → iam_app_runtime`; as demais roles runtime não podem ter memberships.
+- Allowlist de memberships diretas: `iam_app_runtime_login → iam_app_runtime`, com `INHERIT TRUE`, `SET TRUE`, `ADMIN FALSE`; as demais roles runtime não podem ter memberships.
 - Roles owner/migrator permanecem isoladas do runtime.
 - Não conceder policies, grants de tabelas ou permissões funcionais nesta proposta.
 
@@ -45,7 +45,8 @@ O SQL de proposta é testado apenas em PostgreSQL descartável no CI; o CI não 
 4. Login runtime dedicado permanece `LOGIN`, NOBYPASSRLS e sem atributos administrativos.
 5. Allowlist de membership direta é exata: somente `iam_app_runtime_login` membro de `iam_app_runtime`.
 6. Roles antigas `app_runtime*` ficam sem login e sem memberships até decisão posterior de descarte.
-7. O teste negativo cria uma cadeia transitiva runtime → role intermediária → `neon_superuser` e comprova que o detector a identifica.
+7. A membership permitida exige opções explícitas `INHERIT TRUE`, `SET TRUE`, `ADMIN FALSE`; qualquer `ADMIN OPTION` em role runtime bloqueia a proposta.
+8. O teste negativo cria uma cadeia transitiva runtime → role intermediária → `neon_superuser` e comprova que o detector a identifica.
 
 ## 5. Divergência API Neon × catálogo PostgreSQL
 
