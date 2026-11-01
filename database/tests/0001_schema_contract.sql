@@ -1,0 +1,89 @@
+-- CI-only tests. Run as PostgreSQL superuser on disposable PostgreSQL 18.
+\set ON_ERROR_STOP on
+
+DO $assert_schema$
+DECLARE expected_count integer; actual_count integer;
+BEGIN
+  SELECT count(*) INTO expected_count FROM (VALUES
+    ('iam','tenants'),('iam','identities'),('iam','memberships'),('iam','roles'),
+    ('iam','permissions'),('iam','membership_roles'),('iam','role_permissions'),
+    ('iam','invitations'),('iam','schema_migrations'),('audit','events')
+  ) AS expected(schema_name,table_name);
+  SELECT count(*) INTO actual_count
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+  WHERE (n.nspname,c.relname) IN (
+    ('iam','tenants'),('iam','identities'),('iam','memberships'),('iam','roles'),
+    ('iam','permissions'),('iam','membership_roles'),('iam','role_permissions'),
+    ('iam','invitations'),('iam','schema_migrations'),('audit','events')
+  ) AND c.relkind='r';
+  IF actual_count <> expected_count THEN
+    RAISE EXCEPTION 'expected % tables, found %',expected_count,actual_count;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname IN ('iam','audit') AND c.relkind='r'
+      AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity)
+  ) THEN RAISE EXCEPTION 'RLS must be enabled and forced on every IAM/audit table'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid
+    JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('iam','audit')
+  ) THEN RAISE EXCEPTION 'baseline must not create RLS policies'; END IF;
+  IF (SELECT is_nullable FROM information_schema.columns
+      WHERE table_schema='iam' AND table_name='tenants' AND column_name='slug') <> 'YES'
+  THEN RAISE EXCEPTION 'tenant slug must be nullable'; END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ('iam_owner','iam_migrator','iam_app_runtime')
+             AND (rolcanlogin OR rolbypassrls))
+  THEN RAISE EXCEPTION 'IAM group roles must be NOLOGIN/NOBYPASSRLS'; END IF;
+END $assert_schema$;
+
+-- Composite FK must reject a membership from tenant A assigned a role from tenant B.
+BEGIN;
+INSERT INTO iam.tenants(id,slug,display_name) VALUES
+ ('00000000-0000-4000-8000-000000000001','tenant-a','Tenant A'),
+ ('00000000-0000-4000-8000-000000000002','tenant-b','Tenant B'),
+ ('00000000-0000-4000-8000-000000000003',NULL,'Tenant without slug');
+INSERT INTO iam.identities(id,issuer,subject)
+VALUES ('00000000-0000-4000-8000-000000000010','https://issuer.example/','subject-a');
+INSERT INTO iam.memberships(id,tenant_id,identity_id,status)
+VALUES ('00000000-0000-4000-8000-000000000020',
+ '00000000-0000-4000-8000-000000000001',
+ '00000000-0000-4000-8000-000000000010','active');
+INSERT INTO iam.roles(id,tenant_id,key,display_name)
+VALUES ('00000000-0000-4000-8000-000000000030',
+ '00000000-0000-4000-8000-000000000002','admin','Admin');
+DO $assert_composite_fk$
+BEGIN
+  BEGIN
+    INSERT INTO iam.membership_roles(tenant_id,membership_id,role_id)
+    VALUES ('00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000020',
+      '00000000-0000-4000-8000-000000000030');
+    RAISE EXCEPTION 'cross-tenant membership-role assignment unexpectedly succeeded';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+END $assert_composite_fk$;
+ROLLBACK;
+
+-- Test-only grants isolate RLS behavior from ordinary SQL privilege errors.
+GRANT USAGE ON SCHEMA iam,audit TO iam_app_runtime;
+GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA iam,audit TO iam_app_runtime;
+BEGIN;
+INSERT INTO iam.tenants(id,slug,display_name)
+VALUES ('00000000-0000-4000-8000-000000000101','owner-fixture','Owner fixture');
+SET ROLE iam_app_runtime;
+DO $assert_default_deny$
+DECLARE visible_count integer;
+BEGIN
+  SELECT count(*) INTO visible_count FROM iam.tenants;
+  IF visible_count <> 0 THEN
+    RAISE EXCEPTION 'runtime saw % rows without an approved policy',visible_count;
+  END IF;
+  BEGIN
+    INSERT INTO iam.tenants(id,slug,display_name)
+    VALUES ('00000000-0000-4000-8000-000000000102','runtime-write','Must be denied');
+    RAISE EXCEPTION 'runtime INSERT unexpectedly succeeded without a policy';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $assert_default_deny$;
+RESET ROLE;
+ROLLBACK;
