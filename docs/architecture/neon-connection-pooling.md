@@ -1,0 +1,65 @@
+# Neon connection pooling — runtime and operations
+
+## Status and scope
+
+This document defines the connection contract for IAM Control Center. It does not create a database client, rotate credentials, change a Neon role, update Vercel variables, or run migrations. Those actions require a separately reviewed implementation and environment-specific verification.
+
+## Connection classes
+
+| Consumer | Environment variable | Endpoint | Role | Pooling |
+|---|---|---|---|---|
+| Web application runtime | `DATABASE_URL` | Neon pooled hostname (`-pooler`) | `iam_app_runtime_login` (inherits `iam_app_runtime`) | Required |
+| Migration runner / schema maintenance | `DATABASE_MIGRATION_URL` | Neon direct hostname (no `-pooler`) | Dedicated migration identity; never the app runtime role | Disabled |
+| Local development runtime | `DATABASE_URL` | Development branch pooled endpoint | Development runtime role | Preferred |
+| CI schema tests | Ephemeral PostgreSQL service | Direct local service endpoint | Disposable test role | Not applicable |
+
+Both variables are secrets and must be configured only in the environment that needs them. The application runtime must not receive `DATABASE_MIGRATION_URL`. Do not copy a Production URL into Development or Preview.
+
+## Neon transaction-pooler contract
+
+Neon pooled connections use PgBouncer transaction mode. A client connection is assigned a PostgreSQL server connection for a transaction and returned to the pool when that transaction ends. Therefore:
+
+- Do not depend on session state surviving between transactions.
+- Do not issue session-scoped `SET`/`RESET` as application configuration. Use explicit query/schema qualification or a reviewed role-level default where appropriate.
+- Do not use `LISTEN`/`NOTIFY`, session-level advisory locks, session-persistent temporary objects, SQL `PREPARE`/`DEALLOCATE`, or other session-affine features through the pooled runtime URL.
+- Protocol-level prepared statements are supported by current Neon PgBouncer; verify the selected driver's behavior before enabling named prepared statements.
+- Keep transactions short. Do not hold a transaction open across network calls, user interaction, or long-running work.
+- Schema migrations, `pg_dump`/`pg_restore`, logical replication, and administration use the direct URL.
+
+## Runtime client requirements
+
+When a PostgreSQL driver/client is introduced:
+
+1. Keep one bounded connection pool per application process/instance; do not create a new pool per request.
+2. Configure conservative pool limits based on Neon compute size and the total number of concurrently running Vercel instances. Neon pool limits are shared across clients for the same database/user; do not assume every function receives an independent server-connection budget.
+3. Set finite connection acquisition and idle timeouts. Ensure the pool is closed during process shutdown where the runtime supports lifecycle hooks.
+4. Use connection validation/health checks or a pre-ping equivalent where supported, and use bounded retry with exponential backoff and jitter only for transient connection establishment failures.
+5. Never automatically replay a transaction or a non-idempotent write after an ambiguous connection failure. Use idempotency keys or application-level reconciliation where required.
+6. Use TLS and verify the certificate according to the driver/provider's supported configuration. Never log connection strings, passwords, or full connection errors containing credentials.
+7. Use parameterized queries. Tenant authorization must be performed by the application and enforced by the approved database trust boundary; a plain writable tenant GUC is not a strong isolation boundary.
+
+Do not select a driver or hard-code pool sizes in this document. The implementation PR must choose and pin the supported client, document its pool settings, and test behavior against the actual Neon pooled endpoint.
+
+## Health checks and observability
+
+The current `/api/health` endpoint reports scaffold/configuration status only. It does not execute SQL and must not be described as proof of database connectivity.
+
+When a database client is implemented, keep liveness separate from readiness:
+- Liveness: process can respond; no database dependency.
+- Readiness: perform a bounded `SELECT 1` through the runtime pooled URL and report only a sanitized status.
+- Monitor pool client connections (active/idle/waiting), server connections (active/idle), acquisition latency, timeouts, and database errors. Do not expose SQL, hostnames, role names, or credentials in public health responses.
+
+## Environment rollout and evidence
+
+1. Verify the runtime login role and its effective privileges independently in Development and Preview.
+2. Obtain each branch's pooled connection string from Neon Console and set it as the sensitive `DATABASE_URL` in the matching Vercel environment.
+3. Keep a separate direct URL only in a protected migration environment/secret store when a migration workflow is implemented.
+4. Verify the host form without revealing credentials: runtime URL contains `-pooler`; migration URL does not.
+5. Deploy to Development, execute a real bounded database readiness check, and record branch, deployment URL, commit SHA, sanitized outcome, and role verification.
+6. Repeat on Preview with synthetic data.
+7. Production is out of scope until separately approved. Do not edit Production variables or run Production migrations as part of this rollout.
+
+## References
+
+- Neon documentation: https://neon.com/docs/connect/connection-pooling
+- Neon pooled connections use transaction mode; confirm current provider behavior and driver compatibility before implementation.
