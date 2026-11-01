@@ -51,8 +51,9 @@ INSERT INTO iam.tenants(id,slug,display_name) VALUES
  ('00000000-0000-4000-8000-000000000001','tenant-a','Tenant A'),
  ('00000000-0000-4000-8000-000000000002','tenant-b','Tenant B'),
  ('00000000-0000-4000-8000-000000000003',NULL,'Tenant without slug');
-INSERT INTO iam.identities(id,issuer,subject)
-VALUES ('00000000-0000-4000-8000-000000000010','https://issuer.example/','subject-a');
+INSERT INTO iam.identities(id,issuer,subject) VALUES
+ ('00000000-0000-4000-8000-000000000010','https://issuer.example/','subject-a'),
+ ('00000000-0000-4000-8000-000000000011','https://issuer.example/','subject-b');
 INSERT INTO iam.memberships(id,tenant_id,identity_id,status)
 VALUES ('00000000-0000-4000-8000-000000000020',
  '00000000-0000-4000-8000-000000000001',
@@ -71,6 +72,36 @@ BEGIN
   EXCEPTION WHEN foreign_key_violation THEN NULL;
   END;
 END $assert_composite_fk$;
+
+-- Audit actor identity must match the referenced membership, not merely its tenant.
+DO $assert_audit_actor_identity$
+BEGIN
+  BEGIN
+    INSERT INTO audit.events(tenant_id,actor_identity_id,actor_membership_id,action,outcome)
+    VALUES ('00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000011',
+      '00000000-0000-4000-8000-000000000020',
+      'test.audit.identity-mismatch','failure');
+    RAISE EXCEPTION 'audit event accepted an identity different from its membership';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+
+  BEGIN
+    INSERT INTO audit.events(tenant_id,actor_identity_id,actor_membership_id,action,outcome)
+    VALUES ('00000000-0000-4000-8000-000000000001',
+      NULL,
+      '00000000-0000-4000-8000-000000000020',
+      'test.audit.missing-identity','failure');
+    RAISE EXCEPTION 'audit event accepted a membership without its actor identity';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
+  INSERT INTO audit.events(tenant_id,actor_identity_id,actor_membership_id,action,outcome)
+  VALUES ('00000000-0000-4000-8000-000000000001',
+    '00000000-0000-4000-8000-000000000010',
+    '00000000-0000-4000-8000-000000000020',
+    'test.audit.valid-actor','success');
+END $assert_audit_actor_identity$;
 ROLLBACK;
 
 -- Test-only grants isolate RLS behavior from ordinary SQL privilege errors.
