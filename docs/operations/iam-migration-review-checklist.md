@@ -80,6 +80,6 @@ A revisão identificou que a FK original correlacionava membership e tenant, mas
 - A FK de auditoria agora referencia `(actor_membership_id, tenant_id, actor_identity_id)` para a membership.
 - O teste de contrato rejeita identidade divergente e identidade ausente, e aceita o par correspondente.
 
-Evidência automatizada dessa correção ainda está **PENDENTE** até concluir o workflow PostgreSQL 18 no head atual da PR #57.
+Evidência automatizada: **PASS** no workflow [database-schema-tests #41303224076](https://github.com/alexoaraujo83/iam-control-center/actions/runs/41303224076), executado com PostgreSQL 18.6 e SHA de código `1c5a4533151534eafb758fd021a626ab53ff84ca`. O workflow de qualidade [CI #41303238973](https://github.com/alexoaraujo83/iam-control-center/actions/runs/41303238973) também concluiu SUCCESS no head documental `8ced97f7d3aacb582b7748bcf082d0502ee9078b`.
 
 Nenhuma migration foi aplicada em production, development ou preview. As três branches continuam sem tabelas de aplicação.
