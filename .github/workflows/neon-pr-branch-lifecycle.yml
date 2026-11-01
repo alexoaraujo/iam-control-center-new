@@ -64,7 +64,7 @@ jobs:
           BRANCHES_URL="${NEON_API_ROOT}/projects/${NEON_PROJECT_ID}/branches"
 
           api_get_branches() {
-            curl --fail-with-body --silent --show-error \
+            curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 \
               --header "Authorization: Bearer ${NEON_API_KEY}" \
               --header "Accept: application/json" \
               "${BRANCHES_URL}?limit=100"
@@ -72,13 +72,14 @@ jobs:
 
           api_get_branch() {
             local branch_id="$1"
-            curl --fail-with-body --silent --show-error \
+            curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 \
               --header "Authorization: Bearer ${NEON_API_KEY}" \
               --header "Accept: application/json" \
               "${BRANCHES_URL}/${branch_id}"
           }
 
           BRANCHES_JSON="$(api_get_branches)"
+          jq -e '.branches | type == "array"' >/dev/null <<< "${BRANCHES_JSON}"
 
           # Resolve and validate the permanent Development -> Production lineage.
           PRODUCTION_JSON="$(jq -ce '[.branches[] | select(.default == true)] |
@@ -89,7 +90,6 @@ jobs:
             echo "::error::Production branch is not ready."
             exit 1
           }
-          jq -e '.branches | type == "array"' >/dev/null <<< "${BRANCHES_JSON}"
           DEVELOPMENT_JSON="$(jq -ce --arg parent "${PRODUCTION_ID}" '
             [.branches[] | select(.name == "development" and .parent_id == $parent)] |
             if length == 1 then .[0] else error("Expected exactly one Development branch whose parent is Production") end
@@ -126,7 +126,7 @@ jobs:
               exit 1
             }
 
-            curl --fail-with-body --silent --show-error --request DELETE \
+            curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --request DELETE \
               --header "Authorization: Bearer ${NEON_API_KEY}" \
               --header "Accept: application/json" \
               "${BRANCHES_URL}/${TARGET_ID}" >/dev/null
@@ -149,7 +149,7 @@ jobs:
 
             CREATE_BODY="$(jq -cn --arg name "${BRANCH_NAME}" --arg parent "${DEVELOPMENT_ID}" \
               '{branch:{name:$name,parent_id:$parent}}')"
-            CREATE_RESPONSE="$(curl --fail-with-body --silent --show-error --request POST \
+            CREATE_RESPONSE="$(curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --request POST \
               --header "Authorization: Bearer ${NEON_API_KEY}" \
               --header "Accept: application/json" \
               --header "Content-Type: application/json" \
@@ -199,7 +199,7 @@ jobs:
 
           EXPIRES_AT="$(date -u -d '+14 days' '+%Y-%m-%dT%H:%M:%SZ')"
           PATCH_BODY="$(jq -cn --arg expiry "${EXPIRES_AT}" '{branch:{expires_at:$expiry}}')"
-          curl --fail-with-body --silent --show-error --request PATCH \
+          curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --request PATCH \
             --header "Authorization: Bearer ${NEON_API_KEY}" \
             --header "Accept: application/json" \
             --header "Content-Type: application/json" \
