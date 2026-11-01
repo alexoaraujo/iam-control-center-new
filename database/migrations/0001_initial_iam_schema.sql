@@ -9,6 +9,9 @@ BEGIN
   IF current_user <> 'iam_owner' THEN
     RAISE EXCEPTION 'effective current_user must be iam_owner; got %', current_user;
   END IF;
+  IF NOT has_database_privilege(current_user, current_database(), 'CREATE') THEN
+    RAISE EXCEPTION 'iam_owner must have CREATE privilege on database %', current_database();
+  END IF;
   FOREACH role_name IN ARRAY ARRAY['iam_owner','iam_migrator','iam_app_runtime'] LOOP
     SELECT rolcanlogin, rolbypassrls INTO role_row FROM pg_roles WHERE rolname=role_name;
     IF NOT FOUND THEN RAISE EXCEPTION 'required role % missing; migration does not create roles', role_name; END IF;
