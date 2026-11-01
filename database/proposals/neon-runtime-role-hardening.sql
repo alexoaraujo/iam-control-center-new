@@ -22,6 +22,33 @@ BEGIN
   END IF;
 
   -- A transitive administrative path must also stop execution.
+  -- Runtime membership must never carry ADMIN OPTION. The sole approved
+  -- application membership has explicit INHERIT/SET semantics.
+  IF EXISTS (
+    SELECT 1
+    FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid=m.member
+    WHERE member_role.rolname IN
+      ('app_runtime','app_runtime_login','iam_app_runtime','iam_app_runtime_login')
+      AND m.admin_option
+  ) THEN
+    RAISE EXCEPTION 'runtime membership has ADMIN OPTION; stop and review';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid=m.member
+    JOIN pg_roles granted_role ON granted_role.oid=m.roleid
+    WHERE member_role.rolname='iam_app_runtime_login'
+      AND granted_role.rolname='iam_app_runtime'
+      AND m.inherit_option
+      AND m.set_option
+      AND NOT m.admin_option
+  ) THEN
+    RAISE EXCEPTION 'approved runtime membership options differ from INHERIT TRUE, SET TRUE, ADMIN FALSE';
+  END IF;
+
   IF EXISTS (
     WITH RECURSIVE runtime_memberships(member_oid, granted_oid) AS (
       SELECT m.member, m.roleid
