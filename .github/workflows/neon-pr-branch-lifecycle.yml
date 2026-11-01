@@ -84,6 +84,12 @@ jobs:
           PRODUCTION_JSON="$(jq -ce '[.branches[] | select(.default == true)] |
             if length == 1 then .[0] else error("Expected exactly one default Production branch") end' <<< "${BRANCHES_JSON}")"
           PRODUCTION_ID="$(jq -r '.id' <<< "${PRODUCTION_JSON}")"
+          PRODUCTION_STATE="$(jq -r '.current_state // empty' <<< "${PRODUCTION_JSON}")"
+          [[ "${PRODUCTION_STATE}" == "ready" ]] || {
+            echo "::error::Production branch is not ready."
+            exit 1
+          }
+          jq -e '.branches | type == "array"' >/dev/null <<< "${BRANCHES_JSON}"
           DEVELOPMENT_JSON="$(jq -ce --arg parent "${PRODUCTION_ID}" '
             [.branches[] | select(.name == "development" and .parent_id == $parent)] |
             if length == 1 then .[0] else error("Expected exactly one Development branch whose parent is Production") end
