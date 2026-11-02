@@ -83,6 +83,12 @@ GRANT iam_migrator TO iam_migrator_login
 GRANT iam_app_runtime TO iam_app_runtime_login
   WITH ADMIN FALSE, INHERIT TRUE, SET FALSE;
 
+-- PostgreSQL grants TEMPORARY on databases to PUBLIC by default.
+-- The runtime contract explicitly forbids TEMP; a per-role REVOKE cannot
+-- subtract a privilege inherited from PUBLIC. This is intentionally scoped
+-- to this dedicated application database and affects every role in it.
+REVOKE TEMPORARY ON DATABASE "Iam-control-center" FROM PUBLIC;
+
 GRANT CREATE ON DATABASE "Iam-control-center" TO iam_owner;
 
 COMMIT;
