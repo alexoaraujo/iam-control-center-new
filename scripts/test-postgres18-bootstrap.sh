@@ -108,3 +108,144 @@ echo "PASS: IAM migration executed as iam_owner through migrator chain"
 
 psql_in_service -v ON_ERROR_STOP=1 < database/tests/0001_schema_contract.sql
 echo "PASS: IAM schema ownership, RLS FORCE, tenant FK, audit identity, and default-deny contracts"
+
+
+echo "Running the actual Neon Development role proposal as a non-superuser database owner..."
+
+# Create an isolated database and a real LOGIN administrator. The proposal is then
+# applied over TCP as that role; SET SESSION AUTHORIZATION is deliberately not used.
+psql_in_service -v ON_ERROR_STOP=1 <<'SQL'
+CREATE ROLE "Iam-control-center_owner"
+  LOGIN INHERIT NOSUPERUSER NOCREATEDB CREATEROLE NOREPLICATION NOBYPASSRLS;
+CREATE DATABASE "Iam-control-center" OWNER "Iam-control-center_owner";
+SQL
+
+# Trust is confined to loopback inside this disposable PostgreSQL container.
+docker exec -u postgres "$container_id" sh -c \
+  'printf "%s\\n" "host all all 127.0.0.1/32 trust" >> "$PGDATA/pg_hba.conf" && pg_ctl reload -D "$PGDATA"'
+
+psql_as_bootstrap_admin() {
+  docker exec -i "$container_id" psql -X -h 127.0.0.1 -U "Iam-control-center_owner" \
+    -d "Iam-control-center" "$@"
+}
+
+psql_as_bootstrap_admin -v ON_ERROR_STOP=1 < database/bootstrap/neon-development-roles.proposal.sql
+
+psql_as_bootstrap_admin -v ON_ERROR_STOP=1 <<'SQL'
+DO $proposal_assertions$
+DECLARE
+  membership record;
+BEGIN
+  IF current_database() <> 'Iam-control-center'
+     OR session_user <> 'Iam-control-center_owner'
+     OR current_user <> 'Iam-control-center_owner' THEN
+    RAISE EXCEPTION 'Proposal did not execute as the expected real login/database owner';
+  END IF;
+
+  IF (SELECT rolsuper OR NOT rolcreaterole OR NOT rolcreatedb
+      FROM pg_roles WHERE rolname = session_user) THEN
+    RAISE EXCEPTION 'Disposable bootstrap administrator attributes are unexpected';
+  END IF;
+
+  IF (SELECT count(*) FROM pg_roles
+      WHERE rolname IN ('iam_owner','iam_migrator','iam_app_runtime')
+        AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) <> 3 THEN
+    RAISE EXCEPTION 'Group role attributes do not match the proposal';
+  END IF;
+
+  IF (SELECT count(*) FROM pg_roles
+      WHERE rolname IN ('iam_migrator_login','iam_app_runtime_login')
+        AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) <> 2 THEN
+    RAISE EXCEPTION 'Login role attributes do not match the proposal';
+  END IF;
+
+  SELECT m.inherit_option, m.set_option, m.admin_option
+    INTO membership
+  FROM pg_auth_members m
+  JOIN pg_roles granted ON granted.oid = m.roleid
+  JOIN pg_roles member ON member.oid = m.member
+  WHERE granted.rolname = 'iam_owner' AND member.rolname = 'iam_migrator';
+  IF NOT FOUND OR membership.inherit_option OR NOT membership.set_option OR membership.admin_option THEN
+    RAISE EXCEPTION 'iam_migrator -> iam_owner membership options are incorrect';
+  END IF;
+
+  SELECT m.inherit_option, m.set_option, m.admin_option
+    INTO membership
+  FROM pg_auth_members m
+  JOIN pg_roles granted ON granted.oid = m.roleid
+  JOIN pg_roles member ON member.oid = m.member
+  WHERE granted.rolname = 'iam_migrator' AND member.rolname = 'iam_migrator_login';
+  IF NOT FOUND OR membership.inherit_option OR NOT membership.set_option OR membership.admin_option THEN
+    RAISE EXCEPTION 'iam_migrator_login -> iam_migrator membership options are incorrect';
+  END IF;
+
+  SELECT m.inherit_option, m.set_option, m.admin_option
+    INTO membership
+  FROM pg_auth_members m
+  JOIN pg_roles granted ON granted.oid = m.roleid
+  JOIN pg_roles member ON member.oid = m.member
+  WHERE granted.rolname = 'iam_app_runtime' AND member.rolname = 'iam_app_runtime_login';
+  IF NOT FOUND OR NOT membership.inherit_option OR membership.set_option OR membership.admin_option THEN
+    RAISE EXCEPTION 'Runtime membership options are incorrect';
+  END IF;
+
+  IF NOT pg_has_role('iam_migrator_login', 'iam_migrator', 'SET')
+     OR NOT pg_has_role('iam_migrator_login', 'iam_owner', 'SET') THEN
+    RAISE EXCEPTION 'Migrator SET ROLE chain is incomplete';
+  END IF;
+
+  IF pg_has_role('iam_app_runtime_login', 'iam_owner', 'MEMBER')
+     OR pg_has_role('iam_app_runtime_login', 'iam_migrator', 'MEMBER')
+     OR pg_has_role('iam_app_runtime_login', 'iam_app_runtime', 'SET') THEN
+    RAISE EXCEPTION 'Runtime has unintended membership or SET ROLE capability';
+  END IF;
+
+  IF NOT has_database_privilege('iam_owner', current_database(), 'CREATE')
+     OR has_database_privilege('iam_migrator_login', current_database(), 'CREATE')
+     OR has_database_privilege('iam_app_runtime_login', current_database(), 'CREATE') THEN
+    RAISE EXCEPTION 'Database CREATE grant does not match the least-privilege proposal';
+  END IF;
+
+  IF has_schema_privilege('iam_app_runtime_login', 'public', 'CREATE') THEN
+    RAISE EXCEPTION 'Runtime unexpectedly has CREATE on public schema';
+  END IF;
+END
+$proposal_assertions$;
+
+SELECT CASE WHEN has_database_privilege('iam_app_runtime_login', current_database(), 'TEMP')
+  THEN 'BLOCKED: runtime inherits TEMP from PUBLIC; proposal intentionally does not revoke PUBLIC TEMP'
+  ELSE 'PASS: runtime has no TEMP privilege'
+END AS temp_privilege_review;
+SQL
+
+migrator_chain="$(psql_as_bootstrap_admin -Atq -v ON_ERROR_STOP=1 -c \
+  "SET SESSION AUTHORIZATION iam_migrator_login; SET ROLE iam_migrator; SELECT current_user; RESET ROLE; SET ROLE iam_owner; SELECT current_user;")"
+if [[ "$migrator_chain" != $'iam_migrator\\niam_owner' ]]; then
+  echo "::error::Actual proposal migrator chain failed: $migrator_chain"
+  exit 1
+fi
+echo "PASS: proposal migrator login can SET ROLE iam_migrator then iam_owner"
+
+expect_proposal_denial() {
+  local label="$1"
+  local sql="$2"
+  local output
+  if output="$(psql_as_bootstrap_admin -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -c \
+    "SET SESSION AUTHORIZATION iam_app_runtime_login; $sql" 2>&1)"; then
+    echo "::error::Expected runtime permission denial but command succeeded: $label"
+    exit 1
+  fi
+  if ! grep -Fq '42501' <<<"$output"; then
+    echo "::error::Expected SQLSTATE 42501 for proposal runtime test: $label"
+    printf '%s\\n' "$output"
+    exit 1
+  fi
+  echo "PASS (SQLSTATE 42501): proposal runtime cannot $label"
+}
+
+expect_proposal_denial "SET ROLE iam_owner" "SET ROLE iam_owner;"
+expect_proposal_denial "SET ROLE iam_migrator" "SET ROLE iam_migrator;"
+expect_proposal_denial "SET ROLE iam_app_runtime" "SET ROLE iam_app_runtime;"
+expect_proposal_denial "CREATE in public" "CREATE TABLE public.runtime_forbidden(id integer);"
+
+echo "PASS: actual Neon Development role proposal validated with a non-superuser LOGIN administrator"
