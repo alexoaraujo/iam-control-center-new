@@ -76,6 +76,7 @@ jobs:
         run: |
           set -euo pipefail
           results_file="${RUNNER_TEMP}/iam-context-harness-results.txt"
+          server_version="$(psql -X -h 127.0.0.1 -p 5432 -U postgres -d iam_ctx_test -Atqc 'SHOW server_version;')"
           psql -X -v ON_ERROR_STOP=1 -P pager=off \
             -h 127.0.0.1 -p 5432 -U postgres -d iam_ctx_test \
             -f iam-ctx-poc-01-harness/tests/10_sec01_sec16.sql \
@@ -92,8 +93,8 @@ jobs:
             echo "## IAM Context Harness — PostgreSQL 18"
             echo
             echo "- Commit: ${GITHUB_SHA}"
-            echo "- Database: `iam_ctx_test` (ephemeral service container)"
-            echo "- Server: PostgreSQL ${server_version:-18.x}"
+            echo '- Database: `iam_ctx_test` (ephemeral service container)'
+            echo "- Server: PostgreSQL ${server_version}"
             echo "- Result: ${pass_count}/16 assertions reported PASS local"
             echo
             echo '### SQL test output'
