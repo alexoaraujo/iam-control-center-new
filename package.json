@@ -11,7 +11,7 @@
     "build": "pnpm --filter @iam-control-center/web build",
     "lint": "pnpm --filter @iam-control-center/web lint",
     "typecheck": "pnpm --filter @iam-control-center/web typecheck",
-    "test": "pnpm --filter @iam-control-center/web test"
+    "test": "bash scripts/test-postgres18-bootstrap.sh && pnpm --filter @iam-control-center/web test"
   },
   "pnpm": {
     "overrides": {
