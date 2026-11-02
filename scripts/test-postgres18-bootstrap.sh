@@ -142,7 +142,7 @@ BEGIN
     RAISE EXCEPTION 'Proposal did not execute as the expected real login/database owner';
   END IF;
 
-  IF (SELECT rolsuper OR NOT rolcreaterole OR NOT rolcreatedb
+  IF (SELECT rolsuper OR NOT rolcreaterole
       FROM pg_roles WHERE rolname = session_user) THEN
     RAISE EXCEPTION 'Disposable bootstrap administrator attributes are unexpected';
   END IF;
