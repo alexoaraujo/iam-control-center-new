@@ -17,11 +17,12 @@ BEGIN
     RAISE EXCEPTION 'iam_owner must have CREATE privilege on database %', current_database();
   END IF;
 
-  SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
+  SELECT rolcanlogin, rolinherit, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
     INTO session_role_row
     FROM pg_roles
    WHERE rolname = session_user;
-  IF NOT FOUND OR NOT session_role_row.rolcanlogin
+  IF NOT FOUND OR session_user <> 'iam_migrator_login'
+     OR NOT session_role_row.rolcanlogin OR session_role_row.rolinherit
      OR session_role_row.rolsuper OR session_role_row.rolcreatedb
      OR session_role_row.rolcreaterole OR session_role_row.rolreplication
      OR session_role_row.rolbypassrls THEN
@@ -52,6 +53,39 @@ BEGIN
       RAISE EXCEPTION 'role % has a prohibited administrative attribute', role_name;
     END IF;
   END LOOP;
+
+  -- Require the exact two-step migration capability chain; no direct
+  -- login-to-owner grant and no inherited/admin membership is accepted.
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = 'iam_migrator_login'
+       AND granted_role.rolname = 'iam_migrator'
+       AND m.inherit_option IS FALSE
+       AND m.set_option IS TRUE
+       AND m.admin_option IS FALSE
+  ) OR NOT EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = 'iam_migrator'
+       AND granted_role.rolname = 'iam_owner'
+       AND m.inherit_option IS FALSE
+       AND m.set_option IS TRUE
+       AND m.admin_option IS FALSE
+  ) OR EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = 'iam_migrator_login'
+       AND granted_role.rolname = 'iam_owner'
+  ) THEN
+    RAISE EXCEPTION 'migration requires the exact iam_migrator_login -> iam_migrator -> iam_owner SET chain';
+  END IF;
 
   -- Check the complete SET-capable membership graph, including the session
   -- login. The expected migrator -> owner path is allowed; privileged targets
