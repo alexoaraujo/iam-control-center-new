@@ -77,6 +77,23 @@ A documentação oficial atual do SDK recomenda a convenção `proxy.ts` no Next
 
 Isso é uma pendência técnica separada da variável `APP_BASE_URL`. Não alterar o código nesta proposta documental. Antes de qualquer E2E, reconciliar a convenção `proxy.ts` com a PR de migração Next.js 16 já existente, evitando mudanças duplicadas ou conflitantes.
 
+## 4.1 Reconciliação da implementação Proxy e do harness E2E existente
+
+A auditoria de branches identificou uma implementação Next.js 16 já existente em `fix/next16-proxy-r2`:
+
+- `apps/web/src/proxy.ts` delega `Request` para `auth0.middleware(request)` (blob SHA `731f7e40235fc2ac1033a43c01672afed30815e1`);
+- `apps/web/src/proxy.test.ts` testa delegação e matcher (blob SHA `243930e6ea0903d23ee56703f2ce4a7557689f15`);
+- `.github/e2e/auth0.spec.cjs` cobre login, callback, sessão persistente e logout (blob SHA `b2c3b5394c8c8f1d1f`);
+- `.github/workflows/quality.yml` nessa branch contém job `auth0-e2e`, condicionado a `vars.AUTH0_E2E_ENABLED == 'true'`.
+
+A comparação entre `proposal/neon-vercel-workflow-reconciliation` (base SHA `7de15f57297d14296e6a24fc89b5ea6b86dc1aaa`) e `fix/next16-proxy-r2` retornou `diverged`, com 30 commits à frente e 5 atrás. Portanto, a implementação não deve ser integrada por merge/cherry-pick cego; a cadeia de PRs e os contratos precisam ser reconciliados primeiro.
+
+**Bloqueio E2E identificado:** o workflow dessa branch define `E2E_BASE_URL=https://iam-control-center-preview.vercel.app`, mas a consulta atual ao Vercel mostra que esse domínio está vinculado à branch `feat/iam-migrator-role-assumption-review`, não a `fix/next16-proxy-r2`. Assim, executar o job com essa URL não provaria que o código da branch testada está publicado. Além disso, o workflow da branch desta proposta (`proposal/auth0-preview-app-base-url`) contém somente `quality` e `preview-deployment`; não contém o job `auth0-e2e`.
+
+A implementação E2E existente usa secrets `AUTH0_E2E_USERNAME` e `AUTH0_E2E_PASSWORD`, variável `AUTH0_E2E_ENABLED` e token GitHub Actions OIDC para Vercel Trusted Sources. Nenhum valor secreto foi lido. O README afirma que o fluxo não cobre autorização IAM, RBAC, isolamento multi-tenant ou RLS.
+
+**Decisão:** não habilitar `AUTH0_E2E_ENABLED` nem declarar E2E PASS até que (1) a branch proprietária do domínio seja alinhada à branch/commit sob teste, (2) o workflow e a cadeia de PRs sejam reconciliados, e (3) a execução real seja observada no SHA exato.
+
 ## 5. Plano de validação após aprovação
 
 1. Confirmar que a branch `feat/iam-migrator-role-assumption-review` continua sendo a destinatária do domínio canônico.
@@ -121,7 +138,11 @@ Antes de uma alteração futura, registrar somente metadados não secretos da va
 | Domínio canônico vinculado à branch da PR #67 | FAIL — consulta Vercel retornou zero domínios |
 | APP_BASE_URL Preview genérica | NOT CONFIGURED — manter assim |
 | Valor da variável Preview branch-scoped existente | NOT VERIFIED — descriptografia não realizada |
-| Next.js 16 usa convenção `proxy.ts` na branch inspecionada | FAIL — arquivo encontrado é `middleware.ts` |
+| Branch base desta proposta usa `proxy.ts` | FAIL — contém `middleware.ts`; implementação alternativa já existe em `fix/next16-proxy-r2` |
+| Implementação `proxy.ts` na branch `fix/next16-proxy-r2` | PASS — arquivo e teste unitário inspecionados |
+| Branch `fix/next16-proxy-r2` reconciliada com a base desta proposta | BLOCKED — comparação divergiu: 30 commits à frente e 5 atrás |
+| Workflow E2E testa a branch que possui o domínio canônico | FAIL — URL fixa aponta para domínio vinculado a outra branch |
+| Job `auth0-e2e` disponível na branch da PR #67 | NOT CONFIGURED — workflow contém somente quality e preview-deployment |
 | Login/callback/logout E2E | NOT RUN |
 | Alterações externas executadas | NONE |
 
