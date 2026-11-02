@@ -100,13 +100,13 @@ The Vercel project `iam-control-center` environment-variable metadata was listed
 
 | Variable | Target | Metadata | Assessment |
 |---|---|---|---|
-| `DATABASE_URL` | Development | Secret; comment says least-privilege runtime connection for Neon Development, not for migrations | Configured potential runtime consumer; active use not demonstrated |
-| `DATABASE_MIGRATION_URL` | Development | Secret; no explanatory comment | Configured potential migration consumer; active use not demonstrated |
+| `DATABASE_URL` | Development | Secret; comment says least-privilege local-development connection for Neon Development, not for migrations | Local development credential; consumption occurs only if a local tool imports/injects Development variables |
+| `DATABASE_MIGRATION_URL` | Development | Secret; no explanatory comment | Local development credential; likely intended for migration tooling, but purpose and actual use are unconfirmed |
 | `DATABASE_URL` | Preview | Secret; comment names a Preview-specific runtime login | Separate branch/environment; excluded from this Development inventory |
 | `DATABASE_MIGRATION_URL` | Preview | Secret | Separate environment; excluded from this Development inventory |
 | `DATABASE_URL` | Production | Secret; comment names a production runtime login | Production is excluded from this task |
 
-No secret values were decrypted or printed. The Vercel metadata establishes configuration presence and target environment, not current deployment consumption, the actual PostgreSQL login identity, or TEMP use.
+No secret values were decrypted or printed. Vercel's Development environment is for local development commands such as `vercel dev`, `vercel env pull`, and `vercel env run`; it is not the environment injected into hosted Preview/Production deployments. Thus these Development entries are potential local-tool consumers, not evidence of a hosted Vercel function using the Development database. Metadata still does not establish whether the user runs those commands, the actual PostgreSQL login identity, or TEMP use. See [Vercel environments](https://vercel.com/docs/deployments/environments) and [environment variables](https://vercel.com/docs/environment-variables).
 
 Repository search on the PR branch found:
 - `apps/web/src/lib/env.ts` only reports whether `DATABASE_URL` is configured; the health route does not execute SQL.
