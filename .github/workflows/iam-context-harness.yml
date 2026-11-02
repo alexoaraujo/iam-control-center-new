@@ -1,0 +1,103 @@
+name: IAM Context Harness (PostgreSQL 18)
+
+on:
+  push:
+    branches:
+      - IAM-CTX-POC-01-Harness-draft-0.1
+    paths:
+      - "iam-ctx-poc-01-harness/**"
+      - ".github/workflows/iam-context-harness.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-context-harness-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  postgres-harness:
+    name: PostgreSQL 18 disposable harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: iam_ctx_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: iam_ctx_test_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d iam_ctx_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Verify disposable PostgreSQL server
+        env:
+          PGPASSWORD: iam_ctx_test_only
+        run: |
+          set -euo pipefail
+          server_version="$(psql -X -h 127.0.0.1 -p 5432 -U postgres -d iam_ctx_test -Atqc 'SHOW server_version;')"
+          echo "PostgreSQL server version: ${server_version}"
+          case "${server_version}" in
+            18.*) ;;
+            *)
+              echo "::error::Expected PostgreSQL 18; received ${server_version}."
+              exit 1
+              ;;
+          esac
+
+      - name: Install isolated IAM context fixture
+        env:
+          PGPASSWORD: iam_ctx_test_only
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 \
+            -h 127.0.0.1 -p 5432 -U postgres -d iam_ctx_test \
+            -f iam-ctx-poc-01-harness/sql/00_fixture.sql
+
+      - name: Execute SEC-01 through SEC-16
+        env:
+          PGPASSWORD: iam_ctx_test_only
+        run: |
+          set -euo pipefail
+          results_file="${RUNNER_TEMP}/iam-context-harness-results.txt"
+          psql -X -v ON_ERROR_STOP=1 -P pager=off \
+            -h 127.0.0.1 -p 5432 -U postgres -d iam_ctx_test \
+            -f iam-ctx-poc-01-harness/tests/10_sec01_sec16.sql \
+            | tee "${results_file}"
+
+          pass_count="$(grep -c 'PASS local' "${results_file}" || true)"
+          echo "Assertions reported PASS local: ${pass_count}"
+          if [ "${pass_count}" -ne 16 ]; then
+            echo "::error::Expected 16 PASS local assertions; found ${pass_count}."
+            exit 1
+          fi
+
+          {
+            echo "## IAM Context Harness — PostgreSQL 18"
+            echo
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- Database: `iam_ctx_test` (ephemeral service container)"
+            echo "- Server: PostgreSQL ${server_version:-18.x}"
+            echo "- Result: ${pass_count}/16 assertions reported PASS local"
+            echo
+            echo '### SQL test output'
+            echo ' ```text'
+            cat "${results_file}"
+            echo ' ```'
+          } >> "${GITHUB_STEP_SUMMARY}"
