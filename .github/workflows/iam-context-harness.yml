@@ -77,10 +77,24 @@ jobs:
           set -euo pipefail
           results_file="${RUNNER_TEMP}/iam-context-harness-results.txt"
           server_version="$(psql -X -h 127.0.0.1 -p 5432 -U postgres -d iam_ctx_test -Atqc 'SHOW server_version;')"
+          {
+            echo "IAM Context Harness — evidence record"
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Workflow run: ${GITHUB_RUN_ID}"
+            echo "Run attempt: ${GITHUB_RUN_ATTEMPT}"
+            echo "Branch: ${GITHUB_REF_NAME}"
+            echo "Executed at (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Database: iam_ctx_test (ephemeral service container)"
+            echo "PostgreSQL: ${server_version}"
+            echo "Scope: SEC-01 through SEC-16"
+            echo
+            echo "SQL test output:"
+          } > "${results_file}"
+
           psql -X -v ON_ERROR_STOP=1 -P pager=off \
             -h 127.0.0.1 -p 5432 -U postgres -d iam_ctx_test \
             -f iam-ctx-poc-01-harness/tests/10_sec01_sec16.sql \
-            | tee "${results_file}"
+            | tee -a "${results_file}"
 
           pass_count="$(grep -c 'PASS local' "${results_file}" || true)"
           echo "Assertions reported PASS local: ${pass_count}"
@@ -102,3 +116,13 @@ jobs:
             cat "${results_file}"
             echo ' ```'
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload immutable harness evidence artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: iam-context-harness-${{ github.sha }}
+          path: ${{ runner.temp }}/iam-context-harness-results.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
