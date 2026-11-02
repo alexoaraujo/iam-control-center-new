@@ -112,27 +112,51 @@ echo "PASS: IAM schema ownership, RLS FORCE, tenant FK, audit identity, and defa
 
 echo "Running the actual Neon Development role proposal as a non-superuser database owner...
 
-# Create an isolated database and a real LOGIN administrator. Apply the proposal
+# Use a second disposable cluster because PostgreSQL roles are cluster-wide and
+# the legacy bootstrap fixture above already creates roles with the same names.
+proposal_container_name="iam-pg18-proposal-$GITHUB_RUN_ID-$$"
+proposal_container_id="$(docker run -d --name "$proposal_container_name" -e POSTGRES_PASSWORD=disposable-ci-only postgres:18)"
+trap 'cleanup; docker rm -f "$proposal_container_id" >/dev/null 2>&1 || true' EXIT
+
+proposal_ready=false
+for attempt in $(seq 1 60); do
+  if docker exec "$proposal_container_id" pg_isready -h 127.0.0.1 -U postgres -d postgres >/dev/null 2>&1; then
+    proposal_ready=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$proposal_ready" != "true" ]]; then
+  echo "::error::Isolated proposal PostgreSQL 18 cluster did not become ready"
+  docker logs "$proposal_container_id" || true
+  exit 1
+fi
+
+psql_proposal_superuser() {
+  docker exec -i "$proposal_container_id" psql -X -h 127.0.0.1 -U postgres -d postgres "$@"
+}
+
+# Create a real LOGIN administrator and database. The proposal is then applied
 # over TCP as that role; do not emulate identity with SET SESSION AUTHORIZATION.
-psql_in_service -v ON_ERROR_STOP=1 <<'SQL'
+psql_proposal_superuser -v ON_ERROR_STOP=1 <<'SQL'
 CREATE ROLE "Iam-control-center_owner"
   LOGIN INHERIT NOSUPERUSER NOCREATEDB CREATEROLE NOREPLICATION NOBYPASSRLS;
 CREATE DATABASE "Iam-control-center" OWNER "Iam-control-center_owner";
 SQL
 
 # Trust is confined to loopback inside this disposable PostgreSQL container.
-docker exec -u postgres "$container_id" sh -c \
+docker exec -u postgres "$proposal_container_id" sh -c \
   'printf "%s\n" "host all all 127.0.0.1/32 trust" >> "$PGDATA/pg_hba.conf" && pg_ctl reload -D "$PGDATA"'
 
 psql_as_admin() {
-  docker exec -i "$container_id" psql -X -h 127.0.0.1 -U "Iam-control-center_owner" \
+  docker exec -i "$proposal_container_id" psql -X -h 127.0.0.1 -U "Iam-control-center_owner" \
     -d "Iam-control-center" "$@"
 }
 
 psql_as_login() {
   local role="$1"
   shift
-  docker exec -i "$container_id" psql -X -h 127.0.0.1 -U "$role" -d "Iam-control-center" "$@"
+  docker exec -i "$proposal_container_id" psql -X -h 127.0.0.1 -U "$role" -d "Iam-control-center" "$@"
 }
 
 psql_as_admin -v ON_ERROR_STOP=1 < database/bootstrap/neon-development-roles.proposal.sql
