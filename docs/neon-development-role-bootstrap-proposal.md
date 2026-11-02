@@ -49,11 +49,15 @@ The current Neon Development administrative principal is a provider-managed boot
 | Attribute | Observed value |
 |---|---|
 | `session_user` / database owner | `Iam-control-center_owner` |
+| Direct `rolcanlogin` | `true` |
+| Direct `rolinherit` | `true` |
 | Direct `rolsuper` | `false` |
 | Direct `rolcreaterole` | `true` |
 | Direct `rolcreatedb` | `true` |
+| Direct `rolreplication` | `true` |
 | Direct `rolbypassrls` | `true` |
 | Membership in `neon_superuser` | `true` |
+| Membership options | `ADMIN FALSE, INHERIT TRUE, SET TRUE` |
 | `SET` capability for `neon_superuser` | `true` |
 
 This is an explicit environment exception to the simplified phrase “non-superuser administrator”: the principal is not a PostgreSQL superuser, but it has direct BYPASSRLS and elevated provider-managed membership. The bootstrap proposal intentionally requires this exact administrative login and must be run only by an authorized operator for the one-time Development bootstrap.
@@ -88,6 +92,20 @@ Before applying the proposal, the operator must complete and record this invento
 
 Do not infer “no TEMP dependency” merely because no application roles have been created yet. If a legitimate consumer requires TEMP, stop and revise the ACL design to grant TEMP narrowly to that principal after review; do not silently restore TEMP to PUBLIC. If no consumer is identified, record the inventory result and its scope before seeking separate execution approval.
 
+### Additional read-only inventory refresh — 2026-11-02 14:51 UTC
+
+The current Development catalog query reconfirmed the administrative attributes above and the exact `neon_superuser` membership options. The login-capable roles observed at this timestamp are `Iam-control-center_owner`, `cloud_admin`, and `neon_service`. The database ACL still grants TEMPORARY to `PUBLIC`, `Iam-control-center_owner`, and `neon_superuser`; no ACL was changed.
+
+The following application/automation metadata was inspected without decrypting or printing any environment secret:
+
+- Vercel project `iam-control-center` has `DATABASE_URL` and `DATABASE_MIGRATION_URL` entries targeted at Development. The Development `DATABASE_URL` comment describes it as the runtime connection for the Neon Development branch. Matching keys also exist in Preview; Production has its own `DATABASE_URL` entry and is outside this task. Presence in Vercel settings proves configuration, not that a running process currently uses it or creates temporary tables.
+- The application workspace manifest contains no PostgreSQL driver/ORM dependency, and the current health route only reports whether `DATABASE_URL` is configured. The inspected app source has no database query implementation yet. Therefore the Vercel Development variables are a configured/potential consumer, but active TEMP use is not demonstrated by repository code.
+- The GitHub workflow `.github/workflows/neon-review-role-verification.yml` uses a separate allowlisted review branch/database (`br-fancy-bird-b6j7etpp` / `iam_control_center`) and a distinct environment secret. It is not a Development consumer based on its explicit branch and host guards. The workflow's presence does not establish TEMP use in Development.
+- `pg_stat_statements` and `pg_cron` are not installed in the inspected Development database. Consequently, SQL history and in-database cron inventory are unavailable through those extensions; absence of `pg_cron` does not rule out external schedulers.
+- A point-in-time `pg_stat_activity` query sees only sessions present at the instant of observation. It cannot prove that no scheduled or intermittent external process uses the database.
+
+**Remaining owner-confirmation gate:** identify any external Vercel function/cron, operator script, local development tool, scheduled workflow, integration, or third-party client that connects to the Development URL. For each, confirm whether it creates temporary tables or otherwise requires TEMP. Until the configured Development runtime and migration connection are explicitly classified (unused, no TEMP, or TEMP required), the TEMP gate remains BLOCKED. Do not revoke TEMP from PUBLIC as part of this bootstrap.
+
 The current evidence is insufficient to mark this gate PASS. This section is a review requirement, not authorization to execute the SQL.
 
 ## Fail-closed preflight
@@ -95,9 +113,11 @@ The current evidence is insufficient to mark this gate PASS. This section is a r
 The SQL starts a transaction and aborts unless:
 1. `current_database()` is exactly `Iam-control-center`;
 2. `session_user` is exactly `Iam-control-center_owner`;
-3. the session role is CREATEROLE and is not superuser;
-4. the session role owns the target database and has CREATE;
-5. none of the five target IAM roles already exists.
+3. `current_user = session_user`, preventing execution after an unexpected `SET ROLE`;
+4. the administrative login matches the observed Development profile exactly: LOGIN, INHERIT, CREATEDB, CREATEROLE, REPLICATION, BYPASSRLS, and NOT SUPERUSER;
+5. the session role has the exact provider-managed membership in `neon_superuser` with `ADMIN FALSE, INHERIT TRUE, SET TRUE`, and can explicitly `SET ROLE neon_superuser`;
+6. the session role owns the target database and has CREATE;
+7. none of the five target IAM roles already exists.
 
 The script does not attempt to repair or adopt pre-existing roles. Any preflight failure is a stop condition. A failure before COMMIT rolls back the transaction.
 
