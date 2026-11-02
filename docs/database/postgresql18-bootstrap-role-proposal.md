@@ -49,7 +49,16 @@ As opções são definidas por membership, não apenas pelo atributo global da r
 - O migrator acessa objetos de propriedade de `iam_owner` somente após assumir explicitamente essa role.
 - Não são concedidos privilégios funcionais de leitura/escrita sobre futuras tabelas IAM. Isso será objeto de proposta posterior, após contratos de tenancy, contexto de tenant e políticas RLS.
 
-## 4. Testes negativos e positivos obrigatórios
+## 4. Nuance de RLS para roles proprietárias
+
+`NOBYPASSRLS` não impede, por si só, que a role proprietária de uma tabela ignore RLS: por padrão, o owner da tabela pode contornar as políticas, salvo quando a tabela usa `FORCE ROW LEVEL SECURITY`. Portanto:
+
+- `iam_app_runtime_login` nunca será owner de tabelas ou schemas.
+- Tabelas que contenham dados multi-tenant deverão ter RLS habilitada e, quando apropriado, `FORCE ROW LEVEL SECURITY`.
+- A role owner permanece sem LOGIN e inacessível ao runtime; o migrator só a assume durante operações controladas.
+- O teste de bootstrap não prova RLS nem isolamento cross-tenant; esses controles exigem uma suíte separada executada com a role real de runtime.
+
+## 5. Testes negativos e positivos obrigatórios
 
 | Controle | Teste | Resultado esperado |
 |---|---|---|
@@ -66,7 +75,7 @@ As opções são definidas por membership, não apenas pelo atributo global da r
 
 Os testes de falha devem confirmar erro de permissão (não apenas ausência de configuração). As verificações de catálogo são complementares, não substituem as tentativas reais.
 
-## 5. Critérios de aceitação da proposta
+## 6. Critérios de aceitação da proposta
 
 1. Workflow executa em PostgreSQL 18 e confirma versão major 18.
 2. Todas as assertions de catálogo passam.
@@ -77,7 +86,7 @@ Os testes de falha devem confirmar erro de permissão (não apenas ausência de 
 7. Nenhuma etapa conecta a um banco externo.
 8. O SHA exato da PR e os jobs do workflow ficam registrados antes de qualquer classificação PASS.
 
-## 6. Riscos e decisões ainda abertas
+## 7. Riscos e decisões ainda abertas
 
 - **Capacidade administrativa do Neon:** a role administrativa atual `Iam-control-center_owner` tem BYPASSRLS e não deve ser runtime. A compatibilidade e o escopo de concessão de roles no Neon devem ser confirmados separadamente antes de qualquer bootstrap real.
 - **Ownership e schema definitivo:** o schema do ledger, nomes de schemas da aplicação, owners e grants ainda exigem revisão.
@@ -86,11 +95,11 @@ Os testes de falha devem confirmar erro de permissão (não apenas ausência de 
 - **Credenciais:** provisionamento e rotação dos logins de migrations/runtime ficam fora desta proposta.
 - **Produção:** requer aprovação específica, plano de rollback/restore e evidência em ambiente isolado.
 
-## 7. Rollback
+## 8. Rollback
 
 Como a proposta não altera Neon, o rollback consiste em fechar a PR ou reverter o commit da branch. O harness inicia um container PostgreSQL 18 descartável no runner e o remove por meio de trap ao fim da execução.
 
-## 8. Referências normativas
+## 9. Referências normativas
 
 - [PostgreSQL 18 — CREATE ROLE](https://www.postgresql.org/docs/18/sql-createrole.html)
 - [PostgreSQL 18 — GRANT](https://www.postgresql.org/docs/18/sql-grant.html)
