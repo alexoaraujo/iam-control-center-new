@@ -107,7 +107,7 @@ The script does not attempt to repair or adopt pre-existing roles. Any preflight
 2. Test this exact SQL in disposable PostgreSQL 18 using a non-superuser database owner with CREATEROLE. The existing bootstrap CI must not rely solely on running as PostgreSQL superuser for this validation.
 3. Assert the five role attributes and membership options from `pg_roles` / `pg_auth_members`.
 4. Prove the migration chain can explicitly assume `iam_migrator` and then `iam_owner`.
-5. Prove the runtime login cannot assume owner/migrator roles, cannot create in public or migration schemas, and cannot read/write the migration ledger. Confirm that the scoped PUBLIC TEMPORARY revocation leaves `has_database_privilege('iam_app_runtime_login', current_database(), 'TEMP') = false`; the test must emit an explicit BLOCKED result and exit non-zero if TEMP remains effective.
+5. Prove the runtime login cannot assume owner/migrator roles, cannot create in public or migration schemas, and cannot read/write the migration ledger. Explicitly record that TEMP remains effective through PUBLIC in this bootstrap; do not treat the runtime role as production-ready until the separate ACL gate is closed.
 6. Test SQLSTATE `42501` for expected permission denials; distinguish authorization failures from unrelated SQL errors.
 7. Confirm that future application tables are owned by `iam_owner`, never the runtime role, and that tenant tables use `ENABLE ROW LEVEL SECURITY` plus `FORCE ROW LEVEL SECURITY`.
 8. Review the resulting Git diff and CI evidence at the exact head SHA.
