@@ -31,7 +31,7 @@ Auth0 permanece como único provedor de identidade. Neon Auth permanece desabili
 Os três endpoints consultados estavam em estado `ready`. Os identificadores de endpoint não são connection strings e não demonstram qual endpoint está sendo usado pela Vercel.
 
 Inventário Vercel realizado com descriptografia desabilitada:
-- `NEON_PROJECT_ID` estava cadastrado em Development e Preview com a referência antiga `floral-surf-85783683`.
+- Na consulta read-only posterior de 2026-11-02, `NEON_PROJECT_ID` em Development e Preview já aponta para o projeto canônico `wandering-wildflower-90908845`. A referência antiga `floral-surf-85783683` está obsoleta e não deve ser reutilizada.
 - `DATABASE_URL` estava cadastrada em Development, Preview e Production.
 - `DATABASE_MIGRATION_URL` estava cadastrada em Development e Preview.
 - Os comentários associados a variáveis são metadados informativos; não comprovam hostname, database, branch, usuário ou role efetivos.
@@ -81,7 +81,7 @@ No inventário de 2026-11-02, o pooler estava desabilitado nas três branches. P
 2. Confirmar roles e memberships no Development; não inferir existência a partir de comentários ou CI.
 3. Aprovar e executar separadamente o bootstrap de roles somente após preflight, checkpoint e autorização explícita.
 4. Confirmar endpoint/branch/database/role de cada URL sem revelar segredos.
-5. Alterar apenas `NEON_PROJECT_ID` em Development e Preview para o ID canônico, mediante aprovação explícita.
+5. Revalidar periodicamente `NEON_PROJECT_ID` em Development e Preview; na última consulta ele já estava canônico, portanto não há alteração a executar.
 6. Atualizar Development `DATABASE_URL` somente depois da validação de branch e role runtime.
 7. Validar Preview em etapa separada, sem tocar Production.
 8. Manter `DATABASE_MIGRATION_URL` direta e separada, após validar role migrator.
@@ -100,13 +100,29 @@ Rollback deve restaurar somente a variável/target alterada, com aprovação e v
 |---|---|
 | Branches Neon canônicas identificadas | PASS — inventário read-only |
 | Pooler | NOT CONFIGURED — desabilitado nas três branches |
-| `NEON_PROJECT_ID` Development/Preview | FAIL — referência antiga |
+| `NEON_PROJECT_ID` Development/Preview | PASS — metadados atuais apontam para o projeto canônico; endpoint/branch das URLs não comprovados |
 | Host/database/role de `DATABASE_URL` | NOT VERIFIED — secrets não descriptografados |
 | Role runtime dedicada | NOT VERIFIED — inventário retornou apenas owner |
 | `DATABASE_MIGRATION_URL` separada | PASS — variável cadastrada em Development e Preview; conteúdo não validado |
 | Production | BLOCKED — fora do escopo de alteração |
 | Teste real de conectividade e RLS | PENDING |
 
-## 9. Evidência de segurança
+## 9. Atualização do inventário — consulta posterior em 2026-11-02
+
+A consulta mais recente da API Vercel, com `decrypt=false`, confirmou `NEON_PROJECT_ID=wandering-wildflower-90908845` em Development e Preview. Nenhum valor de secret foi descriptografado. `DATABASE_URL` continua cadastrada nos três ambientes; `DATABASE_MIGRATION_URL` permanece cadastrada em Development e Preview, sem comentário que identifique consumidor ou ferramenta.
+
+A consulta Neon confirmou a associação branch → endpoint e pooler desabilitado:
+
+| Ambiente | Branch ID | Endpoint ID | Host direto | Pooler |
+|---|---|---|---|---|
+| Development | `br-nameless-wave-b49yqod7` | `ep-shiny-glade-b4awlrlg` | `ep-shiny-glade-b4awlrlg.c-6.us-east-2.aws.neon.tech` | Desabilitado |
+| Preview | `br-broad-base-b4gnjmg5` | `ep-soft-night-b4xgjlht` | `ep-soft-night-b4xgjlht.c-6.us-east-2.aws.neon.tech` | Desabilitado |
+| Production | `br-dry-mouse-b4gyjp04` | `ep-dawn-river-b4xl1228` | `ep-dawn-river-b4xl1228.c-6.us-east-2.aws.neon.tech` | Desabilitado |
+
+Esses dados descrevem a infraestrutura Neon, mas não provam que as connection strings Vercel usem esses hosts, branches, databases ou roles. A consulta da API de roles retornou somente `Iam-control-center_owner` em cada branch; isso não substitui a inspeção SQL completa do catálogo de roles. Runtime/migrator permanecem NOT VERIFIED.
+
+Auth0 foi inspecionado no Chrome: callback, logout e web origins incluem localhost e os domínios canônicos Preview/Production. A página do Preview continua informando que login/callback/logout E2E precisa ser testado. No Vercel, `APP_BASE_URL` Preview observado é branch-scoped para `fix/next16-proxy-r2`, não para esta branch. Não alterar callbacks nem secrets nesta proposta.
+
+## 10. Evidência de segurança
 
 Nenhuma variável Vercel foi modificada, nenhum secret foi revelado, nenhuma branch/role/ACL Neon foi alterada e nenhuma migration foi executada durante a preparação desta proposta.
