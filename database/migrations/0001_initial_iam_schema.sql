@@ -7,6 +7,7 @@ DO $preflight$
 DECLARE
   role_name text;
   role_row record;
+  session_role_row record;
   expected_inherit boolean;
 BEGIN
   IF current_user <> 'iam_owner' THEN
@@ -14,6 +15,17 @@ BEGIN
   END IF;
   IF NOT has_database_privilege(current_user, current_database(), 'CREATE') THEN
     RAISE EXCEPTION 'iam_owner must have CREATE privilege on database %', current_database();
+  END IF;
+
+  SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
+    INTO session_role_row
+    FROM pg_roles
+   WHERE rolname = session_user;
+  IF NOT FOUND OR NOT session_role_row.rolcanlogin
+     OR session_role_row.rolsuper OR session_role_row.rolcreatedb
+     OR session_role_row.rolcreaterole OR session_role_row.rolreplication
+     OR session_role_row.rolbypassrls THEN
+    RAISE EXCEPTION 'migration session must be a non-privileged LOGIN role';
   END IF;
 
   -- Fail closed if any IAM group role has an administrative attribute.
