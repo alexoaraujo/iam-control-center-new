@@ -2,98 +2,131 @@
 
 **Status:** proposta revisável; nenhuma variável ou configuração externa foi alterada.  
 **Escopo:** Vercel Preview da aplicação IAM Control Center, mantendo Auth0 como IdP.  
-**Base de evidência:** branch `proposal/neon-vercel-workflow-reconciliation`, SHA `7de15f57297d14296e6a24fc89b5ea6b86dc1aaa`; consulta de metadados Vercel com `decrypt=false); inspeção do Preview e do painel Auth0 em 2026-11-02.
+**Base de evidência:** código da branch `proposal/neon-vercel-workflow-reconciliation`; metadados Vercel consultados em 2026-11-02 sem descriptografar variáveis; painel Auth0 e documentação oficial do SDK `@auth0/nextjs-auth0` v4.33.0.
 
-## 1. Achado reproduzível
+## 1. Achados reproduzíveis
 
-O código da aplicação instancia o SDK Auth0 v4 em `apps/web/src/lib/auth0.ts` e fornece explicitamente:
+O código instancia o SDK Auth0 v4 em `apps/web/src/lib/auth0.ts` e passa:
 
 ```ts
 appBaseUrl: process.env.APP_BASE_URL!,
 ```
 
-O middleware encaminha as requisições ao `auth0.middleware(request)`. Portanto, `APP_BASE_URL` é uma dependência direta da configuração do SDK, e não apenas uma variável documental.
+A asserção TypeScript `!` não valida a existência da variável em runtime. A documentação atual do SDK v4.33.0 informa que `APP_BASE_URL`/`appBaseUrl` é opcional e, quando omitido, a origem pode ser inferida do host da requisição. Portanto, a presença explícita dessa propriedade no código não prova que uma variável Vercel deva obrigatoriamente existir.
 
-Na configuração Vercel consultada, com descriptografia desabilitada:
+A consulta de metadados Vercel (sem descriptografia) confirmou:
 
-- existe `APP_BASE_URL` Preview com escopo exclusivo para `fix/next16-proxy-r2`;
-- não existe `APP_BASE_URL` Preview genérica;
-- não existe `APP_BASE_URL` Preview para `proposal/neon-vercel-workflow-reconciliation`;
-- a consulta específica dessa branch retornou lista vazia;
-- nenhum valor secreto foi descriptografado.
+- o domínio `iam-control-center-preview.vercel.app` está verificado no projeto `iam-control-center`;
+- esse domínio está vinculado exclusivamente à branch `feat/iam-migrator-role-assumption-review`;
+- o domínio não é um alias genérico para todos os deployments Preview;
+- a branch `proposal/auth0-preview-app-base-url` não possui domínio associado;
+- existe uma variável `APP_BASE_URL` Preview branch-scoped para `fix/next16-proxy-r2`;
+- não há variável Preview genérica;
+- não foi possível confirmar o valor da variável branch-scoped porque nenhum valor foi descriptografado.
 
-O Preview canônico acessado no navegador foi `https://iam-control-center-preview.vercel.app`. A página informa que o SDK Auth0 v4 está registrado, mas login/callback/logout ainda precisam de teste E2E real.
+Não inferir o valor da variável existente nem alterar seu escopo sem uma inspeção segura dos consumidores e do comportamento do deployment.
 
 ## 2. Evidência Auth0 disponível
 
-A inspeção do painel da aplicação **IAM Control Center Web** confirmou que as listas de URLs permitidas incluem o domínio canônico Preview:
+A inspeção do painel da aplicação **IAM Control Center Web** confirmou que as listas de URLs permitidas incluem:
 
 - Callback: `https://iam-control-center-preview.vercel.app/auth/callback`;
 - Logout: `https://iam-control-center-preview.vercel.app`;
 - Web Origin: `https://iam-control-center-preview.vercel.app`.
 
-Também há entradas para localhost e o domínio canônico de Production. Isso comprova somente o cadastro das URLs no tenant; não comprova que o SDK conclua o fluxo de autenticação.
+Também há entradas para localhost e o domínio canônico de Production. Isso comprova somente o cadastro das URLs no tenant; não comprova login, callback, sessão ou logout E2E.
+
+O allowlist conhecido não demonstra que URLs efêmeras de deployment estejam autorizadas. Não adicionar curingas ou domínios efêmeros ao Auth0 automaticamente.
 
 Não alterar Allowed Callback URLs, Allowed Logout URLs, Allowed Web Origins, client secret, sessão, consentimento ou qualquer outra configuração Auth0 nesta proposta.
 
-## 3. Estado recomendado para revisão
+## 3. Decisão técnica recomendada
 
-| Item | Valor/decisão proposta |
+**Não criar uma variável `APP_BASE_URL` Preview genérica.** O domínio canônico está vinculado a uma única branch, logo uma origem fixa genérica poderia direcionar vários deployments Preview para o deployment de outra branch.
+
+Para a validação Auth0, usar o domínio canônico somente no deployment da branch à qual ele está efetivamente vinculado:
+
+`feat/iam-migrator-role-assumption-review` → `https://iam-control-center-preview.vercel.app`
+
+A documentação oficial do SDK v4.33.0 permite omitir `APP_BASE_URL` e inferir a origem do host da requisição. Essa opção evita fixar a origem de um deployment efêmero. O Auth0 ainda precisa reconhecer a URL de callback resultante; portanto, o E2E deve ocorrer pelo domínio canônico já cadastrado, não pela URL aleatória do deployment.
+
+| Item | Decisão |
 |---|---|
 | Vercel Project | `iam-control-center` |
-| Environment | Preview |
-| Key | `APP_BASE_URL` |
-| Value | `https://iam-control-center-preview.vercel.app` |
-| Escopo preferencial | Preview genérico, se o domínio canônico for o destino estável de todos os testes Preview |
-| Alternativa conservadora | Escopo somente para a branch de integração escolhida, desde que essa branch receba o domínio canônico |
-| Production | Sem alteração |
-| Development | Sem alteração; manter `http://localhost:3000` |
+| Domínio Preview canônico | `https://iam-control-center-preview.vercel.app` |
+| Branch proprietária do domínio | `feat/iam-migrator-role-assumption-review` |
+| Preview genérico `APP_BASE_URL` | Não recomendado |
+| APP_BASE_URL para PR #67 | Não configurar; domínio não está vinculado à branch |
+| APP_BASE_URL branch-scoped existente | Preservar até verificar consumidor e valor sem expor segredo |
+| Development | Manter localhost; nenhuma alteração |
+| Production | Nenhuma alteração |
 
-**Decisão ainda necessária:** confirmar que o domínio `iam-control-center-preview.vercel.app` deve ser o destino estável de autenticação para os deployments Preview. Se o domínio for atribuído somente a uma branch específica, usar variável Preview branch-scoped para essa branch em vez de propagar o valor a todos os Previews.
+Se futuramente houver necessidade comprovada de fixar `APP_BASE_URL`, fazê-lo somente na branch que recebe o domínio correspondente e após confirmar o valor esperado. Não usar uma variável genérica para domínios que não compartilham o mesmo destino.
 
-Não usar URL efêmera de deployment como `APP_BASE_URL`: o domínio correspondente não está cadastrado nas URLs permitidas do Auth0 e pode mudar entre deployments. Não adicionar domínios aleatórios de Preview ao allowlist Auth0 como solução automática.
+## 4. Compatibilidade SDK v4.33.0 com Next.js 16
 
-## 4. Plano de validação após aprovação
+A inspeção do código identificou:
 
-1. Confirmar no Vercel Domains qual deployment/branch recebe `iam-control-center-preview.vercel.app`.
-2. Aplicar a variável somente em Preview, sem selecionar Development ou Production.
-3. Reimplantar o Preview da branch aprovada e confirmar, sem imprimir secrets, que o runtime recebeu a origem esperada.
-4. Validar resposta HTTP e redirecionamento de `/auth/login` para o domínio Auth0 correto.
-5. Concluir login com uma conta de teste autorizada e verificar retorno ao callback canônico.
-6. Verificar cookie/sessão server-side sem registrar tokens, cookies ou dados sensíveis.
-7. Executar logout e confirmar retorno ao destino esperado.
-8. Testar falhas: callback inválido, state/nonce inválido, sessão ausente e variável ausente.
-9. Registrar evidências por deployment ID, branch, SHA, horário e resultado redigido.
+- `apps/web/package.json`: Next.js `16.4.3` e `@auth0/nextjs-auth0` `^4.33.0`;
+- `apps/web/src/middleware.ts`: exporta `middleware(request: NextRequest)` e chama `auth0.middleware(request)`;
+- não foi encontrado `apps/web/src/proxy.ts` na branch inspecionada.
+
+A documentação oficial atual do SDK recomenda a convenção `proxy.ts` no Next.js 16. Ela informa que `middleware.ts` continua compatível por retrocompatibilidade no runtime Edge, mas está depreciado para o runtime Node e será removido em versão futura.
+
+Isso é uma pendência técnica separada da variável `APP_BASE_URL`. Não alterar o código nesta proposta documental. Antes de qualquer E2E, reconciliar a convenção `proxy.ts` com a PR de migração Next.js 16 já existente, evitando mudanças duplicadas ou conflitantes.
+
+## 5. Plano de validação após aprovação
+
+1. Confirmar que a branch `feat/iam-migrator-role-assumption-review` continua sendo a destinatária do domínio canônico.
+2. Verificar se a variável `APP_BASE_URL` branch-scoped existente para `fix/next16-proxy-r2` possui consumidor e valor coerentes, sem imprimir ou registrar valores secretos.
+3. Confirmar que o deployment canônico usa a branch e o SHA esperados.
+4. Reconciliar `middleware.ts` versus `proxy.ts` com a implementação Next.js 16.
+5. Validar resposta HTTP e redirecionamento de `/auth/login` para o tenant Auth0 correto.
+6. Concluir login com conta de teste autorizada e verificar retorno ao callback canônico.
+7. Verificar sessão server-side sem registrar tokens, cookies ou dados sensíveis.
+8. Executar logout e confirmar retorno ao destino esperado.
+9. Testar falhas: callback inválido, state/nonce inválido, sessão ausente e configuração ausente.
+10. Registrar evidências por deployment ID, branch, SHA, horário e resultado redigido.
 
 O teste E2E deve usar conta de teste e não deve expor authorization code, access token, ID token, refresh token, cookie ou client secret nos logs/artefatos.
 
-## 5. Critérios de aceite
+## 6. Critérios de aceite
 
-- [ ] Domínio canônico Preview e branch/deployment de destino confirmados.
-- [ ] Valor e escopo Preview aprovados.
-- [ ] Nenhuma alteração em Production.
-- [ ] Runtime confirma a origem configurada sem revelar secrets.
-- [ ] Login, callback, sessão e logout E2E passam no Preview.
+- [ ] Domínio canônico e branch de destino confirmados no Vercel.
+- [ ] Variável Preview branch-scoped existente inventariada sem expor valor.
+- [ ] Decisão de não usar APP_BASE_URL Preview genérica registrada.
+- [ ] Compatibilidade `proxy.ts`/Next.js 16 reconciliada.
+- [ ] Login, callback, sessão e logout E2E passam no domínio canônico.
 - [ ] Testes negativos de callback/sessão passam.
-- [ ] CI e deployment correspondem ao SHA exato da proposta.
+- [ ] CI e deployment correspondem ao SHA exato.
 - [ ] Evidências anexadas sem tokens, cookies ou secrets.
+- [ ] Production permanece inalterada.
 
-## 6. Limites e rollback
+## 7. Limites e rollback
 
 Esta proposta não altera Vercel, Auth0, Neon, GitHub Environments, secrets ou código de autenticação. Não habilita Neon Auth; Auth0 permanece como provedor de identidade.
 
-Antes de uma alteração futura, registrar os metadados não secretos da variável anterior (target, gitBranch, comentário e existência), sem copiar valor secreto. Se o teste falhar, remover ou reverter somente a configuração Preview aprovada, reimplantar e confirmar o retorno ao estado anterior. Não alterar Production como tentativa de correção.
+Antes de uma alteração futura, registrar somente metadados não secretos da variável anterior (target, gitBranch, comentário e existência). Se uma mudança Preview for aprovada e falhar, reverter somente a configuração Preview alterada, reimplantar a branch afetada e confirmar o retorno ao estado anterior. Não alterar Production como tentativa de correção.
 
-## 7. Estado atual
+## 8. Estado atual
 
 | Controle | Estado |
 |---|---|
-| SDK Auth0 v4 recebe `APP_BASE_URL` | PASS — inspeção do código |
-| Preview canônico acessível | PASS — inspeção do navegador |
-| Domínio canônico cadastrado no Auth0 | PASS — inspeção do painel |
-| `APP_BASE_URL` Preview genérica | NOT CONFIGURED |
-| `APP_BASE_URL` para branch da PR #66 | NOT CONFIGURED |
-| Login/callback/logout E2E | PENDING |
+| SDK Auth0 v4 recebe `APP_BASE_URL` no construtor | PASS — inspeção do código |
+| SDK v4.33.0 permite inferir host sem APP_BASE_URL | PASS — documentação oficial |
+| Domínio Preview canônico verificado | PASS — metadados Vercel |
+| Branch proprietária do domínio identificada | PASS — `feat/iam-migrator-role-assumption-review` |
+| Domínio canônico vinculado à branch da PR #67 | FAIL — consulta Vercel retornou zero domínios |
+| APP_BASE_URL Preview genérica | NOT CONFIGURED — manter assim |
+| Valor da variável Preview branch-scoped existente | NOT VERIFIED — descriptografia não realizada |
+| Next.js 16 usa convenção `proxy.ts` na branch inspecionada | FAIL — arquivo encontrado é `middleware.ts` |
+| Login/callback/logout E2E | NOT RUN |
 | Alterações externas executadas | NONE |
 
-**Conclusão:** a configuração Preview está incompleta para a branch desta proposta. O valor sugerido é o domínio canônico Preview, condicionado à confirmação do vínculo desse domínio com o deployment que será testado. Nenhuma alteração deve ser aplicada antes dessa confirmação e da aprovação do escopo.
+## 9. Referências oficiais
+
+- [Auth0 Next.js SDK v4.33.0 — documentação](https://auth0.github.io/nextjs-auth0/)
+- [Auth0 Next.js SDK — V4 Migration Guide](https://github.com/auth0/nextjs-auth0/blob/main/V4_MIGRATION_GUIDE.md)
+- [Auth0 — Next.js 16 e autenticação](https://auth0.com/blog/handling-auth-nextjs16-with-server-actions-middleware/)
+
+**Conclusão:** não aplicar `APP_BASE_URL` Preview genérica. O domínio canônico é branch-scoped no Vercel e o SDK v4.33.0 pode inferir o host quando a variável é omitida. O próximo gate é reconciliar o proxy Next.js 16 e executar o E2E exclusivamente pelo domínio canônico/branch proprietária. Nenhuma alteração externa foi autorizada ou executada.
