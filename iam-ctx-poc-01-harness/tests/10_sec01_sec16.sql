@@ -92,11 +92,11 @@ INSERT INTO test_results VALUES ('SEC-06','PASS local','unknown identity denied;
 SET ROLE iam_ctx_runtime;
 BEGIN;
 SELECT set_config('app.context_token','fixture-token-a',true);
-DO $ BEGIN
+DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM iam_ctx.tenants WHERE tenant_id='tenant-b') THEN RAISE EXCEPTION 'SEC-07 failed: tenant B row visible'; END IF;
   IF EXISTS (SELECT 1 FROM iam_ctx.memberships WHERE membership_id='m-b') THEN RAISE EXCEPTION 'SEC-07 failed: tenant B membership visible'; END IF;
   IF (SELECT count(*) FROM iam_ctx.memberships WHERE membership_id='m-a') <> 1 THEN RAISE EXCEPTION 'SEC-07 failed: own membership not visible'; END IF;
-END $;
+END $$;
 COMMIT;
 RESET ROLE;
 INSERT INTO test_results VALUES ('SEC-07','PASS local','tenant A sees its own tenant/membership and cannot read tenant B tenant/membership');
@@ -184,14 +184,14 @@ END $$;
 COMMIT;
 RESET ROLE;
 -- Verify the authorized operation persisted exactly once.
-DO $ BEGIN
+DO $$ BEGIN
   IF (SELECT count(*) FROM iam_ctx_private.write_log
       WHERE tenant_id='tenant-a' AND value='allowed-local-fixture') <> 1
   THEN RAISE EXCEPTION 'SEC-13 failed: authorized write was not persisted exactly once'; END IF;
   IF EXISTS (SELECT 1 FROM iam_ctx_private.write_log
       WHERE tenant_id='tenant-a' AND value='must-not-write')
   THEN RAISE EXCEPTION 'SEC-13 failed: denied write left a persisted row'; END IF;
-END $;
+END $$;
 UPDATE iam_ctx.memberships SET can_write=true WHERE membership_id='m-a';
 INSERT INTO test_results VALUES ('SEC-13','PASS local','authorized write persisted exactly once; denied write left no row; membership and can_write checked in write path');
 
@@ -218,14 +218,14 @@ RESET ROLE;
 INSERT INTO test_results VALUES ('SEC-15','PASS local','disabled/no-membership context cannot enumerate tenants');
 
 -- Fail closed if any test result is missing or not PASS.
-DO $ BEGIN
+DO $$ BEGIN
   IF (SELECT count(*) FROM test_results) <> 16 THEN
     RAISE EXCEPTION 'Harness failed: expected 16 result rows, found %', (SELECT count(*) FROM test_results);
   END IF;
   IF EXISTS (SELECT 1 FROM test_results WHERE status <> 'PASS local') THEN
     RAISE EXCEPTION 'Harness failed: one or more SEC results are not PASS local';
   END IF;
-END $;
+END $$;
 
 -- Emit machine-readable summary. Any assertion failure aborts due ON_ERROR_STOP.
 TABLE test_results ORDER BY sec_id;
