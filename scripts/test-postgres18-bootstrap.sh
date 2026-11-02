@@ -110,10 +110,10 @@ psql_in_service -v ON_ERROR_STOP=1 < database/tests/0001_schema_contract.sql
 echo "PASS: IAM schema ownership, RLS FORCE, tenant FK, audit identity, and default-deny contracts"
 
 
-echo "Running the actual Neon Development role proposal as a non-superuser database owner..."
+echo "Running the actual Neon Development role proposal as a non-superuser database owner...
 
-# Create an isolated database and a real LOGIN administrator. The proposal is then
-# applied over TCP as that role; SET SESSION AUTHORIZATION is deliberately not used.
+# Create an isolated database and a real LOGIN administrator. Apply the proposal
+# over TCP as that role; do not emulate identity with SET SESSION AUTHORIZATION.
 psql_in_service -v ON_ERROR_STOP=1 <<'SQL'
 CREATE ROLE "Iam-control-center_owner"
   LOGIN INHERIT NOSUPERUSER NOCREATEDB CREATEROLE NOREPLICATION NOBYPASSRLS;
@@ -122,9 +122,9 @@ SQL
 
 # Trust is confined to loopback inside this disposable PostgreSQL container.
 docker exec -u postgres "$container_id" sh -c \
-  'printf "%s\\n" "host all all 127.0.0.1/32 trust" >> "$PGDATA/pg_hba.conf" && pg_ctl reload -D "$PGDATA"'
+  'printf "%s\n" "host all all 127.0.0.1/32 trust" >> "$PGDATA/pg_hba.conf" && pg_ctl reload -D "$PGDATA"'
 
-psql_as_bootstrap_admin() {
+psql_as_admin() {
   docker exec -i "$container_id" psql -X -h 127.0.0.1 -U "Iam-control-center_owner" \
     -d "Iam-control-center" "$@"
 }
@@ -135,9 +135,9 @@ psql_as_login() {
   docker exec -i "$container_id" psql -X -h 127.0.0.1 -U "$role" -d "Iam-control-center" "$@"
 }
 
-psql_as_bootstrap_admin -v ON_ERROR_STOP=1 < database/bootstrap/neon-development-roles.proposal.sql
+psql_as_admin -v ON_ERROR_STOP=1 < database/bootstrap/neon-development-roles.proposal.sql
 
-psql_as_bootstrap_admin -v ON_ERROR_STOP=1 <<'SQL'
+psql_as_admin -v ON_ERROR_STOP=1 <<'SQL'
 DO $proposal_assertions$
 DECLARE
   membership record;
@@ -226,7 +226,8 @@ SQL
 
 migrator_chain="$(psql_as_login iam_migrator_login -Atq -v ON_ERROR_STOP=1 -c \
   "SET ROLE iam_migrator; SELECT current_user; RESET ROLE; SET ROLE iam_owner; SELECT current_user;")"
-if [[ "$migrator_chain" !=   echo "::error::Actual proposal migrator chain failed: $migrator_chain"
+if [[ "$migrator_chain" != $'iam_migrator\niam_owner' ]]; then
+  echo "::error::Actual proposal migrator chain failed: $migrator_chain"
   exit 1
 fi
 echo "PASS: proposal migrator login can SET ROLE iam_migrator then iam_owner"
@@ -241,39 +242,7 @@ expect_proposal_denial() {
   fi
   if ! grep -Fq '42501' <<<"$output"; then
     echo "::error::Expected SQLSTATE 42501 for proposal runtime test: $label"
-    printf '%s\\n' "$output"
-    exit 1
-  fi
-  echo "PASS (SQLSTATE 42501): proposal runtime cannot $label"
-}
-
-expect_proposal_denial "SET ROLE iam_owner" "SET ROLE iam_owner;"
-expect_proposal_denial "SET ROLE iam_migrator" "SET ROLE iam_migrator;"
-expect_proposal_denial "SET ROLE iam_app_runtime" "SET ROLE iam_app_runtime;"
-expect_proposal_denial "CREATE in public" "CREATE TABLE public.runtime_forbidden(id integer);"
-
-echo "PASS: actual Neon Development role proposal validated with a non-superuser LOGIN administrator"
-iam_migrator\niam_owner' ]]; then
-  echo "::error::Actual proposal migrator chain failed: $migrator_chain"
-  exit 1
-fi
-  echo "::error::Actual proposal migrator chain failed: $migrator_chain"
-  exit 1
-fi
-echo "PASS: proposal migrator login can SET ROLE iam_migrator then iam_owner"
-
-expect_proposal_denial() {
-  local label="$1"
-  local sql="$2"
-  local output
-  if output="$(psql_as_bootstrap_admin -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -c \
-    "$sql" 2>&1)"; then
-    echo "::error::Expected runtime permission denial but command succeeded: $label"
-    exit 1
-  fi
-  if ! grep -Fq '42501' <<<"$output"; then
-    echo "::error::Expected SQLSTATE 42501 for proposal runtime test: $label"
-    printf '%s\\n' "$output"
+    printf '%s\n' "$output"
     exit 1
   fi
   echo "PASS (SQLSTATE 42501): proposal runtime cannot $label"
