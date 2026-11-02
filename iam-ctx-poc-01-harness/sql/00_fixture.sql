@@ -1,6 +1,6 @@
 \set ON_ERROR_STOP on
-BEGIN;
 
+-- Refuse the default postgres database before creating cluster-level roles.
 DO $$
 BEGIN
   IF current_database() = 'postgres' THEN
@@ -8,8 +8,11 @@ BEGIN
   END IF;
 END $$;
 
+-- Roles are cluster-level objects and must be created outside a transaction.
 CREATE ROLE iam_ctx_owner NOLOGIN NOSUPERUSER NOBYPASSRLS;
 CREATE ROLE iam_ctx_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS;
+
+BEGIN;
 
 CREATE SCHEMA iam_ctx AUTHORIZATION iam_ctx_owner;
 CREATE SCHEMA iam_ctx_private AUTHORIZATION iam_ctx_owner;
@@ -131,6 +134,17 @@ CREATE TABLE iam_ctx_private.write_log (
   value text NOT NULL
 );
 
+-- Existing privileged function used to verify the runtime EXECUTE boundary.
+CREATE FUNCTION iam_ctx_private.unapproved_admin_operation()
+RETURNS text
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $fn$
+  SELECT 'privileged fixture operation'::text
+$fn$;
+
+
 CREATE TABLE iam_ctx.identities (
   identity_id text PRIMARY KEY,
   issuer text NOT NULL,
@@ -172,5 +186,6 @@ REVOKE ALL ON FUNCTION iam_ctx_private.current_tenant_id() FROM PUBLIC;
 REVOKE ALL ON FUNCTION iam_ctx_private.context_is_valid() FROM PUBLIC;
 REVOKE ALL ON FUNCTION iam_ctx_private.current_identity_id() FROM PUBLIC;
 REVOKE ALL ON FUNCTION iam_ctx_private.guarded_write(text,text,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION iam_ctx_private.unapproved_admin_operation() FROM PUBLIC;
 
 COMMIT;

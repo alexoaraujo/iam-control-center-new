@@ -149,17 +149,17 @@ END $$;
 RESET ROLE;
 INSERT INTO test_results VALUES ('SEC-11','PASS local','column-level grant blocks issuer/subject update');
 
--- SEC-12: runtime cannot invoke an ungranted privileged function.
+-- SEC-12: an existing privileged function must reject runtime EXECUTE.
 SET ROLE iam_ctx_runtime;
 DO $$ BEGIN
   BEGIN
     EXECUTE 'SELECT iam_ctx_private.unapproved_admin_operation()';
-    RAISE EXCEPTION 'SEC-12 failed: privileged function callable';
-  EXCEPTION WHEN undefined_function OR insufficient_privilege THEN NULL;
+    RAISE EXCEPTION 'SEC-12 failed: runtime executed privileged function';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
 END $$;
 RESET ROLE;
-INSERT INTO test_results VALUES ('SEC-12','PASS local','unapproved privileged operation unavailable');
+INSERT INTO test_results VALUES ('SEC-12','PASS local','existing privileged function denies runtime EXECUTE');
 
 -- SEC-13: membership and permission are checked inside the write operation.
 SET ROLE iam_ctx_runtime;
