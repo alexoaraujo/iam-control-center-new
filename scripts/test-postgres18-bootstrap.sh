@@ -110,11 +110,11 @@ psql_in_service -v ON_ERROR_STOP=1 < database/tests/0001_schema_contract.sql
 echo "PASS: IAM schema ownership, RLS FORCE, tenant FK, audit identity, and default-deny contracts"
 
 
-echo "Running the actual Neon Development role proposal as a non-superuser database owner...
+echo "Running the actual Neon Development role proposal as a non-superuser database owner..."
 
 # Use a second disposable cluster because PostgreSQL roles are cluster-wide and
 # the legacy bootstrap fixture above already creates roles with the same names.
-proposal_container_name="iam-pg18-proposal-$GITHUB_RUN_ID-$$"
+proposal_container_name="iam-pg18-proposal-${GITHUB_RUN_ID:-local}-$"
 proposal_container_id="$(docker run -d --name "$proposal_container_name" -e POSTGRES_PASSWORD=disposable-ci-only postgres:18)"
 trap 'cleanup; docker rm -f "$proposal_container_id" >/dev/null 2>&1 || true' EXIT
 
@@ -133,7 +133,7 @@ if [[ "$proposal_ready" != "true" ]]; then
 fi
 
 psql_proposal_superuser() {
-  docker exec -i "$proposal_container_id" psql -X -h 127.0.0.1 -U postgres -d postgres "$@"
+  docker exec -i "$proposal_container_id" psql -X -U postgres -d postgres "$@"
 }
 
 # Create a real LOGIN administrator and database. The proposal is then applied
@@ -146,7 +146,7 @@ SQL
 
 # Trust is confined to loopback inside this disposable PostgreSQL container.
 docker exec -u postgres "$proposal_container_id" sh -c \
-  'printf "%s\n" "host all all 127.0.0.1/32 trust" >> "$PGDATA/pg_hba.conf" && pg_ctl reload -D "$PGDATA"'
+  'sed -i "1ihost all all 127.0.0.1/32 trust" "$PGDATA/pg_hba.conf" && pg_ctl reload -D "$PGDATA"'
 
 psql_as_admin() {
   docker exec -i "$proposal_container_id" psql -X -h 127.0.0.1 -U "Iam-control-center_owner" \
