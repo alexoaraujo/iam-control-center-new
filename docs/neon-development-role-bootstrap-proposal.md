@@ -67,7 +67,13 @@ This is an explicit environment exception to the simplified phrase “non-superu
 
 ## TEMP dependency inventory — mandatory pre-execution gate
 
-The observed Development database currently grants effective TEMP to its administrative session. The proposed `REVOKE TEMPORARY ... FROM PUBLIC` changes the shared database ACL. The current inventory showed only `Iam-control-center_owner` as a PostgreSQL role, but that fact alone does **not** prove that no external process, future login, or operational workflow relies on temporary tables.
+The observed Development database currently grants effective TEMP to its administrative session. The proposed `REVOKE TEMPORARY ... FROM PUBLIC` changes the shared database ACL.
+
+A direct read-only query of `pg_roles` on 2026-11-02 returned the provider-managed roles `cloud_admin`, `neon_service`, `neon_superuser`, `Iam-control-center_owner`, PostgreSQL predefined roles, and `token_roles`. Among the observed provider roles, `cloud_admin` is LOGIN and SUPERUSER; `neon_service` is LOGIN with CREATEROLE, CREATEDB, and BYPASSRLS; `neon_superuser` is NOLOGIN with CREATEROLE, CREATEDB, and BYPASSRLS. The Neon role-list API had returned only the user-facing owner role, so it must not be treated as a complete `pg_roles` inventory.
+
+The database ACL observed at the same time grants `CONNECT` and `TEMPORARY` to PUBLIC; `CONNECT`, `CREATE`, and `TEMPORARY` to `Iam-control-center_owner`; and `CONNECT`, `CREATE`, and `TEMPORARY` to `neon_superuser`. The owner and provider roles are platform-managed principals; their presence in the catalog is not evidence that they are application consumers. The current `pg_stat_activity` sample showed one active `pgbouncer` session as `Iam-control-center_owner`; this is only a point-in-time observation and cannot identify all possible consumers or scheduled workflows.
+
+This catalog and ACL evidence still does **not** prove that no external process, future login, or operational workflow relies on temporary tables.
 
 Before applying the proposal, the operator must complete and record this inventory for the exact Development database:
 
