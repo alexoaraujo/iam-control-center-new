@@ -114,3 +114,20 @@ CI PostgreSQL descartável não é prova de que o Neon remoto ou Vercel está co
 | Teste RLS cross-tenant | PENDING |
 
 Nenhum workflow foi executado ou modificado durante a preparação desta proposta.
+
+
+## Atualização do inventário Neon — 2026-11-02
+
+A consulta read-only mais recente identificou os seguintes alvos canônicos:
+
+| Ambiente | Branch ID | Endpoint ID | Host direto | Pooler |
+|---|---|---|---|---|
+| Development | `br-nameless-wave-b49yqod7` | `ep-shiny-glade-b4awlrlg` | `ep-shiny-glade-b4awlrlg.c-6.us-east-2.aws.neon.tech` | Desabilitado |
+| Preview | `br-broad-base-b4gnjmg5` | `ep-soft-night-b4xgjlht` | `ep-soft-night-b4xgjlht.c-6.us-east-2.aws.neon.tech` | Desabilitado |
+| Production | `br-dry-mouse-b4gyjp04` | `ep-dawn-river-b4xl1228` | `ep-dawn-river-b4xl1228.c-6.us-east-2.aws.neon.tech` | Desabilitado |
+
+A API de roles Neon retornou somente `Iam-control-center_owner` nas três branches. Esse retorno não prova inexistência de roles adicionais no catálogo PostgreSQL nem valida a identidade das URLs Vercel. A proposta de workflow continua bloqueada até existir e ser validada uma role runtime dedicada e uma connection string Development correspondente.
+
+O Vercel mantém `NEON_PROJECT_ID` canônico em Development e Preview. `DATABASE_MIGRATION_URL` existe em Development e Preview, mas seu consumidor/finalidade continuam desconhecidos. O workflow futuro não deve reutilizar nem ler esse secret sem uma revisão de propósito e autorização separada.
+
+O workflow legado continua sem execução e sem alteração. Esta atualização é documental; não cria workflow, environment, secret, variable ou conexão remota.
