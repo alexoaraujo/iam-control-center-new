@@ -66,6 +66,30 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'IAM group role INHERIT attributes do not match the contract';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid=m.member
+    JOIN pg_roles granted_role ON granted_role.oid=m.roleid
+    WHERE member_role.rolname='iam_migrator_login'
+      AND granted_role.rolname='iam_migrator'
+      AND NOT m.inherit_option AND m.set_option AND NOT m.admin_option
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid=m.member
+    JOIN pg_roles granted_role ON granted_role.oid=m.roleid
+    WHERE member_role.rolname='iam_migrator'
+      AND granted_role.rolname='iam_owner'
+      AND NOT m.inherit_option AND m.set_option AND NOT m.admin_option
+  ) OR EXISTS (
+    SELECT 1 FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid=m.member
+    JOIN pg_roles granted_role ON granted_role.oid=m.roleid
+    WHERE member_role.rolname='iam_migrator_login'
+      AND granted_role.rolname='iam_owner'
+  ) THEN
+    RAISE EXCEPTION 'migration role chain must be exact, two-step, SET-only and non-admin';
+  END IF;
+
   IF EXISTS (
     WITH RECURSIVE role_memberships(root_role, granted_role, path) AS (
       SELECT root.oid, m.roleid, ARRAY[root.oid,m.roleid]::oid[]
