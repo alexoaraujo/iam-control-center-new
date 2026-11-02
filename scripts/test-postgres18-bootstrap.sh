@@ -98,7 +98,7 @@ echo "PASS: all PostgreSQL 18 bootstrap negative tests passed"
 
 echo "Running IAM migration through the dedicated migrator role chain..."
 {
-  printf '%s\\n' \
+  printf '%s\n' \
     'SET SESSION AUTHORIZATION iam_migrator_login;' \
     'SET ROLE iam_migrator;' \
     'SET ROLE iam_owner;'
