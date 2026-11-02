@@ -41,6 +41,49 @@ Database ACL strategy:
 
 The database-level grants in this bootstrap are `CREATE` on `Iam-control-center` to `iam_owner`, and the scoped PUBLIC TEMPORARY revocation above. No passwords or credentials are created.
 
+
+## Neon administrative principal exception — observed Development state
+
+The current Neon Development administrative principal is a provider-managed bootstrap identity, not an application identity. Read-only inspection on 2026-11-02 observed:
+
+| Attribute | Observed value |
+|---|---|
+| `session_user` / database owner | `Iam-control-center_owner` |
+| Direct `rolsuper` | `false` |
+| Direct `rolcreaterole` | `true` |
+| Direct `rolcreatedb` | `true` |
+| Direct `rolbypassrls` | `true` |
+| Membership in `neon_superuser` | `true` |
+| `SET` capability for `neon_superuser` | `true` |
+
+This is an explicit environment exception to the simplified phrase “non-superuser administrator”: the principal is not a PostgreSQL superuser, but it has direct BYPASSRLS and elevated provider-managed membership. The bootstrap proposal intentionally requires this exact administrative login and must be run only by an authorized operator for the one-time Development bootstrap.
+
+**Mandatory separation controls:**
+- Never configure `Iam-control-center_owner` as `DATABASE_URL`, `DATABASE_MIGRATION_URL`, application runtime, CI runtime, or normal migration credentials.
+- Never grant membership in `neon_superuser`, `iam_owner`, or `iam_migrator` to the application runtime login.
+- Use the dedicated `iam_migrator_login` for subsequent schema migrations, with the explicit `iam_migrator -> iam_owner` SET ROLE chain only.
+- Keep the owner principal out of application secrets and routine deployment workflows. Do not copy its provider-managed privilege attributes to any of the five IAM roles.
+- The disposable PostgreSQL CI administrator intentionally does not reproduce Neon’s provider-managed `neon_superuser` membership or BYPASSRLS. CI validates the SQL role bootstrap mechanics, not the provider-managed Neon administrative boundary.
+
+## TEMP dependency inventory — mandatory pre-execution gate
+
+The observed Development database currently grants effective TEMP to its administrative session. The proposed `REVOKE TEMPORARY ... FROM PUBLIC` changes the shared database ACL. The current inventory showed only `Iam-control-center_owner` as a PostgreSQL role, but that fact alone does **not** prove that no external process, future login, or operational workflow relies on temporary tables.
+
+Before applying the proposal, the operator must complete and record this inventory for the exact Development database:
+
+| Check | Required evidence | Status |
+|---|---|---|
+| Enumerate all PostgreSQL roles and login-capable roles | Timestamped `pg_roles` inventory | PENDING |
+| Enumerate current database ACL, including PUBLIC TEMP | `pg_database.datacl` / `aclexplode` output | PENDING |
+| Identify every application, job, script, integration, and human workflow connecting to this database | Owner-confirmed consumer inventory | PENDING |
+| Ask each identified consumer whether it creates temporary tables or depends on TEMP implicitly | Explicit yes/no and owner for each consumer | PENDING |
+| Confirm whether any non-runtime consumer requires TEMP after bootstrap | Approved exception list; otherwise explicit “none identified” | PENDING |
+| Confirm runtime has no effective TEMP after the proposed ACL change | Disposable test plus post-bootstrap read-only query on Development | PENDING |
+
+Do not infer “no TEMP dependency” merely because no application roles have been created yet. If a legitimate consumer requires TEMP, stop and revise the ACL design to grant TEMP narrowly to that principal after review; do not silently restore TEMP to PUBLIC. If no consumer is identified, record the inventory result and its scope before seeking separate execution approval.
+
+The current evidence is insufficient to mark this gate PASS. This section is a review requirement, not authorization to execute the SQL.
+
 ## Fail-closed preflight
 
 The SQL starts a transaction and aborts unless:
