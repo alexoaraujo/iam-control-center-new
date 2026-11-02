@@ -10,29 +10,38 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   exit 0
 fi
 
-container_name="iam-pg18-bootstrap-${GITHUB_RUN_ID:-local}-$$"
-container_id="$(docker run -d --name "$container_name" -e POSTGRES_PASSWORD=disposable-ci-only postgres:18)"
+created_container=false
+if [[ -n "${POSTGRES_CONTAINER_ID:-}" ]]; then
+  container_id="$POSTGRES_CONTAINER_ID"
+else
+  container_name="iam-pg18-bootstrap-${GITHUB_RUN_ID:-local}-$$"
+  container_id="$(docker run -d --name "$container_name" -e POSTGRES_PASSWORD=disposable-ci-only postgres:18)"
+  created_container=true
+fi
+
 cleanup() {
-  docker rm -f "$container_id" >/dev/null 2>&1 || true
+  if [[ "$created_container" == "true" ]]; then
+    docker rm -f "$container_id" >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
 
 ready=false
-for attempt in $(seq 1 30); do
-  if docker exec "$container_id" pg_isready -U postgres -d postgres >/dev/null 2>&1; then
+for attempt in $(seq 1 60); do
+  if docker exec "$container_id" pg_isready -h 127.0.0.1 -U postgres -d postgres >/dev/null 2>&1; then
     ready=true
     break
   fi
   sleep 1
 done
 if [[ "$ready" != "true" ]]; then
-  echo "::error::Disposable PostgreSQL 18 did not become ready"
+  echo "::error::PostgreSQL 18 service did not become ready"
   docker logs "$container_id" || true
   exit 1
 fi
 
 psql_in_service() {
-  docker exec -i "$container_id" psql -X -U postgres -d postgres "$@"
+  docker exec -i "$container_id" psql -X -h 127.0.0.1 -U postgres -d postgres "$@"
 }
 
 expect_permission_denied() {
@@ -43,9 +52,9 @@ expect_permission_denied() {
     echo "::error::Expected permission denial but command succeeded: $label"
     exit 1
   fi
-  if ! grep -Eq '(^|[[:space:]])42501([:[:space:]]|$)' <<<"$output"; then
+  if ! grep -Fq '42501' <<<"$output"; then
     echo "::error::Expected SQLSTATE 42501 for: $label"
-    printf '%s\\n' "$output"
+    printf '%s\n' "$output"
     exit 1
   fi
   echo "PASS (SQLSTATE 42501): $label"
