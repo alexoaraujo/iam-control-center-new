@@ -179,13 +179,13 @@ BEGIN
 
   IF (SELECT count(*) FROM pg_roles
       WHERE rolname IN ('iam_owner','iam_migrator','iam_app_runtime')
-        AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) <> 3 THEN
+        AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) <> 0 THEN
     RAISE EXCEPTION 'Group role attributes do not match the proposal';
   END IF;
 
   IF (SELECT count(*) FROM pg_roles
       WHERE rolname IN ('iam_migrator_login','iam_app_runtime_login')
-        AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) <> 2 THEN
+        AND (NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) <> 0 THEN
     RAISE EXCEPTION 'Login role attributes do not match the proposal';
   END IF;
 
