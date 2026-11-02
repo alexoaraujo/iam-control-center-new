@@ -139,8 +139,12 @@ psql_proposal_superuser() {
 # Create a real LOGIN administrator and database. The proposal is then applied
 # over TCP as that role; do not emulate identity with SET SESSION AUTHORIZATION.
 psql_proposal_superuser -v ON_ERROR_STOP=1 <<'SQL'
+CREATE ROLE neon_superuser
+  NOLOGIN INHERIT NOSUPERUSER CREATEDB CREATEROLE NOREPLICATION BYPASSRLS;
 CREATE ROLE "Iam-control-center_owner"
-  LOGIN INHERIT NOSUPERUSER NOCREATEDB CREATEROLE NOREPLICATION NOBYPASSRLS;
+  LOGIN INHERIT NOSUPERUSER CREATEDB CREATEROLE REPLICATION BYPASSRLS;
+GRANT neon_superuser TO "Iam-control-center_owner"
+  WITH ADMIN FALSE, INHERIT TRUE, SET TRUE;
 CREATE DATABASE "Iam-control-center" OWNER "Iam-control-center_owner";
 SQL
 
@@ -172,9 +176,25 @@ BEGIN
     RAISE EXCEPTION 'Proposal did not execute as the expected real login/database owner';
   END IF;
 
-  IF (SELECT rolsuper OR NOT rolcreaterole
+  IF (SELECT rolsuper OR NOT rolcanlogin OR NOT rolinherit
+             OR NOT rolcreatedb OR NOT rolcreaterole
+             OR NOT rolreplication OR NOT rolbypassrls
       FROM pg_roles WHERE rolname = session_user) THEN
     RAISE EXCEPTION 'Disposable bootstrap administrator attributes are unexpected';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+      JOIN pg_roles member_role ON member_role.oid = m.member
+     WHERE granted_role.rolname = 'neon_superuser'
+       AND member_role.rolname = session_user
+       AND NOT m.admin_option
+       AND m.inherit_option
+       AND m.set_option
+  ) THEN
+    RAISE EXCEPTION 'Disposable bootstrap administrator membership does not match Neon';
   END IF;
 
   IF (SELECT count(*) FROM pg_roles
