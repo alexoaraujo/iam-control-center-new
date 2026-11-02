@@ -30,16 +30,16 @@ Membership intent:
 - `iam_migrator` may explicitly `SET ROLE iam_owner`; it does not inherit owner privileges implicitly.
 - `iam_migrator_login` may explicitly `SET ROLE iam_migrator`; it does not inherit migration privileges implicitly.
 - `iam_app_runtime_login` inherits `iam_app_runtime` privileges but cannot `SET ROLE` into it or into administrative roles.
-- Runtime receives no explicit database CREATE, schema CREATE, migration-ledger, or DDL grants from this proposal. Its effective TEMPORARY privilege must also be absent.
+- Runtime receives no explicit database CREATE, schema CREATE, migration-ledger, or DDL grants from this proposal. TEMPORARY is not yet secured: the existing PUBLIC grant remains until a separate ACL decision is approved.
 - All five roles are non-superuser, non-CREATEROLE, non-CREATEDB, non-replication, and NOBYPASSRLS.
 
 Database ACL strategy:
 - PostgreSQL grants `TEMPORARY` on databases to `PUBLIC` by default. Since every role is effectively a member of PUBLIC, a per-role `REVOKE TEMP` cannot subtract this inherited privilege.
-- The proposal therefore executes `REVOKE TEMPORARY ON DATABASE "Iam-control-center" FROM PUBLIC`. This is deliberately scoped to this dedicated application database, not a cluster-wide setting.
-- This changes the effective privilege for every role in this database. Any non-runtime role that legitimately needs temporary tables must receive an explicit, reviewed grant; the current proposal does not grant TEMP to the migrator or runtime roles. The database owner retains owner-level authority.
-- This is a shared ACL change and must be confirmed during the Development preflight; do not apply it to Preview, Production, or any other database without separate review.
+- This bootstrap deliberately does **not** revoke TEMPORARY from PUBLIC. The external-consumer inventory is incomplete, and changing the shared database ACL could break unrelated jobs, operators, or integrations.
+- Consequently, the runtime login will continue to have effective TEMPORARY privilege through PUBLIC after this bootstrap. The runtime role must not be activated or placed in Vercel `DATABASE_URL` until a separate, reviewed ACL change removes or narrowly replaces that privilege.
+- A follow-up ACL proposal must identify all consumers, document any legitimate TEMP requirement, test the exact privilege outcome on disposable PostgreSQL 18, and request separate execution approval. Do not apply it to Preview or Production without independent review.
 
-The database-level grants in this bootstrap are `CREATE` on `Iam-control-center` to `iam_owner`, and the scoped PUBLIC TEMPORARY revocation above. No passwords or credentials are created.
+The only database-level grant in this bootstrap is `CREATE` on `Iam-control-center` to `iam_owner`. No database ACL revocation, passwords, or credentials are created.
 
 
 ## Neon administrative principal exception — observed Development state
