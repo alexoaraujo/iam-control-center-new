@@ -35,14 +35,20 @@ psql_in_service() {
   docker exec -i "$container_id" psql -X -U postgres -d postgres "$@"
 }
 
-expect_failure() {
+expect_permission_denied() {
   local label="$1"
   local sql="$2"
-  if psql_in_service -v ON_ERROR_STOP=1 -c "$sql" >/dev/null 2>&1; then
-    echo "::error::Expected denial but command succeeded: $label"
+  local output
+  if output="$(psql_in_service -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -c "$sql" 2>&1)"; then
+    echo "::error::Expected permission denial but command succeeded: $label"
     exit 1
   fi
-  echo "PASS (denied): $label"
+  if ! grep -Eq '(^|[[:space:]])42501([:[:space:]]|$)' <<<"$output"; then
+    echo "::error::Expected SQLSTATE 42501 for: $label"
+    printf '%s\\n' "$output"
+    exit 1
+  fi
+  echo "PASS (SQLSTATE 42501): $label"
 }
 
 psql_in_service -v ON_ERROR_STOP=1 < database/bootstrap/tests/bootstrap.sql
@@ -58,25 +64,25 @@ if [[ "$migrator_result" != $'iam_migrator\niam_owner' ]]; then
 fi
 echo "PASS: migrator can explicitly assume iam_migrator and iam_owner"
 
-expect_failure "runtime cannot SET ROLE iam_owner" \
+expect_permission_denied "runtime cannot SET ROLE iam_owner" \
   "SET SESSION AUTHORIZATION iam_app_runtime_login; SET ROLE iam_owner;"
-expect_failure "runtime cannot SET ROLE iam_migrator" \
+expect_permission_denied "runtime cannot SET ROLE iam_migrator" \
   "SET SESSION AUTHORIZATION iam_app_runtime_login; SET ROLE iam_migrator;"
-expect_failure "runtime cannot SET ROLE iam_app_runtime" \
+expect_permission_denied "runtime cannot SET ROLE iam_app_runtime" \
   "SET SESSION AUTHORIZATION iam_app_runtime_login; SET ROLE iam_app_runtime;"
-expect_failure "runtime cannot CREATE in public" \
+expect_permission_denied "runtime cannot CREATE in public" \
   "SET SESSION AUTHORIZATION iam_app_runtime_login; CREATE TABLE public.runtime_must_not_create(id integer);"
-expect_failure "runtime cannot CREATE in the migration fixture schema" \
+expect_permission_denied "runtime cannot CREATE in the migration fixture schema" \
   "SET SESSION AUTHORIZATION iam_app_runtime_login; CREATE TABLE bootstrap_fixture.runtime_must_not_create(id integer);"
-expect_failure "runtime cannot create temporary tables" \
+expect_permission_denied "runtime cannot create temporary tables" \
   "SET SESSION AUTHORIZATION iam_app_runtime_login; CREATE TEMP TABLE runtime_must_not_create(id integer);"
-expect_failure "runtime cannot read the migration ledger" \
+expect_permission_denied "runtime cannot read the migration ledger" \
   "SET SESSION AUTHORIZATION iam_app_runtime_login; SELECT * FROM bootstrap_fixture.schema_migrations;"
-expect_failure "runtime cannot insert into the migration ledger" \
+expect_permission_denied "runtime cannot insert into the migration ledger" \
   "SET SESSION AUTHORIZATION iam_app_runtime_login; INSERT INTO bootstrap_fixture.schema_migrations(version) VALUES ('runtime-forbidden');"
-expect_failure "runtime cannot update the migration ledger" \
+expect_permission_denied "runtime cannot update the migration ledger" \
   "SET SESSION AUTHORIZATION iam_app_runtime_login; UPDATE bootstrap_fixture.schema_migrations SET version = 'runtime-forbidden';"
-expect_failure "runtime cannot delete from the migration ledger" \
+expect_permission_denied "runtime cannot delete from the migration ledger" \
   "SET SESSION AUTHORIZATION iam_app_runtime_login; DELETE FROM bootstrap_fixture.schema_migrations;"
 
 echo "PASS: all PostgreSQL 18 bootstrap negative tests passed"
