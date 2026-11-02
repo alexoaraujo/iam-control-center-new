@@ -19,6 +19,8 @@ A consulta de metadados Vercel (sem descriptografia) confirmou:
 - o domínio `iam-control-center-preview.vercel.app` está verificado no projeto `iam-control-center`;
 - esse domínio está vinculado exclusivamente à branch `feat/iam-migrator-role-assumption-review`;
 - o domínio não é um alias genérico para todos os deployments Preview;
+- o deployment mais recente encontrado para essa branch está `READY`, com ID `dpl_EwCLAEen7xEBHYTHrMZBeNXcZM1G`, SHA `55376fa7059b6ddbe20debfbf21a78dd8c04a1e2` e commit `docs: reconcile migrator ownership review with schema preflight`;
+- esse deployment confirma a atividade da branch proprietária do domínio, mas não corresponde à branch `proposal/auth0-preview-app-base-url` da PR #67;
 - a branch `proposal/auth0-preview-app-base-url` não possui domínio associado;
 - existe uma variável `APP_BASE_URL` Preview branch-scoped para `fix/next16-proxy-r2`;
 - não há variável Preview genérica;
