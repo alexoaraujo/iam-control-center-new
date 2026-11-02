@@ -51,9 +51,42 @@ BEGIN
   IF (SELECT is_nullable FROM information_schema.columns
       WHERE table_schema='iam' AND table_name='tenants' AND column_name='slug') <> 'YES'
   THEN RAISE EXCEPTION 'tenant slug must be nullable'; END IF;
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ('iam_owner','iam_migrator','iam_app_runtime')
-             AND (rolcanlogin OR rolbypassrls))
-  THEN RAISE EXCEPTION 'IAM group roles must be NOLOGIN/NOBYPASSRLS'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_roles
+     WHERE rolname IN ('iam_owner','iam_migrator','iam_app_runtime')
+       AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole
+            OR rolreplication OR rolbypassrls)
+  ) THEN
+    RAISE EXCEPTION 'IAM group roles must be NOLOGIN and have no administrative attributes';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_roles
+     WHERE (rolname='iam_app_runtime' AND NOT rolinherit)
+        OR (rolname IN ('iam_owner','iam_migrator') AND rolinherit)
+  ) THEN
+    RAISE EXCEPTION 'IAM group role INHERIT attributes do not match the contract';
+  END IF;
+  IF EXISTS (
+    WITH RECURSIVE role_memberships(root_role, granted_role, path) AS (
+      SELECT root.oid, m.roleid, ARRAY[root.oid,m.roleid]::oid[]
+        FROM pg_roles root
+        JOIN pg_auth_members m ON m.member=root.oid
+       WHERE root.rolname IN ('iam_owner','iam_migrator','iam_app_runtime')
+      UNION ALL
+      SELECT rm.root_role, m.roleid, rm.path || m.roleid
+        FROM role_memberships rm
+        JOIN pg_auth_members m ON m.member=rm.granted_role
+       WHERE NOT m.roleid=ANY(rm.path)
+    )
+    SELECT 1
+      FROM role_memberships rm
+      JOIN pg_roles granted ON granted.oid=rm.granted_role
+     WHERE granted.rolname='neon_superuser'
+        OR granted.rolsuper OR granted.rolcreatedb OR granted.rolcreaterole
+        OR granted.rolreplication OR granted.rolbypassrls
+  ) THEN
+    RAISE EXCEPTION 'IAM group roles must not inherit or assume privileged roles';
+  END IF;
   IF has_table_privilege('iam_app_runtime','iam.schema_migrations','SELECT')
      OR has_table_privilege('iam_app_runtime','iam.schema_migrations','INSERT') THEN
     RAISE EXCEPTION 'runtime must not access migration ledger';
