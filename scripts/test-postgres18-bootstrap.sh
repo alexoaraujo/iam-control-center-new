@@ -129,6 +129,12 @@ psql_as_bootstrap_admin() {
     -d "Iam-control-center" "$@"
 }
 
+psql_as_login() {
+  local role="$1"
+  shift
+  docker exec -i "$container_id" psql -X -h 127.0.0.1 -U "$role" -d "Iam-control-center" "$@"
+}
+
 psql_as_bootstrap_admin -v ON_ERROR_STOP=1 < database/bootstrap/neon-development-roles.proposal.sql
 
 psql_as_bootstrap_admin -v ON_ERROR_STOP=1 <<'SQL'
@@ -218,9 +224,39 @@ SELECT CASE WHEN has_database_privilege('iam_app_runtime_login', current_databas
 END AS temp_privilege_review;
 SQL
 
-migrator_chain="$(psql_as_bootstrap_admin -Atq -v ON_ERROR_STOP=1 -c \
-  "SET SESSION AUTHORIZATION iam_migrator_login; SET ROLE iam_migrator; SELECT current_user; RESET ROLE; SET ROLE iam_owner; SELECT current_user;")"
-if [[ "$migrator_chain" != $'iam_migrator\\niam_owner' ]]; then
+migrator_chain="$(psql_as_login iam_migrator_login -Atq -v ON_ERROR_STOP=1 -c \
+  "SET ROLE iam_migrator; SELECT current_user; RESET ROLE; SET ROLE iam_owner; SELECT current_user;")"
+if [[ "$migrator_chain" !=   echo "::error::Actual proposal migrator chain failed: $migrator_chain"
+  exit 1
+fi
+echo "PASS: proposal migrator login can SET ROLE iam_migrator then iam_owner"
+
+expect_proposal_denial() {
+  local label="$1"
+  local sql="$2"
+  local output
+  if output="$(psql_as_login iam_app_runtime_login -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -c "$sql" 2>&1)"; then
+    echo "::error::Expected runtime permission denial but command succeeded: $label"
+    exit 1
+  fi
+  if ! grep -Fq '42501' <<<"$output"; then
+    echo "::error::Expected SQLSTATE 42501 for proposal runtime test: $label"
+    printf '%s\\n' "$output"
+    exit 1
+  fi
+  echo "PASS (SQLSTATE 42501): proposal runtime cannot $label"
+}
+
+expect_proposal_denial "SET ROLE iam_owner" "SET ROLE iam_owner;"
+expect_proposal_denial "SET ROLE iam_migrator" "SET ROLE iam_migrator;"
+expect_proposal_denial "SET ROLE iam_app_runtime" "SET ROLE iam_app_runtime;"
+expect_proposal_denial "CREATE in public" "CREATE TABLE public.runtime_forbidden(id integer);"
+
+echo "PASS: actual Neon Development role proposal validated with a non-superuser LOGIN administrator"
+iam_migrator\niam_owner' ]]; then
+  echo "::error::Actual proposal migrator chain failed: $migrator_chain"
+  exit 1
+fi
   echo "::error::Actual proposal migrator chain failed: $migrator_chain"
   exit 1
 fi
@@ -231,7 +267,7 @@ expect_proposal_denial() {
   local sql="$2"
   local output
   if output="$(psql_as_bootstrap_admin -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -c \
-    "SET SESSION AUTHORIZATION iam_app_runtime_login; $sql" 2>&1)"; then
+    "$sql" 2>&1)"; then
     echo "::error::Expected runtime permission denial but command succeeded: $label"
     exit 1
   fi
