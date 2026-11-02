@@ -72,9 +72,10 @@ Os testes de falha devem confirmar erro de permissão (não apenas ausência de 
 2. Todas as assertions de catálogo passam.
 3. Os comandos positivos do migrator retornam o `current_user` esperado.
 4. Cada tentativa negativa do runtime retorna código de saída diferente de zero.
-5. Nenhuma variável/secret Neon ou Auth0 é necessária no workflow.
-6. Nenhuma etapa conecta a um banco externo.
-7. O SHA exato da PR e os jobs do workflow ficam registrados antes de qualquer classificação PASS.
+5. O workflow de qualidade já existente executa o harness por meio de `pnpm test`.
+6. Nenhuma variável/secret Neon ou Auth0 é necessária; o container é efêmero e local ao runner.
+7. Nenhuma etapa conecta a um banco externo.
+8. O SHA exato da PR e os jobs do workflow ficam registrados antes de qualquer classificação PASS.
 
 ## 6. Riscos e decisões ainda abertas
 
@@ -87,7 +88,7 @@ Os testes de falha devem confirmar erro de permissão (não apenas ausência de 
 
 ## 7. Rollback
 
-Como a proposta não altera Neon, o rollback consiste em fechar a PR ou reverter o commit da branch. O workflow usa somente um serviço PostgreSQL descartável, destruído ao fim da execução.
+Como a proposta não altera Neon, o rollback consiste em fechar a PR ou reverter o commit da branch. O harness inicia um container PostgreSQL 18 descartável no runner e o remove por meio de trap ao fim da execução.
 
 ## 8. Referências normativas
 
