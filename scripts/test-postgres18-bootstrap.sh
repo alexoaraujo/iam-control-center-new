@@ -17,8 +17,8 @@ expect_failure() {
   echo "PASS (denied): $label"
 }
 
-psql_in_service -v ON_ERROR_STOP=1 -f database/bootstrap/tests/bootstrap.sql
-psql_in_service -v ON_ERROR_STOP=1 -f database/bootstrap/tests/assertions.sql
+psql_in_service -v ON_ERROR_STOP=1 < database/bootstrap/tests/bootstrap.sql
+psql_in_service -v ON_ERROR_STOP=1 < database/bootstrap/tests/assertions.sql
 
 migrator_result="$(
   psql_in_service -Atq -v ON_ERROR_STOP=1 -c \
