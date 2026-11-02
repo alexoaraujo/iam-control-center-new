@@ -70,6 +70,14 @@ BEGIN
     RAISE EXCEPTION 'Runtime has unintended role membership or SET ROLE capability';
   END IF;
 
+  IF NOT has_database_privilege('iam_owner', 'postgres', 'CREATE') THEN
+    RAISE EXCEPTION 'iam_owner must have CREATE on the database for migration 0001';
+  END IF;
+
+  IF has_database_privilege('iam_migrator_login', 'postgres', 'CREATE') THEN
+    RAISE EXCEPTION 'iam_migrator_login must not inherit database CREATE before SET ROLE';
+  END IF;
+
   IF has_database_privilege('iam_app_runtime_login', 'postgres', 'CREATE')
      OR has_database_privilege('iam_app_runtime_login', 'postgres', 'TEMP')
      OR has_schema_privilege('iam_app_runtime_login', 'public', 'CREATE')
