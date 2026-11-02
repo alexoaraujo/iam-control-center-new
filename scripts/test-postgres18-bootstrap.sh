@@ -241,6 +241,7 @@ BEGIN
   END IF;
 END
 $proposal_assertions$;
+SQL
 
 temp_privilege_result="$(psql_as_admin -Atq -v ON_ERROR_STOP=1 -c \
   "SELECT CASE WHEN has_database_privilege('iam_app_runtime_login', current_database(), 'TEMP') THEN 'PRESENT' ELSE 'ABSENT' END;")"
