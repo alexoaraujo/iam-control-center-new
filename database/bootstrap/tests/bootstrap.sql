@@ -30,6 +30,7 @@ GRANT iam_app_runtime TO iam_app_runtime_login
 
 REVOKE CREATE, TEMPORARY ON DATABASE postgres FROM PUBLIC;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+GRANT CREATE ON DATABASE postgres TO iam_owner;
 
 CREATE SCHEMA bootstrap_fixture AUTHORIZATION iam_owner;
 REVOKE ALL ON SCHEMA bootstrap_fixture FROM PUBLIC;
