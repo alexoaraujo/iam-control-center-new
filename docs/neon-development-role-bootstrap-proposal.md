@@ -30,10 +30,16 @@ Membership intent:
 - `iam_migrator` may explicitly `SET ROLE iam_owner`; it does not inherit owner privileges implicitly.
 - `iam_migrator_login` may explicitly `SET ROLE iam_migrator`; it does not inherit migration privileges implicitly.
 - `iam_app_runtime_login` inherits `iam_app_runtime` privileges but cannot `SET ROLE` into it or into administrative roles.
-- Runtime receives no explicit database CREATE, schema CREATE, migration-ledger, or DDL grants from this proposal. PostgreSQL may still grant TEMPORARY to PUBLIC by default; this proposal does not revoke that shared privilege.
+- Runtime receives no explicit database CREATE, schema CREATE, migration-ledger, or DDL grants from this proposal. Its effective TEMPORARY privilege must also be absent.
 - All five roles are non-superuser, non-CREATEROLE, non-CREATEDB, non-replication, and NOBYPASSRLS.
 
-The only database-level grant in this bootstrap is `CREATE` on `Iam-control-center` to `iam_owner`. No passwords or credentials are created.
+Database ACL strategy:
+- PostgreSQL grants `TEMPORARY` on databases to `PUBLIC` by default. Since every role is effectively a member of PUBLIC, a per-role `REVOKE TEMP` cannot subtract this inherited privilege.
+- The proposal therefore executes `REVOKE TEMPORARY ON DATABASE "Iam-control-center" FROM PUBLIC`. This is deliberately scoped to this dedicated application database, not a cluster-wide setting.
+- This changes the effective privilege for every role in this database. Any non-runtime role that legitimately needs temporary tables must receive an explicit, reviewed grant; the current proposal does not grant TEMP to the migrator or runtime roles. The database owner retains owner-level authority.
+- This is a shared ACL change and must be confirmed during the Development preflight; do not apply it to Preview, Production, or any other database without separate review.
+
+The database-level grants in this bootstrap are `CREATE` on `Iam-control-center` to `iam_owner`, and the scoped PUBLIC TEMPORARY revocation above. No passwords or credentials are created.
 
 ## Fail-closed preflight
 
@@ -52,7 +58,7 @@ The script does not attempt to repair or adopt pre-existing roles. Any preflight
 2. Test this exact SQL in disposable PostgreSQL 18 using a non-superuser database owner with CREATEROLE. The existing bootstrap CI must not rely solely on running as PostgreSQL superuser for this validation.
 3. Assert the five role attributes and membership options from `pg_roles` / `pg_auth_members`.
 4. Prove the migration chain can explicitly assume `iam_migrator` and then `iam_owner`.
-5. Prove the runtime login cannot assume owner/migrator roles, cannot create in public or migration schemas, and cannot read/write the migration ledger. Separately inspect the effective TEMPORARY privilege: if it is inherited from PUBLIC and the runtime contract requires no TEMP, stop for a separately reviewed ACL change; do not silently revoke PUBLIC privileges in this bootstrap.
+5. Prove the runtime login cannot assume owner/migrator roles, cannot create in public or migration schemas, and cannot read/write the migration ledger. Confirm that the scoped PUBLIC TEMPORARY revocation leaves `has_database_privilege('iam_app_runtime_login', current_database(), 'TEMP') = false`; the test must emit an explicit BLOCKED result and exit non-zero if TEMP remains effective.
 6. Test SQLSTATE `42501` for expected permission denials; distinguish authorization failures from unrelated SQL errors.
 7. Confirm that future application tables are owned by `iam_owner`, never the runtime role, and that tenant tables use `ENABLE ROW LEVEL SECURITY` plus `FORCE ROW LEVEL SECURITY`.
 8. Review the resulting Git diff and CI evidence at the exact head SHA.
