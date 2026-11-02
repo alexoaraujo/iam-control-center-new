@@ -67,7 +67,7 @@ This is an explicit environment exception to the simplified phrase “non-superu
 - Never grant membership in `neon_superuser`, `iam_owner`, or `iam_migrator` to the application runtime login.
 - Use the dedicated `iam_migrator_login` for subsequent schema migrations, with the explicit `iam_migrator -> iam_owner` SET ROLE chain only.
 - Keep the owner principal out of application secrets and routine deployment workflows. Do not copy its provider-managed privilege attributes to any of the five IAM roles.
-- The disposable PostgreSQL CI administrator intentionally does not reproduce Neon’s provider-managed `neon_superuser` membership or BYPASSRLS. CI validates the SQL role bootstrap mechanics, not the provider-managed Neon administrative boundary.
+- The disposable PostgreSQL 18 harness now reproduces the observed administrative attributes and exact `neon_superuser` membership using a real non-superuser LOGIN connection. CI validates the fail-closed assertions against that simulated profile; it still does not prove the real Neon provider control plane or authorize execution on Neon.
 
 ## TEMP dependency inventory — mandatory pre-execution gate
 
@@ -92,21 +92,34 @@ Before applying the proposal, the operator must complete and record this invento
 
 Do not infer “no TEMP dependency” merely because no application roles have been created yet. If a legitimate consumer requires TEMP, stop and revise the ACL design to grant TEMP narrowly to that principal after review; do not silently restore TEMP to PUBLIC. If no consumer is identified, record the inventory result and its scope before seeking separate execution approval.
 
-### Additional read-only inventory refresh — 2026-11-02 14:51 UTC
+### Additional read-only inventory refresh — 2026-11-02 15:05 UTC
 
-The current Development catalog query reconfirmed the administrative attributes above and the exact `neon_superuser` membership options. The login-capable roles observed at this timestamp are `Iam-control-center_owner`, `cloud_admin`, and `neon_service`. The database ACL still grants TEMPORARY to `PUBLIC`, `Iam-control-center_owner`, and `neon_superuser`; no ACL was changed.
+A fresh read-only Development query reconfirmed: zero of the five IAM target roles exist; the expected administrative attributes match; the `Iam-control-center_owner` membership in `neon_superuser` remains exactly `ADMIN FALSE, INHERIT TRUE, SET TRUE`. The current point-in-time `pg_stat_activity` sample contained only the inspection session through `pgbouncer`; it did not reveal an independent application session. No grants or ACLs were changed.
 
-The following application/automation metadata was inspected without decrypting or printing any environment secret:
+The Vercel project `iam-control-center` environment-variable metadata was listed with decryption disabled. Relevant entries are:
 
-- Vercel project `iam-control-center` has `DATABASE_URL` and `DATABASE_MIGRATION_URL` entries targeted at Development. The Development `DATABASE_URL` comment describes it as the runtime connection for the Neon Development branch. Matching keys also exist in Preview; Production has its own `DATABASE_URL` entry and is outside this task. Presence in Vercel settings proves configuration, not that a running process currently uses it or creates temporary tables.
-- The application workspace manifest contains no PostgreSQL driver/ORM dependency, and the current health route only reports whether `DATABASE_URL` is configured. The inspected app source has no database query implementation yet. Therefore the Vercel Development variables are a configured/potential consumer, but active TEMP use is not demonstrated by repository code.
-- The GitHub workflow `.github/workflows/neon-review-role-verification.yml` uses a separate allowlisted review branch/database (`br-fancy-bird-b6j7etpp` / `iam_control_center`) and a distinct environment secret. It is not a Development consumer based on its explicit branch and host guards. The workflow's presence does not establish TEMP use in Development.
-- `pg_stat_statements` and `pg_cron` are not installed in the inspected Development database. Consequently, SQL history and in-database cron inventory are unavailable through those extensions; absence of `pg_cron` does not rule out external schedulers.
-- A point-in-time `pg_stat_activity` query sees only sessions present at the instant of observation. It cannot prove that no scheduled or intermittent external process uses the database.
+| Variable | Target | Metadata | Assessment |
+|---|---|---|---|
+| `DATABASE_URL` | Development | Secret; comment says least-privilege runtime connection for Neon Development, not for migrations | Configured potential runtime consumer; active use not demonstrated |
+| `DATABASE_MIGRATION_URL` | Development | Secret; no explanatory comment | Configured potential migration consumer; active use not demonstrated |
+| `DATABASE_URL` | Preview | Secret; comment names a Preview-specific runtime login | Separate branch/environment; excluded from this Development inventory |
+| `DATABASE_MIGRATION_URL` | Preview | Secret | Separate environment; excluded from this Development inventory |
+| `DATABASE_URL` | Production | Secret; comment names a production runtime login | Production is excluded from this task |
 
-**Remaining owner-confirmation gate:** identify any external Vercel function/cron, operator script, local development tool, scheduled workflow, integration, or third-party client that connects to the Development URL. For each, confirm whether it creates temporary tables or otherwise requires TEMP. Until the configured Development runtime and migration connection are explicitly classified (unused, no TEMP, or TEMP required), the TEMP gate remains BLOCKED. Do not revoke TEMP from PUBLIC as part of this bootstrap.
+No secret values were decrypted or printed. The Vercel metadata establishes configuration presence and target environment, not current deployment consumption, the actual PostgreSQL login identity, or TEMP use.
 
-The current evidence is insufficient to mark this gate PASS. This section is a review requirement, not authorization to execute the SQL.
+Repository search on the PR branch found:
+- `apps/web/src/lib/env.ts` only reports whether `DATABASE_URL` is configured; the health route does not execute SQL.
+- No `DATABASE_MIGRATION_URL` reference in application or workflow code was found.
+- No PostgreSQL driver/ORM dependency or application database query implementation was found in the inspected workspace manifests/source.
+- The workflow `.github/workflows/neon-review-role-verification.yml` uses a distinct secret and explicit review branch/database allowlist; it is not evidence of a Development connection.
+- The repository search for temporary-table statements did not identify an application runtime TEMP consumer. This is not proof about scripts or external processes.
+
+The login-capable roles in the Development catalog remain `Iam-control-center_owner`, `cloud_admin`, and `neon_service`. The database ACL still grants TEMPORARY to `PUBLIC`, `Iam-control-center_owner`, and `neon_superuser`. Neither `pg_stat_statements` nor `pg_cron` is installed. The session sample is point-in-time only and cannot inventory scheduled/intermittent external processes.
+
+**Remaining owner-confirmation gate:** confirm whether any external Vercel function/cron, operator script, local tool, scheduled workflow, integration, or third-party client actually consumes either Development connection, and whether it requires temporary tables. In particular, identify the owner and purpose of `DATABASE_MIGRATION_URL`. Until that is confirmed, TEMP remains BLOCKED. Do not revoke TEMP from PUBLIC or activate runtime credentials as part of this bootstrap.
+
+This evidence narrows the likely consumer set but does not justify “no TEMP dependency.” It is not authorization to execute the SQL.
 
 ## Fail-closed preflight
 
