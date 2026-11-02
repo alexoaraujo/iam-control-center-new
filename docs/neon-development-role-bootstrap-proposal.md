@@ -67,7 +67,7 @@ This is an explicit environment exception to the simplified phrase “non-superu
 
 ## TEMP dependency inventory — mandatory pre-execution gate
 
-The observed Development database currently grants effective TEMP to its administrative session. The proposed `REVOKE TEMPORARY ... FROM PUBLIC` changes the shared database ACL.
+The observed Development database currently grants effective TEMP to its administrative session. A possible follow-up `REVOKE TEMPORARY ... FROM PUBLIC` would change the shared database ACL, but this operation is intentionally excluded from the role bootstrap and requires a separate review and approval.
 
 A direct read-only query of `pg_roles` on 2026-11-02 returned the provider-managed roles `cloud_admin`, `neon_service`, `neon_superuser`, `Iam-control-center_owner`, PostgreSQL predefined roles, and `token_roles`. Among the observed provider roles, `cloud_admin` is LOGIN and SUPERUSER; `neon_service` is LOGIN with CREATEROLE, CREATEDB, and BYPASSRLS; `neon_superuser` is NOLOGIN with CREATEROLE, CREATEDB, and BYPASSRLS. The Neon role-list API had returned only the user-facing owner role, so it must not be treated as a complete `pg_roles` inventory.
 
