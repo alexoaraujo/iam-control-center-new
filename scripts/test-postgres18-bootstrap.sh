@@ -95,3 +95,16 @@ expect_permission_denied "runtime cannot delete from the migration ledger" \
   "SET SESSION AUTHORIZATION iam_app_runtime_login; DELETE FROM bootstrap_fixture.schema_migrations;"
 
 echo "PASS: all PostgreSQL 18 bootstrap negative tests passed"
+
+echo "Running IAM migration through the dedicated migrator role chain..."
+{
+  printf '%s\\n' \
+    'SET SESSION AUTHORIZATION iam_migrator_login;' \
+    'SET ROLE iam_migrator;' \
+    'SET ROLE iam_owner;'
+  cat database/migrations/0001_initial_iam_schema.sql
+} | psql_in_service -v ON_ERROR_STOP=1
+echo "PASS: IAM migration executed as iam_owner through migrator chain"
+
+psql_in_service -v ON_ERROR_STOP=1 < database/tests/0001_schema_contract.sql
+echo "PASS: IAM schema ownership, RLS FORCE, tenant FK, audit identity, and default-deny contracts"
