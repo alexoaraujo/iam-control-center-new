@@ -114,7 +114,7 @@ echo "Running the actual Neon Development role proposal as a non-superuser datab
 
 # Use a second disposable cluster because PostgreSQL roles are cluster-wide and
 # the legacy bootstrap fixture above already creates roles with the same names.
-proposal_container_name="iam-pg18-proposal-${GITHUB_RUN_ID:-local}-$"
+proposal_container_name="iam-pg18-proposal-${GITHUB_RUN_ID:-local}-$$"
 proposal_container_id="$(docker run -d --name "$proposal_container_name" -e POSTGRES_PASSWORD=disposable-ci-only postgres:18)"
 trap 'cleanup; docker rm -f "$proposal_container_id" >/dev/null 2>&1 || true' EXIT
 
