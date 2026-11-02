@@ -30,7 +30,7 @@ Membership intent:
 - `iam_migrator` may explicitly `SET ROLE iam_owner`; it does not inherit owner privileges implicitly.
 - `iam_migrator_login` may explicitly `SET ROLE iam_migrator`; it does not inherit migration privileges implicitly.
 - `iam_app_runtime_login` inherits `iam_app_runtime` privileges but cannot `SET ROLE` into it or into administrative roles.
-- Runtime receives no database CREATE/TEMPORARY, schema CREATE, migration-ledger, or DDL grants from this proposal.
+- Runtime receives no explicit database CREATE, schema CREATE, migration-ledger, or DDL grants from this proposal. PostgreSQL may still grant TEMPORARY to PUBLIC by default; this proposal does not revoke that shared privilege.
 - All five roles are non-superuser, non-CREATEROLE, non-CREATEDB, non-replication, and NOBYPASSRLS.
 
 The only database-level grant in this bootstrap is `CREATE` on `Iam-control-center` to `iam_owner`. No passwords or credentials are created.
@@ -52,12 +52,12 @@ The script does not attempt to repair or adopt pre-existing roles. Any preflight
 2. Test this exact SQL in disposable PostgreSQL 18 using a non-superuser database owner with CREATEROLE. The existing bootstrap CI must not rely solely on running as PostgreSQL superuser for this validation.
 3. Assert the five role attributes and membership options from `pg_roles` / `pg_auth_members`.
 4. Prove the migration chain can explicitly assume `iam_migrator` and then `iam_owner`.
-5. Prove the runtime login cannot assume owner/migrator roles, cannot create in public or migration schemas, cannot create temporary tables, and cannot read/write the migration ledger.
+5. Prove the runtime login cannot assume owner/migrator roles, cannot create in public or migration schemas, and cannot read/write the migration ledger. Separately inspect the effective TEMPORARY privilege: if it is inherited from PUBLIC and the runtime contract requires no TEMP, stop for a separately reviewed ACL change; do not silently revoke PUBLIC privileges in this bootstrap.
 6. Test SQLSTATE `42501` for expected permission denials; distinguish authorization failures from unrelated SQL errors.
 7. Confirm that future application tables are owned by `iam_owner`, never the runtime role, and that tenant tables use `ENABLE ROW LEVEL SECURITY` plus `FORCE ROW LEVEL SECURITY`.
 8. Review the resulting Git diff and CI evidence at the exact head SHA.
 
-Important test limitation: the existing PostgreSQL 18 harness uses `SET SESSION AUTHORIZATION` to emulate login identity. That is useful for role-chain checks but is not a proof of password authentication or an actual Neon login. Add a non-superuser bootstrap-admin fixture before treating the Neon-specific preflight as validated.
+Important test limitation: the legacy PostgreSQL 18 harness uses `SET SESSION AUTHORIZATION` for earlier role-chain tests; that is not a proof of password authentication. The new proposal-specific test must connect as a real disposable LOGIN administrator with CREATEROLE and database ownership, then connect separately as the migrator and runtime LOGIN roles. Disposable TCP trust is limited to loopback inside the CI container and is not a production authentication pattern.
 
 ## Execution controls
 
