@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 
 const BUILD_RELEVANT = [
+  /^\.github\/workflows\/quality\.yml$/,
   /^apps\/web\//,
   /^packages\//,
   /^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|vercel\.json|turbo\.json|pnpmfile\.cjs)$/,
