@@ -25,8 +25,10 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   });
 
   // Vercel Trusted Sources requires the OIDC header on every request to the
-  // exact protected Preview origin, including the Auth0 callback navigation.
-  // Never forward the token to Auth0 or to a different Vercel deployment.
+  // exact protected Preview origin, including redirects and the Auth0 callback.
+  // Continue the browser request normally so Playwright can intercept each
+  // redirect hop independently; route.fetch()+fulfill() bypassed that routing.
+  // Explicitly strip the header from every non-Preview origin.
   await context.route("**/*", async (route) => {
     const requestUrl = new URL(route.request().url());
     if (requestUrl.hostname.endsWith(".vercel.app")) {
@@ -35,24 +37,17 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
       );
     }
 
-    if (requestUrl.hostname !== previewHost) {
-      await route.continue();
-      return;
+    const headers = { ...route.request().headers() };
+    if (requestUrl.hostname === previewHost) {
+      headers["x-vercel-trusted-oidc-idp-token"] = trustedOidcToken;
+      console.log(
+        `Trusted Sources header attached: ${route.request().method()} ${requestUrl.pathname}`
+      );
+    } else {
+      delete headers["x-vercel-trusted-oidc-idp-token"];
     }
 
-    // Fetch only this Preview request with the Trusted Sources token and do not
-    // follow redirects in the API client. The browser receives the redirect,
-    // then the next Preview navigation is intercepted independently. This keeps
-    // the OIDC header off Auth0 and every other origin.
-    const headers = {
-      ...route.request().headers(),
-      "x-vercel-trusted-oidc-idp-token": trustedOidcToken,
-    };
-    console.log(
-      `Trusted Sources header attached: ${route.request().method()} ${requestUrl.pathname}`
-    );
-    const response = await route.fetch({ headers, maxRedirects: 0 });
-    await route.fulfill({ response });
+    await route.continue({ headers });
   });
 
   // Anonymous access must enter the Auth0 Authorization Code + PKCE flow.
