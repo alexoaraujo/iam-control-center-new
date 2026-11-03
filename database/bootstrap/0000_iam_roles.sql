@@ -100,6 +100,12 @@ GRANT iam_app_runtime TO iam_app_runtime_login
 -- database privileges are added here.
 DO $database_grants$
 BEGIN
+  -- PostgreSQL grants CONNECT and TEMP to PUBLIC by default. Remove those
+  -- ambient privileges so the two LOGIN principals receive CONNECT explicitly.
+  EXECUTE format(
+    'REVOKE CONNECT, TEMP ON DATABASE %I FROM PUBLIC',
+    current_database()
+  );
   EXECUTE format(
     'GRANT CREATE ON DATABASE %I TO iam_owner',
     current_database()
