@@ -39,7 +39,7 @@ export default async function HomePage() {
           <span className="brand-copy"><strong>IAM CONTROL</strong><small>CENTER</small></span>
         </a>
         <div className="workspace-label">WORKSPACE</div>
-        <div className="workspace-switcher"><span className="workspace-avatar">IC</span><span><strong>IAM Platform</strong><small>Console administrativo</small></span><span className="chevron">⌄</span></div>
+        <div className="workspace-switcher"><span className="workspace-avatar">IC</span><span><strong>IAM Platform</strong><small>Console de governança</small></span><span className="chevron">⌄</span></div>
         <nav className="main-nav" aria-label="Navegação principal">
           <span className="nav-caption">GERENCIAMENTO</span>
           {navigation.slice(0, 5).map((item, index) => (
@@ -54,14 +54,14 @@ export default async function HomePage() {
         </nav>
         <div className="sidebar-bottom">
           <div className="support-card"><span className="support-icon">?</span><strong>Central de segurança</strong><p>Princípios, controles e procedimentos operacionais.</p><a href="#security">Consultar controles <span>↗</span></a></div>
-          <div className="sidebar-user"><span className="user-avatar">AD</span><span><strong>Administrador</strong><small>Sessão Auth0</small></span><a href="/auth/logout" aria-label="Encerrar sessão">↗</a></div>
+          <div className="sidebar-user"><span className="user-avatar">IA</span><span><strong>Usuário autenticado</strong><small>Sessão Auth0</small></span><a href="/auth/logout" aria-label="Encerrar sessão">↗</a></div>
         </div>
       </aside>
 
       <section className="main-panel">
         <header className="topbar">
           <div className="breadcrumb">Workspace <span>/</span> <strong>Visão geral</strong></div>
-          <div className="topbar-actions"><span className="environment-pill"><i /> AMBIENTE NÃO IDENTIFICADO</span><a className="icon-button" href="#evidence" aria-label="Central de evidências">◷</a><a className="topbar-avatar" href="/auth/logout" aria-label="Sair">AD</a></div>
+          <div className="topbar-actions"><span className="environment-pill"><i /> AMBIENTE NÃO IDENTIFICADO</span><a className="icon-button" href="#evidence" aria-label="Central de evidências">◷</a><a className="topbar-avatar" href="/auth/logout" aria-label="Sair">IA</a></div>
         </header>
 
         <div className="content" id="overview">
@@ -72,7 +72,7 @@ export default async function HomePage() {
 
           <div className="notice notice--info"><span className="notice-icon">i</span><div><strong>Painel em fase de estruturação</strong><p>Os módulos e indicadores abaixo definem a estrutura de governança. Métricas operacionais só serão exibidas após integração e validação das fontes reais. Nenhum dado demonstrativo é apresentado como produção.</p></div><Status tone="warning">DADOS NÃO CONECTADOS</Status></div>
 
-          <div className="metric-grid">
+          <div className="notice notice--warning"><span className="notice-icon">!</span><div><strong>Autenticação não equivale a autorização administrativa</strong><p>A sessão Auth0 protege a entrada. A validação de papel administrativo, membership e permissão ainda precisa ser implementada antes de habilitar operações ou expor dados de tenants.</p></div><Status tone="warning">RBAC PENDENTE</Status></div>\n\n          <div className="metric-grid">
             {[
               ["Identidades", "—", "Diretório de usuários", "Aguardando fonte"],
               ["Organizações", "—", "Tenants cadastrados", "Aguardando fonte"],
