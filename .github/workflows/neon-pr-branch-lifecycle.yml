@@ -13,7 +13,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: neon-pr-lifecycle-${{ github.event.pull_request.number }}
+  group: neon-pr-lifecycle-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
@@ -40,8 +40,8 @@ jobs:
             echo "::error::Invalid pull request number."
             exit 1
           }
-          [[ "${NEON_PROJECT_ID}" =~ ^[a-z0-9-]{1,60}$ ]] || {
-            echo "::error::NEON_PROJECT_ID is missing or invalid."
+          [[ "${NEON_PROJECT_ID}" == "wandering-wildflower-90908845" ]] || {
+            echo "::error::NEON_PROJECT_ID does not match the canonical IAM Control Center Neon project."
             exit 1
           }
           [[ -n "${NEON_API_KEY:-}" ]] || {
@@ -105,7 +105,15 @@ jobs:
           EXISTING_COUNT="$(jq -r 'length' <<< "${EXISTING}")"
 
           if [[ "${PR_ACTION}" == "closed" ]]; then
-            if [[ "${EXISTING_COUNT}" == "0" ]]; then
+            # Do not delete by deterministic name/parent alone: a manually
+            # created branch could share both. Neon branch provenance is not
+            # currently recorded in a verifiable ownership marker.
+            echo "PR closed; automatic deletion is disabled because branch provenance cannot be proven."
+            echo "Any existing PR branch retains its previously verified 14-day expiration."
+            exit 0
+          fi
+
+          if [[ "${EXISTING_COUNT}" == "0" ]]; then
               echo "No temporary Neon branch exists for this PR; cleanup is already complete."
               exit 0
             fi
