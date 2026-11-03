@@ -149,7 +149,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          status="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status" \\
+          status="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status" \
             --jq '[.statuses[] | select(.context == "Vercel")] | last | .state // "missing"')"
           if [ "${status}" != "success" ]; then
             echo "::error::Vercel Preview status is not successful for ${COMMIT_SHA} (state: ${status})."
@@ -178,7 +178,7 @@ jobs:
           esac
 
           echo "Resolved exact-SHA Vercel Preview host: ${preview_host}"
-          printf 'E2E_BASE_URL=https://%s\\n' "${preview_host}" >> "$GITHUB_ENV"
+          printf 'E2E_BASE_URL=https://%s\n' "${preview_host}" >> "$GITHUB_ENV"
 
       - name: Install isolated Playwright runner
         run: |
