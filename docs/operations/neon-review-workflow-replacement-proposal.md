@@ -131,3 +131,27 @@ A API de roles Neon retornou somente `Iam-control-center_owner` nas três branch
 O Vercel mantém `NEON_PROJECT_ID` canônico em Development e Preview. `DATABASE_MIGRATION_URL` existe em Development e Preview, mas seu consumidor/finalidade continuam desconhecidos. O workflow futuro não deve reutilizar nem ler esse secret sem uma revisão de propósito e autorização separada.
 
 O workflow legado continua sem execução e sem alteração. Esta atualização é documental; não cria workflow, environment, secret, variable ou conexão remota.
+
+
+## Atualização de estado — 03/11/2026 (supersede os snapshots anteriores)
+
+Projeto canônico: wandering-wildflower-90908845.
+
+O bootstrap de roles IAM foi executado somente em Development, sob autorização específica, pela proposta integrada na PR #80. A inspeção SQL read-only confirmou cinco roles e três memberships:
+- iam_migrator_login → iam_migrator (INHERIT FALSE, SET TRUE, ADMIN FALSE).
+- iam_migrator → iam_owner (INHERIT FALSE, SET TRUE, ADMIN FALSE).
+- iam_app_runtime_login → iam_app_runtime (INHERIT TRUE, SET FALSE, ADMIN FALSE).
+
+As roles iam_owner e iam_migrator são NOLOGIN/NOINHERIT/NOSUPERUSER/NOBYPASSRLS. iam_migrator_login é LOGIN/NOINHERIT/NOSUPERUSER/NOBYPASSRLS. iam_app_runtime é NOLOGIN/INHERIT/NOSUPERUSER/NOBYPASSRLS. iam_app_runtime_login é LOGIN/INHERIT/NOSUPERUSER/NOBYPASSRLS.
+
+Portanto, a afirmação anterior de que a API Neon listava somente Iam-control-center_owner é um snapshot histórico da API e não substitui a inspeção SQL posterior. O estado atual do Development possui as cinco roles IAM. Preview e Production não receberam bootstrap e o inventário continua sem relações de aplicação.
+
+Nenhuma senha foi provisionada para iam_migrator_login ou iam_app_runtime_login. A tentativa de conexão via conector Neon falhou com “missing authentication credentials: required password”. O novo workflow de verificação real continua BLOCKED até existir credencial runtime apropriada e uma connection string Development validada.
+
+O workflow legado permanece sem execução. Seus guards ainda apontam para branch/endpoint antigos (br-fancy-bird-b6j7etpp / ep-curly-shape-b6hv2xd4), não para o Development canônico. Não o execute nem o use como fonte de conectividade atual. A substituição proposta continua sendo apenas documentação; nenhum workflow novo foi instalado.
+
+Auth0 permanece como IdP. A PR #55 registrou E2E Auth0 PASS no SHA 678dbcf595937625e98974db787e189d9d8b81b2, run 41562860012. Essa evidência é limitada à branch/Preview testada; APP_BASE_URL de Preview continua branch-scoped para fix/next16-proxy-r2.
+
+A Vercel está no plano Hobby. A auditoria histórica #45 registrou restrição de elegibilidade para SaaS comercial; confirmar os termos vigentes antes de qualquer uso comercial. Não promover Production nem iniciar upgrade/teste pago automaticamente.
+
+**Decisão:** manter esta proposta em revisão. Não executar workflow, SQL, migration, provisionamento de credenciais, alteração de environment ou operação em Production.

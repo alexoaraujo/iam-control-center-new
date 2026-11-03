@@ -4,7 +4,7 @@
 **Projeto:** IAM Control Center  
 **Repositório:** alexoaraujo83/iam-control-center  
 **Branch de referência:** proposal/pooler-runtime-migration-isolation  
-**HEAD de referência:** 64988220e0afa2d05a802d94c9c4733288b94f9c  
+**HEAD de referência:** a8c902302b4477bdf5de8889e7d9a8fb549a004b  
 **Data da atualização:** 2026-11-03
 
 ## 1. Resultado executivo atualizado

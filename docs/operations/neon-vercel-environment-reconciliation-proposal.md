@@ -126,3 +126,40 @@ Auth0 foi inspecionado no Chrome: callback, logout e web origins incluem localho
 ## 10. Evidência de segurança
 
 Nenhuma variável Vercel foi modificada, nenhum secret foi revelado, nenhuma branch/role/ACL Neon foi alterada e nenhuma migration foi executada durante a preparação desta proposta.
+
+
+## Atualização de estado — 03/11/2026 (supersede os snapshots anteriores)
+
+Projeto Neon canônico: wandering-wildflower-90908845.
+
+### Roles e credenciais
+
+O bootstrap da PR #80 foi executado somente em Development. A inspeção SQL read-only confirmou cinco roles IAM e as memberships:
+- iam_migrator_login → iam_migrator (INHERIT FALSE / SET TRUE / ADMIN FALSE).
+- iam_migrator → iam_owner (INHERIT FALSE / SET TRUE / ADMIN FALSE).
+- iam_app_runtime_login → iam_app_runtime (INHERIT TRUE / SET FALSE / ADMIN FALSE).
+
+iam_owner e iam_migrator são NOLOGIN; iam_migrator_login é LOGIN/NOINHERIT; iam_app_runtime é NOLOGIN; iam_app_runtime_login é LOGIN/INHERIT. Todos os principals IAM são NOSUPERUSER/NOBYPASSRLS.
+
+Nenhuma senha foi provisionada para os dois LOGINs. A conexão real via conector Neon falhou por ausência de credencial de senha. Logo, o bootstrap de roles está verificado, mas autenticação real e uso de runtime/migrator continuam BLOCKED.
+
+Development, Preview e Production foram consultados por schema/relação: somente public e zero relações de aplicação. Preview e Production não receberam bootstrap. A migration 0001 não foi executada em nenhum branch.
+
+### Vercel
+
+Inventário de variáveis feito sem descriptografar valores:
+- NEON_PROJECT_ID em Development e Preview aponta para wandering-wildflower-90908845.
+- DATABASE_URL está cadastrada em Development, Preview e Production.
+- DATABASE_MIGRATION_URL está cadastrada em Development e Preview; consumidor/finalidade ainda não comprovados.
+- A existência das variáveis não prova host, branch, database, role, TLS ou conectividade efetivos.
+- APP_BASE_URL de Preview permanece limitada à branch fix/next16-proxy-r2.
+
+Pooler continua desabilitado nas três branches. Não habilitar nem alterar endpoints sem teste separado do driver, transações, sessão e prepared statements.
+
+### Auth0 e hospedagem
+
+Auth0 permanece o único IdP. A PR #55 passou E2E no SHA 678dbcf595937625e98974db787e189d9d8b81b2, run 41562860012; essa evidência não prova todos os ambientes nem o estado de Production.
+
+A Vercel está no plano Hobby. A auditoria histórica #45 registrou restrição de elegibilidade para SaaS comercial; reconfirmar termos vigentes antes de uso comercial. Não fazer deploy Production ou upgrade automaticamente.
+
+**Decisão:** manter a proposta como documentação de reconciliação. Não alterar secrets/variables, roles, ACLs, pooler, migrations ou Production. Credenciais dedicadas e teste de conexão Development continuam pendentes.
