@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "\${DATABASE_URL:?DATABASE_URL must point to a disposable PostgreSQL database}"
-: "\${MIGRATOR_DATABASE_URL:?MIGRATOR_DATABASE_URL must authenticate as iam_migrator_login}"
-: "\${RUNTIME_DATABASE_URL:?RUNTIME_DATABASE_URL must authenticate as iam_app_runtime_login}"
-: "\${MIGRATOR_TEST_PASSWORD:?MIGRATOR_TEST_PASSWORD is required for disposable CI/local use}"
-: "\${RUNTIME_TEST_PASSWORD:?RUNTIME_TEST_PASSWORD is required for disposable CI/local use}"
+: "${DATABASE_URL:?DATABASE_URL must point to a disposable PostgreSQL database}"
+: "${MIGRATOR_DATABASE_URL:?MIGRATOR_DATABASE_URL must authenticate as iam_migrator_login}"
+: "${RUNTIME_DATABASE_URL:?RUNTIME_DATABASE_URL must authenticate as iam_app_runtime_login}"
+: "${MIGRATOR_TEST_PASSWORD:?MIGRATOR_TEST_PASSWORD is required for disposable CI/local use}"
+: "${RUNTIME_TEST_PASSWORD:?RUNTIME_TEST_PASSWORD is required for disposable CI/local use}"
 
 ROOT="database/prototypes/iam-context"
 
