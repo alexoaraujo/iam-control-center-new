@@ -1,0 +1,91 @@
+name: PostgreSQL 18 Role Security Harness
+on:
+  pull_request:
+    paths:
+      - "role-security-harness/**"
+      - "scripts/test-postgres18-role-security-harness.sh"
+      - ".github/workflows/postgres18-role-security-harness.yml"
+  push:
+    branches:
+      - "test/postgres18-role-security-harness"
+    paths:
+      - "role-security-harness/**"
+      - "scripts/test-postgres18-role-security-harness.sh"
+      - ".github/workflows/postgres18-role-security-harness.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: postgres18-role-security-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  role-security-harness:
+    name: PostgreSQL 18 role security assertions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-role-harness-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Execute isolated role-security harness
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: 5432
+          PGUSER: postgres
+          PGDATABASE: postgres
+          PGPASSWORD: disposable-role-harness-only
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          results="${RUNNER_TEMP}/postgres18-role-security-results.txt"
+          {
+            echo "IAM Control Center — PostgreSQL 18 role-security evidence"
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Workflow run: ${GITHUB_RUN_ID}"
+            echo "Database: disposable iam_role_harness"
+            echo "Scope: ROLE-01 through ROLE-13"
+            echo
+          } | tee "${results}"
+          bash scripts/test-postgres18-role-security-harness.sh 2>&1 | tee -a "${results}"
+          pass_count="$(grep -c 'PASS local' "${results}" || true)"
+          echo "Assertions reported PASS local: ${pass_count}"
+          if [ "${pass_count}" -ne 13 ]; then
+            echo "::error::Expected 13 PASS local assertions; found ${pass_count}."
+            exit 1
+          fi
+          {
+            echo "## PostgreSQL 18 role-security harness"
+            echo
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- Workflow run: ${GITHUB_RUN_ID}"
+            echo "- Result: ${pass_count}/13 local assertions passed"
+            echo
+            cat "${results}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+      - name: Upload evidence artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: postgres18-role-security-${{ github.sha }}
+          path: ${{ runner.temp }}/postgres18-role-security-results.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
