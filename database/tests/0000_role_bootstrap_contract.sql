@@ -27,7 +27,7 @@ BEGIN
        OR actual_role.rolsuper OR actual_role.rolcreatedb OR actual_role.rolcreaterole
        OR actual_role.rolreplication OR actual_role.rolbypassrls
        OR actual_role.rolpassword IS NOT NULL THEN
-      RAISE EXCEPTION 'role % violates the least-privilege bootstrap contract', expected_role.role_name;
+      RAISE EXCEPTION 'role % violates bootstrap contract: login=% (expected %), inherit=% (expected %), superuser=%, createdb=%, createrole=%, replication=%, bypassrls=%, password_present=%', expected_role.role_name, actual_role.rolcanlogin, expected_role.can_login, actual_role.rolinherit, expected_role.can_inherit, actual_role.rolsuper, actual_role.rolcreatedb, actual_role.rolcreaterole, actual_role.rolreplication, actual_role.rolbypassrls, actual_role.rolpassword IS NOT NULL;
     END IF;
   END LOOP;
 END
