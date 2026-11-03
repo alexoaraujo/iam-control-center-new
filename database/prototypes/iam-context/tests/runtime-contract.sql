@@ -51,8 +51,9 @@ $invalid_context$;
 BEGIN;
 SELECT ctx_lab.set_test_context('fixture-token-tenant-a');
 DO $tenant_a_visibility$
-DECLARE n bigint;
-DECLARE unexpected_b bigint;
+DECLARE
+  n bigint;
+  unexpected_b bigint;
 BEGIN
   SELECT count(*) INTO n FROM ctx_lab.tenant_records;
   SELECT count(*) INTO unexpected_b FROM ctx_lab.tenant_records
