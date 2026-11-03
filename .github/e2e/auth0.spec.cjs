@@ -11,14 +11,21 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   }
 
   const previewHost = new URL(baseURL).hostname;
+  const context = page.context();
 
-  await page.route("**/*", async (route) => {
+  // Vercel Trusted Sources requires the OIDC header on every request to the
+  // protected Preview origin, including the Auth0 callback navigation. Keep
+  // the token strictly scoped to that origin; never forward it to Auth0.
+  await context.route("**/*", async (route) => {
     const requestUrl = new URL(route.request().url());
     if (requestUrl.hostname === previewHost) {
       const headers = {
         ...route.request().headers(),
         "x-vercel-trusted-oidc-idp-token": trustedOidcToken,
       };
+      console.log(
+        `Trusted Sources header attached: ${route.request().method()} ${requestUrl.pathname}`
+      );
       await route.continue({ headers });
       return;
     }
