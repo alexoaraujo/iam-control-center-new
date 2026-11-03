@@ -1,0 +1,67 @@
+name: database-schema-tests
+
+on:
+  pull_request:
+    paths:
+      - "database/**"
+      - "role-security-harness/**"
+      - "scripts/test-postgres18-role-security-harness.sh"
+      - "docs/architecture/iam-decisions.md"
+      - "docs/architecture/tenant-context-rfc.md"
+      - "docs/operations/iam-role-bootstrap-review.md"
+      - ".github/workflows/database-tests.yml"
+  push:
+    branches:
+      - "feat/iam-schema-migration-review"
+      - "feat/iam-role-bootstrap-review"
+    paths:
+      - "database/**"
+      - "role-security-harness/**"
+      - "scripts/test-postgres18-role-security-harness.sh"
+      - "docs/architecture/iam-decisions.md"
+      - "docs/architecture/tenant-context-rfc.md"
+      - "docs/operations/iam-role-bootstrap-review.md"
+      - ".github/workflows/database-tests.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-schema-tests-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  postgres-18:
+    name: postgres-18-schema-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: iam_schema_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d iam_schema_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres@localhost:5432/iam_schema_test
+      BOOTSTRAP_DATABASE_URL: postgresql://iam_bootstrap_admin@localhost:5432/iam_schema_test
+      MIGRATOR_DATABASE_URL: postgresql://iam_migrator_login@localhost:5432/iam_schema_test
+      POSTGRES_TEST_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Verify PostgreSQL version
+        run: PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -Atc "SHOW server_version;"
+      - name: Run role bootstrap and migration contract tests
+        run: bash database/tests/run.sh
