@@ -127,6 +127,7 @@ jobs:
     permissions:
       contents: read
       checks: read
+      statuses: read
       id-token: write
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
@@ -150,7 +151,7 @@ jobs:
         run: |
           set -euo pipefail
           status="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status" \
-            --jq '[.statuses[] | select(.context == "Vercel")] | last | .state // "missing"')"
+            --jq '[.statuses[] | select(.context == "Vercel")] | first | .state // "missing"')"
           if [ "${status}" != "success" ]; then
             echo "::error::Vercel Preview status is not successful for ${COMMIT_SHA} (state: ${status})."
             exit 1
