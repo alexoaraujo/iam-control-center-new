@@ -42,6 +42,17 @@ BEGIN
       RAISE EXCEPTION 'membership contract failed: % -> %', item.member_name, item.granted_name;
     END IF;
   END LOOP;
+  -- The five contract roles may participate in exactly the three declared edges.
+  -- Count edges on either side so unexpected grants to or from these roles fail closed.
+  SELECT count(*) INTO contract_membership_count
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid=m.member
+      JOIN pg_roles granted_role ON granted_role.oid=m.roleid
+     WHERE member_role.rolname IN ('iam_owner','iam_migrator','iam_migrator_login','iam_app_runtime','iam_app_runtime_login')
+        OR granted_role.rolname IN ('iam_owner','iam_migrator','iam_migrator_login','iam_app_runtime','iam_app_runtime_login');
+  IF contract_membership_count <> 3 THEN
+    RAISE EXCEPTION 'expected exactly 3 memberships touching contract roles; found %', contract_membership_count;
+  END IF;
   IF EXISTS (
     SELECT 1 FROM pg_auth_members m
     JOIN pg_roles member_role ON member_role.oid=m.member
