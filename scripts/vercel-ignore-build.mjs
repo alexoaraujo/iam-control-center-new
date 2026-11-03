@@ -3,6 +3,8 @@ import { appendFileSync } from "node:fs";
 
 const BUILD_RELEVANT = [
   /^\.github\/workflows\/quality\.yml$/,
+  // E2E harness changes require a fresh exact-SHA Preview deployment.
+  /^\.github\/e2e\//,
   /^apps\/web\//,
   /^packages\//,
   /^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|vercel\.json|turbo\.json|pnpmfile\.cjs)$/,
