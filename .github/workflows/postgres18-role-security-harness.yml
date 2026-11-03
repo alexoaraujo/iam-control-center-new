@@ -29,7 +29,7 @@ jobs:
         env:
           POSTGRES_DB: postgres
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: disposable-role-harness-only
+          POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
         ports:
           - 5432:5432
         options: >-
@@ -50,9 +50,11 @@ jobs:
           PGPORT: 5432
           PGUSER: postgres
           PGDATABASE: postgres
-          PGPASSWORD: disposable-role-harness-only
+          PGAPPNAME: postgres18-role-security-disposable
+          PGPASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -euo pipefail
           results="${RUNNER_TEMP}/postgres18-role-security-results.txt"
@@ -60,6 +62,7 @@ jobs:
             echo "IAM Control Center — PostgreSQL 18 role-security evidence"
             echo "Commit: ${GITHUB_SHA}"
             echo "Workflow run: ${GITHUB_RUN_ID}"
+            echo "Run attempt: ${GITHUB_RUN_ATTEMPT}"
             echo "Database: disposable iam_role_harness"
             echo "Scope: ROLE-01 through ROLE-13"
             echo
@@ -76,6 +79,7 @@ jobs:
             echo
             echo "- Commit: ${GITHUB_SHA}"
             echo "- Workflow run: ${GITHUB_RUN_ID}"
+            echo "- Run attempt: ${GITHUB_RUN_ATTEMPT}"
             echo "- Result: ${pass_count}/13 local assertions passed"
             echo
             cat "${results}"
@@ -84,7 +88,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: postgres18-role-security-${{ github.sha }}
+          name: postgres18-role-security-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/postgres18-role-security-results.txt
           if-no-files-found: error
           retention-days: 14
