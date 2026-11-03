@@ -4,9 +4,10 @@
 
 DO $role_contract$
 DECLARE
-  r record;
+  expected_role record;
+  actual_role record;
 BEGIN
-  FOR r IN
+  FOR expected_role IN
     SELECT * FROM (VALUES
       ('iam_owner', false, false),
       ('iam_migrator', false, false),
@@ -17,16 +18,16 @@ BEGIN
   LOOP
     SELECT rolcanlogin, rolinherit, rolsuper, rolcreatedb,
            rolcreaterole, rolreplication, rolbypassrls, rolpassword
-      INTO STRICT r
+      INTO STRICT actual_role
       FROM pg_roles
-     WHERE rolname = r.role_name;
+     WHERE rolname = expected_role.role_name;
 
-    IF r.rolcanlogin IS DISTINCT FROM r.can_login
-       OR r.rolinherit IS DISTINCT FROM r.can_inherit
-       OR r.rolsuper OR r.rolcreatedb OR r.rolcreaterole
-       OR r.rolreplication OR r.rolbypassrls
-       OR r.rolpassword IS NOT NULL THEN
-      RAISE EXCEPTION 'role % violates the least-privilege bootstrap contract', r.role_name;
+    IF actual_role.rolcanlogin IS DISTINCT FROM expected_role.can_login
+       OR actual_role.rolinherit IS DISTINCT FROM expected_role.can_inherit
+       OR actual_role.rolsuper OR actual_role.rolcreatedb OR actual_role.rolcreaterole
+       OR actual_role.rolreplication OR actual_role.rolbypassrls
+       OR actual_role.rolpassword IS NOT NULL THEN
+      RAISE EXCEPTION 'role % violates the least-privilege bootstrap contract', expected_role.role_name;
     END IF;
   END LOOP;
 END
@@ -72,7 +73,6 @@ BEGIN
     SELECT 1
       FROM pg_auth_members m
       JOIN pg_roles member_role ON member_role.oid = m.member
-      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
      WHERE member_role.rolname IN (
        'iam_owner','iam_migrator','iam_migrator_login',
        'iam_app_runtime','iam_app_runtime_login'
