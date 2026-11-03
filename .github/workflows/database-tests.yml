@@ -6,14 +6,17 @@ on:
       - "database/**"
       - "docs/architecture/iam-decisions.md"
       - "docs/architecture/tenant-context-rfc.md"
+      - "docs/operations/iam-role-bootstrap-review.md"
       - ".github/workflows/database-tests.yml"
   push:
     branches:
       - "feat/iam-schema-migration-review"
+      - "feat/iam-role-bootstrap-review"
     paths:
       - "database/**"
       - "docs/architecture/iam-decisions.md"
       - "docs/architecture/tenant-context-rfc.md"
+      - "docs/operations/iam-role-bootstrap-review.md"
       - ".github/workflows/database-tests.yml"
 
 permissions:
@@ -44,7 +47,9 @@ jobs:
           --health-retries 20
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/iam_schema_test
+      BOOTSTRAP_DATABASE_URL: postgresql://iam_bootstrap_admin:bootstrap-ci-only@localhost:5432/iam_schema_test
       MIGRATOR_DATABASE_URL: postgresql://iam_migrator_login@localhost:5432/iam_schema_test
+      BOOTSTRAP_TEST_PASSWORD: bootstrap-ci-only
       MIGRATOR_TEST_PASSWORD: disposable-ci-only
     steps:
       - name: Checkout
@@ -55,5 +60,5 @@ jobs:
           sudo apt-get install --yes postgresql-client
       - name: Verify PostgreSQL version
         run: psql "$DATABASE_URL" -Atc "SHOW server_version;"
-      - name: Run migration contract tests
+      - name: Run role bootstrap and migration contract tests
         run: bash database/tests/run.sh
