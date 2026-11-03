@@ -18,6 +18,9 @@ importers:
       '@auth0/nextjs-auth0':
         specifier: ^4.33.0
         version: 4.33.0(next@16.4.3(@babel/core@7.29.7)(@types/node@24.0.10)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@neondatabase/serverless':
+        specifier: 1.2.0
+        version: 1.2.0
       next:
         specifier: 16.4.3
         version: 16.4.3(@babel/core@7.29.7)(@types/node@24.0.10)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -547,6 +550,10 @@ packages:
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+
+  '@neondatabase/serverless@1.2.0':
+    resolution: {integrity: sha512-tnaqgixUengZQNd9ZrS3ytQfamJzLKY8QxgqWQTNHHtB+KrFQWk77JTbbpg4RD+J3qE4eO2lVytvGDX5Kj6FdQ==}
+    engines: {node: '>=19.0.0'}
 
   '@next/env@16.4.3':
     resolution: {integrity: sha512-a7tz1QCcWWkwC/rPJcPMJk/UNRu9CFhDd3OHYE5hddbJrs8BqRTalxI6GlKCWEGzRLHN+S/B7a4PAHCtm25aBQ==}
@@ -2648,6 +2655,8 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
+  '@neondatabase/serverless@1.2.0': {}
+
   '@next/env@16.4.3': {}
 
   '@next/eslint-plugin-next@16.4.3(eslint@10.14.0)':
@@ -3343,7 +3352,7 @@ snapshots:
       eslint: 10.14.0
       eslint-import-resolver-node: 0.3.10
       eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.72.1(eslint@10.14.0)(typescript@6.0.3))(eslint@10.14.0))(eslint@10.14.0)
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.72.1(eslint@10.14.0)(typescript@6.0.3))(eslint-import-resolver-typescript@3.10.1)(eslint@10.14.0)
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.72.1(eslint@10.14.0)(typescript@6.0.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.72.1(eslint@10.14.0)(typescript@6.0.3))(eslint@10.14.0))(eslint@10.14.0))(eslint@10.14.0)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@10.14.0)
       eslint-plugin-react: 7.37.5(eslint@10.14.0)
       eslint-plugin-react-hooks: 7.1.1(eslint@10.14.0)
@@ -3376,7 +3385,7 @@ snapshots:
       tinyglobby: 0.2.17
       unrs-resolver: 1.13.0
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.72.1(eslint@10.14.0)(typescript@6.0.3))(eslint-import-resolver-typescript@3.10.1)(eslint@10.14.0)
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.72.1(eslint@10.14.0)(typescript@6.0.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.72.1(eslint@10.14.0)(typescript@6.0.3))(eslint@10.14.0))(eslint@10.14.0))(eslint@10.14.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -3391,7 +3400,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.72.1(eslint@10.14.0)(typescript@6.0.3))(eslint-import-resolver-typescript@3.10.1)(eslint@10.14.0):
+  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.72.1(eslint@10.14.0)(typescript@6.0.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.72.1(eslint@10.14.0)(typescript@6.0.3))(eslint@10.14.0))(eslint@10.14.0))(eslint@10.14.0):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.2.0
