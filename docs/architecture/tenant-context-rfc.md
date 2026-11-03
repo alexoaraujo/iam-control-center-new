@@ -1,46 +1,53 @@
 # RFC: contexto confiável de tenant para RLS
 
 Status: **proposta técnica para revisão; não implementada nem aprovada**  
-Escopo: resolver a limitação de segurança de `app.tenant_id` na migration 0001 sem alterar Development, Preview ou Production.
+Escopo: definir como policies RLS poderão identificar tenant/identity/membership sem confiar em dados manipuláveis pela sessão SQL. Não altera Development, Preview ou Production.
 
 ## Problema confirmado
 
-A função atual `app_private.current_tenant_id()` lê `current_setting('app.tenant_id', true)`. Um papel SQL de runtime pode alterar um GUC customizado. Portanto, a policy que compara `tenant_id` com esse valor não é, isoladamente, uma fronteira de segurança contra SQL arbitrário executado com a mesma role.
+A função baseada em `current_setting('app.tenant_id', true)` aceita um custom GUC que a própria sessão SQL pode modificar. Uma role runtime capaz de executar SQL arbitrário pode trocar o UUID. Portanto, esse valor isolado não é uma fronteira de segurança contra SQL arbitrário executado sob a mesma role.
 
-## Alternativas avaliadas
+## Alternativas em avaliação
 
-1. **GUC com UUID simples — rejeitada para isolamento forte.** Fácil de usar, mas falsificável pela sessão.
-2. **Role PostgreSQL por tenant — alternativa possível, porém com custo operacional e de pool de conexões; exigiria desenho próprio de provisionamento e rotação.**
-3. **Contexto assinado, verificado dentro do banco — candidata recomendada para prototipagem isolada.** A aplicação autentica a identidade e autoriza a membership antes de emitir um contexto de curta duração, contendo no mínimo tenant ID, identidade/membership, instante de emissão/expiração e identificador de requisição. O banco valida a assinatura em toda leitura do contexto usada pelas policies; não basta validar uma vez e confiar num GUC com UUID.
-4. **Broker de conexão/serviço confiável dedicado — alternativa a comparar**, se puder impedir que a sessão runtime execute SQL arbitrário diretamente ou separar de forma comprovável a autoridade de contexto.
+1. **GUC com UUID simples — rejeitada como controle de isolamento forte.** Pode ser útil para roteamento/defesa em profundidade, nunca como única prova de tenant.
+2. **Role PostgreSQL por tenant — não selecionada.** Exige desenho de provisionamento, conexão/pool, rotação e limites operacionais.
+3. **Contexto assinado verificado no banco — candidata para protótipo isolado.** A aplicação só emite contexto depois de autenticar a identidade OIDC e autorizar membership ativa. O banco precisa verificar assinatura, expiração e formato em cada uso do contexto pelas policies.
+4. **Broker/serviço de conexão confiável — alternativa a comparar.** Deve demonstrar que a sessão SQL da aplicação não consegue forjar ou substituir o contexto.
+5. **JWT assimétrico verificável no banco — alternativa a estudar.** Não presumir que `pgcrypto` forneça validação JWT pronta; algoritmo, parser, canonicalização e rotação precisam de prova técnica.
 
-## Desenho candidato (ainda não implementado)
+## HMAC: candidato, não decisão
 
-- Usar envelope assinado com HMAC ou mecanismo criptográfico equivalente, incluindo os campos acima e versão do formato.
-- Manter o segredo de verificação em objeto privado acessível apenas por função de verificação `SECURITY DEFINER`; nunca conceder SELECT ao runtime. O segredo da aplicação não deve ser derivado de dados controlados pelo cliente.
-- Usar uma função de verificação com `search_path` fixo, nomes de objetos qualificados, validação estrita de formato, expiração e rotação de chave. Evitar privilégios desnecessários para o owner da função.
-- Policies RLS devem consumir somente um contexto que tenha assinatura válida e não expirado. Alterar o GUC para um tenant diferente, UUID malformado, assinatura inválida ou contexto expirado deve resultar em zero linhas/rejeição, nunca em fallback permissivo.
-- O contexto deve ser definido por transação e não persistir entre requisições em conexões reutilizadas. A limpeza do GUC ajuda a reduzir erros operacionais, mas **não substitui** a verificação criptográfica.
-- A assinatura não substitui a autorização: o servidor só pode assinar tenant/membership depois de verificar identidade OIDC, membership ativa e a operação solicitada.
-- Não incluir tokens OIDC, cookies, segredos ou material de assinatura em logs/auditoria.
+HMAC não está aprovado. Antes de adotá-lo, exigir:
 
-## Testes obrigatórios antes de aprovar
+- threat model documentando o que ocorre se a aplicação ou a sessão SQL for comprometida;
+- algoritmo e canonicalização inequívocos do envelope;
+- segredo fora de tabelas legíveis pelo runtime, com acesso exclusivo à função verificadora;
+- função `SECURITY DEFINER` com `search_path` fixo, objetos qualificados e privilégios mínimos;
+- expiração curta, versão de chave, rotação, revogação e comportamento em indisponibilidade;
+- proteção contra replay conforme modelo de transação/requisição;
+- prova de que o runtime não consegue ler/alterar segredo, função, tabela de chaves ou assumir role privilegiada;
+- avaliação da extensão criptográfica no PostgreSQL/Neon e aprovação explícita antes de instalá-la.
 
-- Contexto válido para tenant A permite apenas os dados autorizados de A.
-- Tentar mudar o GUC para tenant B mantendo a assinatura de A não revela dados de B.
-- UUID/contexto malformado, assinatura alterada, assinatura ausente e contexto expirado resultam em negação segura.
-- Contexto não persiste entre transações/conexões reutilizadas.
-- Role runtime não consegue ler segredo, alterar função verificadora, modificar tabela de chaves ou assumir role privilegiada.
-- Testes de INSERT/UPDATE/DELETE verificam também `WITH CHECK`, grants efetivos e constraints compostas.
-- Testar como o login de runtime efetivo, não como `Administrador`, owner ou papel com `BYPASSRLS`.
-- Revisar rotação de chaves, concorrência, observabilidade sem vazamento de segredo e recuperação de incidentes.
+A assinatura não substitui autorização. Se o backend que possui a chave de assinatura estiver totalmente comprometido, ele poderá emitir contexto falso; esse risco precisa estar explícito no modelo.
 
-## Critérios de decisão
+## Baseline fail-closed deste PR
 
-A proposta só pode avançar para implementação após revisar a disponibilidade de extensão criptográfica suportada no Neon PostgreSQL, a separação de privilégios do verificador, o formato do envelope, a estratégia de rotação e a forma de executar testes como o runtime real. Não alterar a migration 0001 nem aplicar qualquer mudança nos ambientes compartilhados até essa revisão.
+A migration proposta habilita e força RLS em todas as tabelas IAM/audit, sem criar policies e sem conceder privilégios de runtime. Assim, mesmo após grants de teste, o runtime não vê linhas e não consegue inserir/alterar dados enquanto não houver policy. Isso é deliberado e impede que a entrega sugira isolamento forte inexistente.
+
+## Testes obrigatórios antes de aprovar policies
+
+- Contexto válido de tenant A só permite operações autorizadas em A.
+- Alterar o GUC para tenant B mantendo prova/contexto de A não revela B.
+- Contexto ausente, malformado, assinatura inválida ou expirado resulta em negação segura.
+- Contexto não vaza entre transações/conexões reutilizadas.
+- Runtime não lê segredos, não altera verificador/chaves e não assume roles privilegiadas.
+- INSERT/UPDATE/DELETE exercitam `WITH CHECK`, grants efetivos e FKs compostas.
+- Execução com login/role runtime efetivo, não owner, superuser ou papel `BYPASSRLS`.
+- Rotação, concorrência, replay, observabilidade sem vazamento e recuperação de incidente.
 
 ## Estado de evidência
 
-- Confirmado: GUC simples é mutável por sessão; a migration atual é insuficiente para alegar isolamento forte contra SQL arbitrário.
-- Confirmado: a conexão Neon desta integração está fixada em `Administrador` e não permite selecionar `iam_app_runtime_dev_safe` através do parâmetro de role; os testes de RLS com a role efetiva continuam bloqueados.
-- Pendente: protótipo criptográfico, revisão independente, harness de testes de runtime e aprovação humana.
+- Confirmado no desenho atual: GUC simples é mutável pela sessão.
+- Confirmado no estado de integração registrado: conexão Neon está fixada em `Administrador`; teste como login runtime efetivo continua bloqueado.
+- Pendente: seleção do mecanismo, protótipo criptográfico/broker, revisão independente e testes runtime reais.
+- Não autorizado: instalação de extensão, alteração de roles ou execução de migration em qualquer branch Neon.
