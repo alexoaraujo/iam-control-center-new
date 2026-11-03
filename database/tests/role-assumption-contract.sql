@@ -1,7 +1,7 @@
 -- CI-only contract test. Disposable PostgreSQL 18 only; never run against Neon.
 \set ON_ERROR_STOP on
 
-CREATE ROLE iam_migrator_login LOGIN NOINHERIT NOBYPASSRLS;
+-- iam_migrator_login is created once by bootstrap.sql with a disposable CI password.
 
 GRANT iam_owner TO iam_migrator
   WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
