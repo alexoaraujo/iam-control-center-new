@@ -4,6 +4,10 @@ Status: **PROPOSTA / NÃO EXECUTADA**
 Escopo: roles observadas em Development e Preview do projeto `floral-surf-85783683`, database `iam_control_center`.  
 Data da evidência de origem: 01/11/2026.
 
+## 0. Limite de aplicabilidade — projeto Neon histórico
+
+Esta proposta e a matriz de roles abaixo referem-se exclusivamente ao projeto histórico `floral-surf-85783683` (`iam-control-center`), nas branches Development e Preview observadas em 01/11/2026. Elas **não descrevem** o projeto Neon canônico atual `wandering-wildflower-90908845` (`control-center`). A inspeção da API Neon no projeto canônico retornou somente a role owner nas branches consultadas; isso não comprova que as roles `app_runtime*` ou `iam_app_runtime*` existam nele, nem substitui inventário SQL autenticado. Não executar o SQL desta proposta no projeto canônico. Antes de qualquer uso, refazer o preflight read-only no projeto/branch explicitamente identificado, revisar o diff SQL para esse estado e obter autorização separada para a alteração de roles. Nenhuma alteração foi aplicada em qualquer projeto.
+
 ## 1. Evidência observada (somente leitura)
 
 Nas sessões SQL autenticadas como `app_runtime_login` em Development e Preview, o catálogo `pg_roles` indicou:
