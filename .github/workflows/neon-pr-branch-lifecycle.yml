@@ -114,41 +114,6 @@ jobs:
           fi
 
           if [[ "${EXISTING_COUNT}" == "0" ]]; then
-              echo "No temporary Neon branch exists for this PR; cleanup is already complete."
-              exit 0
-            fi
-            [[ "${EXISTING_COUNT}" == "1" ]] || {
-              echo "::error::More than one branch matched the exact PR branch name."
-              exit 1
-            }
-            TARGET_ID="$(jq -r '.[0].id' <<< "${EXISTING}")"
-            TARGET_PARENT="$(jq -r '.[0].parent_id // empty' <<< "${EXISTING}")"
-            [[ "${TARGET_PARENT}" == "${DEVELOPMENT_ID}" ]] || {
-              echo "::error::Refusing to delete a branch outside the expected Development parent."
-              exit 1
-            }
-
-            CHILDREN="$(jq -c --arg id "${TARGET_ID}" '[.branches[] | select(.parent_id == $id)]' <<< "${BRANCHES_JSON}")"
-            [[ "$(jq -r 'length' <<< "${CHILDREN}")" == "0" ]] || {
-              echo "::error::Refusing to delete a PR branch that has child branches."
-              exit 1
-            }
-
-            curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --request DELETE \
-              --header "Authorization: Bearer ${NEON_API_KEY}" \
-              --header "Accept: application/json" \
-              "${BRANCHES_URL}/${TARGET_ID}" >/dev/null
-
-            AFTER_DELETE="$(api_get_branches)"
-            [[ "$(jq -r --arg name "${BRANCH_NAME}" '[.branches[] | select(.name == $name)] | length' <<< "${AFTER_DELETE}")" == "0" ]] || {
-              echo "::error::Neon branch deletion could not be verified."
-              exit 1
-            }
-            echo "Temporary Neon branch deleted and absence verified."
-            exit 0
-          fi
-
-          if [[ "${EXISTING_COUNT}" == "0" ]]; then
             BRANCH_COUNT="$(jq -r '.branches | length' <<< "${BRANCHES_JSON}")"
             if (( BRANCH_COUNT >= 10 )); then
               echo "::error::Neon Free plan branch limit (10) reached; no permanent branch will be removed."
