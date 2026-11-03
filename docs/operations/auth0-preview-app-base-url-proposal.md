@@ -153,3 +153,22 @@ Antes de uma alteração futura, registrar somente metadados não secretos da va
 - [Auth0 — Next.js 16 e autenticação](https://auth0.com/blog/handling-auth-nextjs16-with-server-actions-middleware/)
 
 **Conclusão:** não aplicar `APP_BASE_URL` Preview genérica. O domínio canônico é branch-scoped no Vercel e o SDK v4.33.0 pode inferir o host quando a variável é omitida. O próximo gate é reconciliar o proxy Next.js 16 e executar o E2E exclusivamente pelo domínio canônico/branch proprietária. Nenhuma alteração externa foi autorizada ou executada.
+
+
+## Atualização de evidência E2E e Preview — 03/11/2026
+
+### PR #55 — implementação Proxy e E2E
+- O SHA anterior `678dbcf595937625e98974db787e189d9d8b81b2` teve o run `41562860012` SUCCESS, incluindo `quality`, `preview-deployment` e `auth0-e2e`.
+- A correspondência deployment → branch do domínio canônico não foi provada para esse SHA. O domínio `iam-control-center-preview.vercel.app` estava associado a outra branch no inventário Vercel. Portanto, classificar o run como **E2E do domínio testado PASS**, mas **E2E do código da branch #55 NOT PROVEN**.
+- Após reconciliar a base, o build inicial falhou por coexistência de `middleware.ts` e `proxy.ts`; o arquivo legado foi removido.
+- No SHA atual da PR #55 `8e9dbfaeb6f8a33d99011621bafa0b69f0db157b`, Quality e Preview passaram, mas `auth0-e2e` falhou no preflight Trusted Sources: HTTP 404 sem header Location ao acessar `/protected` pelo domínio canônico.
+- O HTTP 404 confirma que o domínio não está servindo a rota protegida esperada para este fluxo. Não classificar o E2E atual como PASS.
+
+### Decisão atual
+- Não criar APP_BASE_URL Preview genérica.
+- Não alterar callback/logout/origin no Auth0.
+- Não trocar o domínio/branch no Vercel sem aprovação operacional separada.
+- Não habilitar `AUTH0_E2E_ENABLED` como gate de merge até que o domínio Preview seja associado à branch/commit correto e o preflight retorne redirect para Auth0.
+- A PR #55 permanece Draft/BLOCKED para integração final até existir evidência de deployment correspondente ao SHA e E2E completo (login, callback, sessão persistente e logout).
+
+Nenhuma variável Vercel, configuração Auth0 ou segredo foi alterado nesta atualização.
