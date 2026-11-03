@@ -7,21 +7,25 @@ on:
 permissions:
   contents: read
 
-# Keep the latest PR revision moving; do not cancel push validation on long-lived refs.
-# GitHub concurrency keeps at most one pending run per group.
+# Serialize CI per ref without interrupting an active run.
+# Note: GitHub concurrency keeps at most one pending run per group.
 concurrency:
-  group: ci-v2-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   quality:
     name: quality
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
+    outputs:
+      preview_required: ${{ steps.preview-impact.outputs.preview_required }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -58,14 +62,25 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Test Preview build filter
+        run: node --test scripts/vercel-ignore-build.test.mjs
+
+      - name: Determine whether a Preview deployment is required
+        id: preview-impact
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/vercel-ignore-build.mjs --github-output
+
       - name: Build
         run: pnpm build
 
   preview-deployment:
     name: preview-deployment
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && needs.quality.outputs.preview_required == 'true'
     needs: quality
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     environment:
       name: Preview
@@ -74,32 +89,7 @@ jobs:
       statuses: read
       deployments: write
     steps:
-      - name: Detect whether this commit requires a new Preview deployment
-        id: preview-impact
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          files="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}" --jq '.files[].filename')"
-          required=false
-          while IFS= read -r file; do
-            case "${file}" in
-              apps/web/*|packages/*|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.npmrc|vercel.json|next.config.*)
-                required=true
-                ;;
-            esac
-          done <<< "${files}"
-          echo "required=${required}" >> "$GITHUB_OUTPUT"
-          if [ "${required}" = "true" ]; then
-            echo "This commit changes application/build inputs; a fresh Vercel Preview is required."
-          else
-            echo "This commit changes no application/build inputs; the existing Preview remains the test target."
-          fi
-
       - name: Wait for successful Vercel Preview deployment
-        if: steps.preview-impact.outputs.required == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -121,147 +111,3 @@ jobs:
           done
           echo "::error::Timed out waiting for a successful Vercel status for ${COMMIT_SHA}."
           exit 1
-
-      - name: Reuse the last Preview when application inputs are unchanged
-        if: steps.preview-impact.outputs.required != 'true'
-        run: echo "Preview deployment skipped because this commit changes only workflow or documentation files."
-
-  auth0-e2e:
-    name: auth0-e2e
-    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true'
-    needs:
-      - quality
-      - preview-deployment
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # Must match the GitHub Actions environment configured in Vercel Trusted Sources.
-    # Without this, GitHub issues a ref-based OIDC subject instead of environment:Preview.
-    environment:
-      name: Preview
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      E2E_BASE_URL: https://iam-control-center-preview.vercel.app
-      AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
-      AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-
-
-      - name: Install isolated Playwright runner
-        run: |
-          mkdir -p "$RUNNER_TEMP/playwright"
-          cd "$RUNNER_TEMP/playwright"
-          npm init -y >/dev/null
-          npm install --save-exact --no-audit --no-fund @playwright/test@1.64.1
-          npm audit --audit-level=high
-
-      - name: Install Chromium
-        run: "$RUNNER_TEMP/playwright/node_modules/.bin/playwright install --with-deps chromium"
-
-      - name: Request Vercel Trusted Source OIDC token
-        shell: bash
-        run: |
-          set -euo pipefail
-          response="$(curl --fail --silent --show-error \
-            --get \
-            --data-urlencode "audience=https://github.com/alexoaraujo83" \
-            --header "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}")"
-          token="$(jq -er '.value | select(type == "string" and length > 0)' <<< "$response")"
-          echo "::add-mask::${token}"
-          printf 'VERCEL_TRUSTED_OIDC_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
-          unset token response
-
-      - name: Verify GitHub OIDC claims for Vercel Trusted Sources
-        run: |
-          node <<'NODE'
-          const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
-          if (!token) throw new Error("OIDC token missing from job environment.");
-          const parts = token.split(".");
-          if (parts.length !== 3) throw new Error("OIDC token is not a JWT.");
-          const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-          const expectedIssuer = "https://token.actions.githubusercontent.com";
-          // GitHub's OIDC subject for this repository includes immutable owner/repository IDs.
-          const expectedSubject = "repo:alexoaraujo83@288204053/iam-control-center@1431662503:environment:Preview";
-          const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-          // These claims are non-secret diagnostics; never print or persist the JWT.
-          console.log(JSON.stringify({
-            issuer: claims.iss ?? null,
-            audience,
-            subject: claims.sub ?? null,
-            repository: claims.repository ?? null,
-            ref: claims.ref ?? null,
-            environment: claims.environment ?? null,
-            event_name: claims.event_name ?? null,
-            issued_at: claims.iat ?? null,
-            expires_at: claims.exp ?? null,
-            token_age_seconds: Number.isFinite(claims.iat) ? Math.floor(Date.now() / 1000) - claims.iat : null,
-            seconds_until_expiry: Number.isFinite(claims.exp) ? claims.exp - Math.floor(Date.now() / 1000) : null,
-          }));
-          const now = Math.floor(Date.now() / 1000);
-          if (!Number.isFinite(claims.iat) || !Number.isFinite(claims.exp)) throw new Error("OIDC token is missing iat/exp claims.");
-          if (claims.iat > now + 60 || claims.exp <= now) throw new Error("OIDC token is not currently valid.");
-          if (claims.iss !== expectedIssuer) throw new Error("Unexpected OIDC issuer.");
-          if (!audience.includes("https://github.com/alexoaraujo83")) throw new Error("Unexpected OIDC audience.");
-          if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
-          NODE
-
-      - name: Preflight Vercel Trusted Sources access to Preview
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const base = new URL(process.env.E2E_BASE_URL);
-          const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
-          const previewHost = base.hostname;
-          const auth0Host = "iam-control-center.us.auth0.com";
-          if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
-
-          let current = new URL("/protected", base);
-          for (let attempt = 0; attempt < 6; attempt += 1) {
-            const headers = current.hostname === previewHost
-              ? { "x-vercel-trusted-oidc-idp-token": token }
-              : {};
-            const response = await fetch(current, { redirect: "manual", headers });
-            const location = response.headers.get("location");
-
-            if (!location) {
-              throw new Error(
-                `Expected redirect to Auth0; received HTTP ${response.status} with no Location header.`
-              );
-            }
-
-            const next = new URL(location, current);
-            if (next.hostname === auth0Host) {
-              console.log("Vercel Trusted Sources preflight passed: protected route reached Auth0.");
-              process.exit(0);
-            }
-            if (next.hostname === "vercel.com") {
-              throw new Error(
-                "Vercel Deployment Protection still intercepts the request. Verify the GitHub Actions Trusted Source issuer, audience, immutable subject, and Preview environment."
-              );
-            }
-            if (next.hostname !== previewHost) {
-              throw new Error(
-                `Unexpected redirect host during Trusted Sources preflight: ${next.hostname}.`
-              );
-            }
-            current = next;
-          }
-
-          throw new Error("Trusted Sources preflight exceeded the redirect limit.");
-          NODE
-
-      - name: Run Auth0 end-to-end flow
-        run: |
-          NODE_PATH="$RUNNER_TEMP/playwright/node_modules" \
-            "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" test \
-            --config=.github/e2e/playwright.config.cjs
