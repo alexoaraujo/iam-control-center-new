@@ -1,5 +1,7 @@
 -- CI contract checks for database/bootstrap/0000_iam_roles.sql.
--- Run with a disposable PostgreSQL 18 administrator connection.
+-- Run with a disposable PostgreSQL 18 superuser connection because pg_authid
+-- is intentionally protected and is used only to assert that LOGIN roles
+-- have no password hash before a separate CI-only password is provisioned.
 \set ON_ERROR_STOP on
 
 DO $role_contract$
@@ -17,7 +19,7 @@ BEGIN
     ) AS expected(role_name, can_login, can_inherit)
   LOOP
     SELECT rolcanlogin, rolinherit, rolsuper, rolcreatedb,
-           rolcreaterole, rolreplication, rolbypassrls, rolpassword
+           rolcreaterole, rolreplication, rolbypassrls
       INTO STRICT actual_role
       FROM pg_roles
      WHERE rolname = expected_role.role_name;
@@ -25,9 +27,21 @@ BEGIN
     IF actual_role.rolcanlogin IS DISTINCT FROM expected_role.can_login
        OR actual_role.rolinherit IS DISTINCT FROM expected_role.can_inherit
        OR actual_role.rolsuper OR actual_role.rolcreatedb OR actual_role.rolcreaterole
-       OR actual_role.rolreplication OR actual_role.rolbypassrls
-       OR actual_role.rolpassword IS NOT NULL THEN
-      RAISE EXCEPTION 'role % violates bootstrap contract: login=% (expected %), inherit=% (expected %), superuser=%, createdb=%, createrole=%, replication=%, bypassrls=%, password_present=%', expected_role.role_name, actual_role.rolcanlogin, expected_role.can_login, actual_role.rolinherit, expected_role.can_inherit, actual_role.rolsuper, actual_role.rolcreatedb, actual_role.rolcreaterole, actual_role.rolreplication, actual_role.rolbypassrls, actual_role.rolpassword IS NOT NULL;
+       OR actual_role.rolreplication OR actual_role.rolbypassrls THEN
+      RAISE EXCEPTION 'role % violates bootstrap attributes: login=% (expected %), inherit=% (expected %), superuser=%, createdb=%, createrole=%, replication=%, bypassrls=%',
+        expected_role.role_name, actual_role.rolcanlogin, expected_role.can_login,
+        actual_role.rolinherit, expected_role.can_inherit, actual_role.rolsuper,
+        actual_role.rolcreatedb, actual_role.rolcreaterole, actual_role.rolreplication,
+        actual_role.rolbypassrls;
+    END IF;
+
+    IF EXISTS (
+      SELECT 1 FROM pg_authid
+       WHERE rolname = expected_role.role_name
+         AND rolpassword IS NOT NULL
+    ) THEN
+      RAISE EXCEPTION 'role % must not have a password before secure credential provisioning',
+        expected_role.role_name;
     END IF;
   END LOOP;
 END
