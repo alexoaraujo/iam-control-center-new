@@ -19,7 +19,13 @@ Memberships exatas:
 - `iam_migrator → iam_owner`: `INHERIT FALSE / SET TRUE / ADMIN FALSE`.
 - `iam_app_runtime_login → iam_app_runtime`: `INHERIT TRUE / SET FALSE / ADMIN FALSE`.
 - Nenhum membership direto `iam_migrator_login → iam_owner`.
-- Nenhum `ADMIN OPTION` e nenhuma membership para roles administrativas/provider-managed.
+- Nenhum `ADMIN OPTION` nas memberships concedidas aos principals IAM; nenhuma role IAM é membro de roles administrativas/provider-managed.
+
+### Observação específica do Neon
+
+No Development, o catálogo PostgreSQL mostrou cinco memberships adicionais cujo **member é `Iam-control-center_owner`**, cujo **grantor é `cloud_admin`** e que têm `ADMIN OPTION`. O Neon cria essas associações administrativas para o proprietário do database quando roles são criadas. Elas permitem a administração das roles pelo owner e **não são memberships concedidas a principals IAM** pelo bootstrap.
+
+Por isso, o teste do grafo IAM deve contar as associações cujo membro é uma das cinco roles IAM e validar exatamente as três arestas aprovadas. Não deve contar as associações gerenciadas pelo Neon em que `Iam-control-center_owner` é o membro. Essas associações provider-managed não devem ser revogadas como correção do teste.
 
 ## Principal administrativo do bootstrap
 
@@ -41,7 +47,7 @@ O SQL proposto exige que o principal seja uma sessão direta, não-superuser, co
 
 O workflow PostgreSQL 18 deve validar:
 - atributos de cada role e ausência de atributos administrativos;
-- grafo de memberships exatamente igual às três memberships aprovadas, sem associações adicionais;
+- grafo de memberships concedidas aos cinco principals IAM exatamente igual às três memberships aprovadas, sem associações adicionais; associações provider-managed em que o owner do database é o membro ficam fora desse grafo e são verificadas separadamente;
 - ACL do database: sem CONNECT/TEMP para PUBLIC, CREATE apenas para `iam_owner`, CONNECT explícito para os dois LOGINs e sem TEMP para roles IAM;
 - ausência de password hash no catálogo protegido `pg_authid` após bootstrap;
 - opções exatas das três memberships;
