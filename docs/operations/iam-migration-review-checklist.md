@@ -40,9 +40,9 @@ Status: **aguardando revisão; nenhuma execução autorizada**.
 **Não marcar PASS** para isolamento multi-tenant forte, Auth0 E2E, Neon runtime ou RLS real com base apenas no CI descartável.
 
 
-## Evidência read-only do Neon — 01/11/2026
+## Evidência read-only do Neon — 01/11/2026 (projeto histórico)
 
-Projeto `floral-surf-85783683`, database `iam_control_center`. Nenhuma instrução DDL/DML foi executada durante esta inspeção.
+Projeto `floral-surf-85783683`, database `iam_control_center`. Nenhuma instrução DDL/DML foi executada durante esta inspeção. Esta matriz de roles e memberships é evidência histórica exclusiva desse projeto; não deve ser reutilizada como inventário do projeto canônico atual.
 
 | Branch | ID | Estado | Relações de aplicação |
 |---|---|---|---|
@@ -58,6 +58,12 @@ Projeto `floral-surf-85783683`, database `iam_control_center`. Nenhuma instruç�
 - Não existe membership de `iam_migrator` em `iam_owner`, nem membership direta de `iam_migrator_login` em `iam_owner`. Logo, a cadeia proposta `iam_migrator_login → iam_migrator → iam_owner` **não está configurada**.
 - A sessão disponibilizada pelo conector está fixada em `Administrador`; a consulta read-only como `iam_app_runtime_login` foi rejeitada pelo conector por não permitir trocar a role da conexão. Portanto, não há prova de sessão runtime efetiva.
 - `Administrador` possui privilégios administrativos elevados, incluindo `CREATEROLE`, `CREATEDB`, `REPLICATION` e `BYPASSRLS`. Essa sessão não é evidência válida para isolamento RLS.
+
+### Inventário SQL autenticado do projeto canônico — 03/11/2026
+
+Projeto `wandering-wildflower-90908845` (`control-center`), database `Iam-control-center`. Consultas `SELECT` read-only autenticadas foram executadas em Development (`br-nameless-wave-b49yqod7`) e Preview (`br-broad-base-b4gnjmg5`). Ambas retornaram `current_user = Iam-control-center_owner`, somente o schema `public`, zero relations, zero roles com nomes `iam_%`/`app_runtime%` e zero memberships correspondentes. O inventário da API Neon também retornou somente a role owner.
+
+**Consequência:** no projeto canônico, `iam_owner`, `iam_migrator`, `iam_migrator_login`, `iam_app_runtime` e `iam_app_runtime_login` não estão provisionadas no snapshot consultado. A migration 0001 exige `current_user = iam_owner`, e a proposta de cadeia #59 pressupõe roles existentes; portanto, a execução está **BLOCKED antes mesmo da etapa de SET ROLE**. O próximo artefato deve ser uma proposta separada de bootstrap de roles, revisável e testada em PostgreSQL descartável, seguida de preflight read-only. Não executar grants, criar roles ou aplicar migration no Neon sem diff SQL específico e autorização separada. Production não foi consultada nem alterada.
 
 ### Resultado de CI no SHA da PR
 
