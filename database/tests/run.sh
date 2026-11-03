@@ -7,8 +7,11 @@ set -euo pipefail
 : "${MIGRATOR_TEST_PASSWORD:?MIGRATOR_TEST_PASSWORD must be a disposable CI-only password}"
 
 echo "Preparing a non-superuser database-owner fixture for the role bootstrap..."
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v bootstrap_password="$BOOTSTRAP_TEST_PASSWORD" \
-  -c "CREATE ROLE iam_bootstrap_admin LOGIN CREATEROLE NOSUPERUSER NOCREATEDB NOREPLICATION NOBYPASSRLS PASSWORD :'bootstrap_password';"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v bootstrap_password="$BOOTSTRAP_TEST_PASSWORD" <<'SQL'
+CREATE ROLE iam_bootstrap_admin
+  LOGIN CREATEROLE NOSUPERUSER NOCREATEDB NOREPLICATION NOBYPASSRLS
+  PASSWORD :'bootstrap_password';
+SQL
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -c "ALTER DATABASE iam_schema_test OWNER TO iam_bootstrap_admin;"
 
@@ -41,8 +44,9 @@ rollback_probe="$(psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 -c \
 test "$rollback_probe" = "0"
 
 echo "Setting a disposable password only for the authenticated CI migration test..."
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v migrator_password="$MIGRATOR_TEST_PASSWORD" \
-  -c "ALTER ROLE iam_migrator_login PASSWORD :'migrator_password';"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v migrator_password="$MIGRATOR_TEST_PASSWORD" <<'SQL'
+ALTER ROLE iam_migrator_login PASSWORD :'migrator_password';
+SQL
 
 echo "Running migration over an authenticated non-privileged LOGIN session..."
 {
