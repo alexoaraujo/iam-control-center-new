@@ -2,6 +2,10 @@
 
 Status: **análise arquitetural para revisão; nenhuma alteração aplicada ao Neon**.
 
+## Escopo do projeto canônico — inventário 03/11/2026
+
+A recomendação de cadeia abaixo é uma proposta de desenho, não uma descrição das roles atualmente existentes no projeto canônico `wandering-wildflower-90908845`. Consultas SQL read-only autenticadas em Development e Preview retornaram somente o schema `public`, zero relações, zero roles com nomes `iam_%`/`app_runtime%` e zero memberships correspondentes. Assim, `iam_owner`, `iam_migrator`, `iam_migrator_login` e as roles runtime precisam ser tratadas como **não provisionadas** no projeto canônico. A sequência proposta não pode ser executada como simples concessão adicional; primeiro é necessário desenhar e revisar um bootstrap completo de roles/ownership, sem copiar as roles históricas de `floral-surf-85783683`. Production não foi consultada nem alterada.
+
 ## Estado observado na migration 0001
 
 A migration exige `current_user = iam_owner`, cria os schemas `iam`, `audit` e `app_private` com `AUTHORIZATION iam_owner`, e cria as tabelas sob essa identidade efetiva. O ledger `iam.schema_migrations` fica sem FORCE RLS e sem grants ao runtime. As tabelas de negócio/auditoria recebem ENABLE + FORCE RLS, sem policies nem grants de runtime na baseline.
