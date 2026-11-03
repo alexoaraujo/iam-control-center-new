@@ -156,3 +156,44 @@ Nesta verificação:
 - Production permaneceu intocada.
 
 **Conclusão:** o Projeto B tem evidência SQL read-only útil da topologia IAM e do estado limpo em Development, mas não tem autenticação dos logins comprovada. O Projeto A é o projeto indicado atualmente pela variável Vercel `NEON_PROJECT_ID` em Development e Preview, porém não tem nesta auditoria evidência SQL equivalente. A seleção do projeto canônico precisa ser resolvida antes de conectar aplicação, credenciais e migration.
+
+
+## 8. Decisão do projeto canônico — 03/11/2026
+
+O usuário confirmou **wandering-wildflower-90908845** como projeto Neon canônico do IAM Control Center. Esta decisão substitui o estado “aguardando escolha” da seção 6 e o resumo executivo da seção 1.
+
+### 8.1 Estado da configuração após a decisão
+
+- Projeto canônico escolhido: **wandering-wildflower-90908845** (control-center), região `aws-us-east-2`, PostgreSQL 18.
+- Vercel `NEON_PROJECT_ID` continua com valor `floral-surf-85783683` em Development e Preview, conforme consulta sem descriptografar secrets.
+- Portanto, a decisão de arquitetura está **CONFIRMADA**, mas o roteamento da aplicação permanece **BLOCKED / DIVERGENTE** até alinhar as variáveis e os endpoints `DATABASE_URL` / `DATABASE_MIGRATION_URL` por ambiente.
+- Não há `NEON_PROJECT_ID` configurado em Production; Production não deve ser alterada nesta etapa.
+
+### 8.2 Verificação adicional de Development e Preview
+
+Consultas SQL somente leitura executadas em 03/11/2026, usando a conexão administrativa fornecida pelo Neon (sem revelar credenciais):
+
+| Verificação | Development `br-nameless-wave-b49yqod7` | Preview `br-broad-base-b4gnjmg5` |
+|---|---|---|
+| Database | `Iam-control-center` | `Iam-control-center` |
+| Owner | `Iam-control-center_owner` | `Iam-control-center_owner` |
+| Roles IAM catalogadas | `iam_owner`, `iam_migrator`, `iam_migrator_login`, `iam_app_runtime`, `iam_app_runtime_login` | Não encontradas |
+| LOGIN dedicado migrator/runtime | Sim, `rolcanlogin=true` | Não aplicável; roles ausentes |
+| `iam` / `audit` / `app_private` | Ausentes | Ausentes |
+| Auth real dos LOGINs dedicados | Não comprovada | Não configurada |
+
+Em Development, os atributos catalogais confirmam `iam_owner` e `iam_migrator` com `LOGIN=false` e `INHERIT=false`; `iam_migrator_login` com `LOGIN=true` e `INHERIT=false`; `iam_app_runtime` com `LOGIN=false` e `INHERIT=true`; e `iam_app_runtime_login` com `LOGIN=true` e `INHERIT=true`. Nenhuma dessas roles tem SUPERUSER, CREATEDB, CREATEROLE, REPLICATION ou BYPASSRLS.
+
+Memberships em Development: `iam_migrator_login → iam_migrator` (`SET=true`, `INHERIT=false`); `iam_migrator → iam_owner` (`SET=true`, `INHERIT=false`); `iam_app_runtime_login → iam_app_runtime` (`SET=false`, `INHERIT=true`).
+
+A API administrativa Neon listou apenas a role proprietária no Preview. A consulta SQL confirmou que não há as cinco roles IAM nem os schemas IAM nesse branch. Não provisionar automaticamente; o bootstrap Preview deve ser uma etapa separada, revisada e autorizada.
+
+### 8.3 Próximas ações com limites
+
+1. Alinhar `NEON_PROJECT_ID` de Development e Preview para `wandering-wildflower-90908845` e validar a identidade de cada `DATABASE_URL` e `DATABASE_MIGRATION_URL` sem exibir seus valores — **requer aprovação explícita para alterar variáveis/conexões Vercel**.
+2. Emitir credenciais dedicadas em Development e comprovar `SELECT 1` como `iam_app_runtime_login` e a cadeia migrator sem usar a role owner como sessão — **BLOCKED**.
+3. Preparar bootstrap revisável para Preview após validar a baseline e os privilégios necessários — **não executado**.
+4. Executar migration 0001 somente após revisão do runner, checksum, rollback, prova de runtime/RLS e autorização específica — **não autorizado**.
+5. Não alterar Production, não habilitar Neon Auth e não trocar Auth0 como IdP.
+
+Nenhuma variável, secret, role, membership, schema, policy ou database foi alterado nesta etapa. Nenhuma migration ou deploy foi executado.
