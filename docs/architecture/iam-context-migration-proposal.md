@@ -264,3 +264,57 @@ A sequência proposta, após aprovação do desenho:
 6. Executar primeiro em PostgreSQL descartável e depois, mediante autorização, em branch Neon isolada.
 
 **Checkpoint:** nenhum banco, role, secret, configuração externa ou ambiente foi alterado por esta proposta. Nenhum SQL executável foi criado. Production permanece fora do escopo.
+
+
+## 14. Reconciliação obrigatória com a migration 0001 atual — 03/11/2026
+
+Esta seção supersede os snapshots anteriores das seções 3.1, 3.2 e 5 quando houver divergência. A migration 0001 atual foi inspecionada diretamente na branch `chore/dependencies-refresh-reconciled`.
+
+### 14.1 Baseline real da migration 0001
+
+A migration atual:
+- cria os schemas `iam`, `audit` e `app_private`;
+- cria as tabelas IAM, audit e o ledger `iam.schema_migrations`;
+- habilita e força RLS em nove tabelas de negócio/auditoria: tenants, identities, memberships, roles, permissions, membership_roles, role_permissions, invitations e audit.events;
+- **não cria nenhuma policy RLS**;
+- **não cria função `app_private.current_tenant_id()` nem qualquer função de verificação de contexto**;
+- **não concede grants de runtime**;
+- mantém o ledger fora de RLS e sem grants para runtime/PUBLIC;
+- não instala extensão, não cria seed data e não escolhe mecanismo criptográfico.
+
+Logo, as referências anteriores a `app.tenant_id`, a uma função `current_tenant_id()`, a policies tenant-scoped existentes ou a grants runtime de SELECT/INSERT/UPDATE/DELETE não descrevem a migration 0001 atual. Elas são snapshots históricos de uma proposta anterior e não devem ser usadas como evidência de comportamento do schema atual.
+
+### 14.2 Consequência de segurança
+
+A baseline atual é **RLS default-deny**. Como não há policies nem grants runtime, a aplicação não tem autorização de dados implementada nesta migration. Isso é intencional até que o contexto confiável, as policies e os grants mínimos sejam aprovados numa migration corretiva separada.
+
+A futura migration 0002 deverá ser projetada a partir deste estado real, sem pressupor policies antigas para remover ou corrigir. Não copiar SQL de protótipos nem executar o harness de contexto como migration.
+
+### 14.3 Contrato de roles e assunção
+
+A migration 0001 exige:
+- `iam_owner`, `iam_migrator` e `iam_app_runtime` preexistentes, NOLOGIN e sem atributos administrativos;
+- `session_user = iam_migrator_login`, um LOGIN sem atributos administrativos;
+- `current_user = iam_owner` imediatamente antes da migration;
+- cadeia exata `iam_migrator_login → iam_migrator → iam_owner`, com INHERIT FALSE, SET TRUE e ADMIN FALSE nas duas memberships;
+- nenhuma membership direta `iam_migrator_login → iam_owner`;
+- ausência de caminho transitivo para `neon_superuser` ou outra role administrativa.
+
+No Neon canônico, o bootstrap de cinco roles e três memberships foi executado somente em Development. Não foi provisionada senha para `iam_migrator_login` nem `iam_app_runtime_login`; conexão real com esses principals permanece BLOCKED. Preview e Production não receberam bootstrap.
+
+### 14.4 Evidência do harness de contexto
+
+O harness IAM-CTX-POC-01 passou 16/16 assertions em PostgreSQL 18 descartável no SHA `a719561443ff542940ef13f9d7b49fa1f0de79da`, workflow run `41645901289`. O harness foi posteriormente integrado à branch de revisão da PR #69; a evidência continua limitada ao SHA/run indicado.
+
+O harness usa um registry opaco local como fixture. Não implementa HMAC, assinatura assimétrica, validação de token OIDC, rotação de chaves, anti-replay ou compatibilidade Neon. A decisão criptográfica continua PENDING. Nenhum resultado do harness autoriza criação de policies, grants, funções SECURITY DEFINER ou execução em Neon.
+
+### 14.5 Fonte de verdade e gates
+
+- Migration atual: `database/migrations/0001_initial_iam_schema.sql`.
+- Contrato SQL: `database/tests/0001_schema_contract.sql`.
+- Contrato operacional e sequência: `database/migrations/README.md`.
+- Estado de pooling: `docs/architecture/neon-connection-pooling.md`; pooler desabilitado nas três branches.
+- Estado do cliente Neon: scaffold server-only, sem query real e sem sessão autenticada demonstrada.
+- `DATABASE_MIGRATION_URL` está cadastrada no Vercel em Development e Preview segundo inventário sem descriptografia; finalidade/consumidor não comprovados. Não usar no runtime; qualquer remoção exige mudança externa separada.
+
+**Decisão atual:** manter esta PR como proposta documental. Não gerar migration 0002 executável até G2/G3, não alterar roles/grants/policies, não provisionar credenciais e não executar SQL no Neon. Production permanece não autorizada.
