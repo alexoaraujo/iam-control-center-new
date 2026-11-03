@@ -2,6 +2,10 @@
 
 Status: **proposta para revisão; não aplicada ao Neon**.
 
+## Limite de aplicabilidade — inventário canônico 03/11/2026
+
+Esta cadeia é somente um desenho para teste em PostgreSQL descartável. No projeto Neon canônico `wandering-wildflower-90908845`, o inventário SQL read-only autenticado de Development e Preview encontrou zero roles com nomes `iam_%`/`app_runtime%` e zero memberships correspondentes. Portanto, as roles desta proposta ainda não existem no alvo consultado e os comandos `GRANT` abaixo não são um delta operacional válido para esse projeto. Não executar no Neon. Antes, elaborar uma proposta revisável de bootstrap que defina criação, atributos, ownership, grants mínimos, rollback e validações; Production não foi consultada nem alterada.
+
 ## Objetivo
 
 Permitir que o login dedicado `iam_migrator_login` execute a migration baseline, cujo preflight exige `current_user = iam_owner`, sem tornar o login proprietário, sem conceder `BYPASSRLS` e sem envolver o runtime.
