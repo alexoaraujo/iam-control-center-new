@@ -20,12 +20,12 @@ The runtime/direct split below is an architecture target, not a statement that e
 
 | Consumer | Environment variable | Endpoint | Role | Pooling |
 |---|---|---|---|---|
-| Web application runtime | `DATABASE_URL` | Neon pooled hostname (`-pooler`) | `iam_app_runtime_login` (inherits `iam_app_runtime`) | Required |
+| Web application runtime | `DATABASE_URL` | Direct endpoint while pooler is disabled; pooled endpoint only after provider enablement and verification | `iam_app_runtime_login` (Development only; credentials not provisioned) | BLOCKED / direct test pending |
 | Migration runner / schema maintenance | `DATABASE_MIGRATION_URL` | Neon direct hostname (no `-pooler`) | Dedicated migration identity; never the app runtime role | Disabled |
-| Local development runtime | `DATABASE_URL` | Development branch pooled endpoint | Development runtime role | Preferred |
+| Local development runtime | `DATABASE_URL` | Development direct endpoint while pooler is disabled | Dedicated runtime login (not yet authenticated) | Direct endpoint only for controlled test |
 | CI schema tests | Ephemeral PostgreSQL service | Direct local service endpoint | Disposable test role | Not applicable |
 
-Both variables are secrets and must be configured only in the environment that needs them. The application runtime must not receive `DATABASE_MIGRATION_URL`. Do not copy a Production URL into Development or Preview.
+Both variables are secrets and must be configured only in the environment that needs them. The application runtime must not receive `DATABASE_MIGRATION_URL`. Do not copy a Production URL into Development or Preview. No runtime credential has been provisioned; do not configure the app for a successful Neon query until the login and endpoint are verified.
 
 ## Neon transaction-pooler contract
 
@@ -63,10 +63,10 @@ When a database client is implemented, keep liveness separate from readiness:
 
 ## Environment rollout and evidence
 
-1. Verify the runtime login role and its effective privileges independently in Development and Preview.
-2. Obtain each branch's pooled connection string from Neon Console and set it as the sensitive `DATABASE_URL` in the matching Vercel environment.
+1. Verify the runtime login role and its effective privileges independently in Development and Preview. Development has the IAM roles but no LOGIN credentials; Preview has not received the IAM role bootstrap.
+2. While `pooler_enabled=false`, do not request or configure a pooled URL. For a controlled Development test, use the direct endpoint and dedicated runtime login only after its credential is provisioned; enable pooling later as a separate approved change.
 3. Keep a separate direct URL only in a protected migration environment/secret store when a migration workflow is implemented.
-4. Verify the host form without revealing credentials: runtime URL contains `-pooler`; migration URL does not.
+4. Verify host form without revealing credentials: direct runtime URL has no `-pooler` while pooling is disabled; after provider enablement and a separate driver test, pooled runtime URL uses `-pooler`; migration URL remains direct.
 5. Deploy to Development, execute a real bounded database readiness check, and record branch, deployment URL, commit SHA, sanitized outcome, and role verification.
 6. Repeat on Preview with synthetic data.
 7. Production is out of scope until separately approved. Do not edit Production variables or run Production migrations as part of this rollout.
