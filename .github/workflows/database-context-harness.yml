@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: database-context-harness-\${{ github.ref }}
+  group: database-context-harness-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
