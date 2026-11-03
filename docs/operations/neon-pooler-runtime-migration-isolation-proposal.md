@@ -131,3 +131,16 @@ Cada evidência deve registrar SHA, run/deployment ID, ambiente, branch/database
 ## 7. Próxima ação
 
 Concluir a Etapa A com inventário de consumidores e inspeção de configuração do driver/ORM. Em seguida, apresentar um diff de código/workflow e uma proposta de SQL revisável. Não aplicar alterações de Vercel, Neon ou Auth0 sem autorização específica.
+
+
+## Atualização de estado canônico — 03/11/2026
+
+A revisão da PR #58 confirmou que o pooler permanece desabilitado (`pooler_enabled=false`) em Production, Development e Preview. Portanto, não usar hostname `-pooler` em `DATABASE_URL` até que o provider habilite o pooler e o driver seja testado separadamente. O uso de `@neondatabase/serverless` no scaffold não comprova compatibilidade com PgBouncer nem conectividade real.
+
+O bootstrap IAM foi executado somente em Development. As roles `iam_app_runtime` e `iam_app_runtime_login` existem nesse branch, mas não foi provisionada senha para `iam_app_runtime_login`; autenticação real permanece BLOCKED. Preview e Production não receberam bootstrap IAM. A migration 0001 não foi executada.
+
+A variável `DATABASE_MIGRATION_URL` aparece cadastrada no Vercel em Development e Preview, sem que seus valores tenham sido descriptografados. Isso contraria a arquitetura-alvo de manter a credencial de migration exclusivamente no executor protegido. Nenhuma remoção ou alteração foi feita; uma mudança futura exige inventário de consumidores, autorização e rollback próprio.
+
+O módulo `getSql()` permanece apenas factory server-only. Não executa query, não prova sessão, TLS, role, grants ou RLS. O endpoint health continua sendo configuração-only.
+
+**Decisão:** scaffold implementado; integração Neon real, pooling, migration executor e RLS permanecem BLOCKED/PENDING. Não alterar Vercel, Neon, Auth0 ou Production nesta proposta.
