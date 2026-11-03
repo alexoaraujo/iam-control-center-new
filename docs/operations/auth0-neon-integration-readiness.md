@@ -73,6 +73,8 @@ A role owner do Neon não deve ser usada como runtime. Não promover migration, 
 
 O projeto Vercel iam-control-center está no plano Hobby e usa Next.js / Node 24.x.
 
+**Elegibilidade comercial:** a auditoria histórica da PR #45 registrou que o plano Hobby não é elegível para hospedagem de SaaS comercial. Essa condição deve ser reconfirmada nos termos vigentes da Vercel antes de qualquer uso comercial. Enquanto o projeto permanecer no plano Hobby/free, não promover Production nem oferecer o serviço comercialmente se isso contrariar os termos. Não fazer upgrade nem iniciar teste pago automaticamente.
+
 Metadados de variáveis consultados sem descriptografar valores:
 - AUTH0_DOMAIN e AUTH0_CLIENT_ID: configuração não secreta nos três ambientes.
 - AUTH0_CLIENT_SECRET e AUTH0_SECRET: secrets separados por Development, Preview e Production.
