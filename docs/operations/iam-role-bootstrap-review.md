@@ -41,12 +41,15 @@ O SQL proposto exige que o principal seja uma sessão direta, não-superuser, co
 
 O workflow PostgreSQL 18 deve validar:
 - atributos de cada role e ausência de atributos administrativos;
+- grafo de memberships exatamente igual às três memberships aprovadas, sem associações adicionais;
+- ACL do database: sem CONNECT/TEMP para PUBLIC, CREATE apenas para `iam_owner`, CONNECT explícito para os dois LOGINs e sem TEMP para roles IAM;
 - ausência de password hash no catálogo protegido `pg_authid` após bootstrap;
 - opções exatas das três memberships;
 - `CREATE` somente para `iam_owner` e `CONNECT` explícito para os dois logins;
 - ausência de `CREATE` para runtime e logins;
 - rejeição de segunda execução (bootstrap não idempotente);
-- atomicidade/rollback de DDL de roles em uma transação descartável.
+- atomicidade/rollback de DDL de roles em uma transação descartável;
+- senhas aleatórias efêmeras no runner e senha de serviço derivada do identificador da execução, sem credenciais fixas versionadas.
 
 Esses testes validam o SQL em PostgreSQL 18 descartável. Não provam privilégios, memberships, autenticação ou comportamento RLS reais no Neon.
 
