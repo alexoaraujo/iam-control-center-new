@@ -26,6 +26,8 @@ PGPASSWORD="$BOOTSTRAP_TEST_PASSWORD" psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR
 echo "Checking role attributes, membership options, and database privileges..."
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f database/tests/0000_role_bootstrap_contract.sql
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f database/tests/role-assumption-contract.sql
 
 echo "Verifying bootstrap is non-idempotent and fails without partial role creation..."
 if PGPASSWORD="$BOOTSTRAP_TEST_PASSWORD" psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -61,4 +63,4 @@ echo "Running migration over an authenticated non-privileged LOGIN session..."
 # Schema contract checks intentionally run as the disposable test administrator
 # because they inspect ownership and exercise test-only grants/RLS behavior.
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/0001_schema_contract.sql
-echo "PASS: role bootstrap, rollback, migration chain, schema contract, and RLS default-deny tests"
+echo "PASS: role bootstrap, role-assumption contract, rollback, migration chain, schema contract, and RLS default-deny tests"
