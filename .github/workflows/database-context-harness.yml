@@ -1,0 +1,55 @@
+name: database-context-harness
+
+on:
+  pull_request:
+    paths:
+      - "database/prototypes/iam-context/**"
+      - ".github/workflows/database-context-harness.yml"
+  push:
+    branches:
+      - "feat/iam-context-harness-prototype"
+    paths:
+      - "database/prototypes/iam-context/**"
+      - ".github/workflows/database-context-harness.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-context-harness-\${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  postgres-18-context-harness:
+    name: postgres-18-context-harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: iam_context_harness
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d iam_context_harness"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/iam_context_harness
+      MIGRATOR_DATABASE_URL: postgresql://iam_migrator_login@localhost:5432/iam_context_harness
+      RUNTIME_DATABASE_URL: postgresql://iam_app_runtime_login@localhost:5432/iam_context_harness
+      MIGRATOR_TEST_PASSWORD: disposable-ci-only-migrator
+      RUNTIME_TEST_PASSWORD: disposable-ci-only-runtime
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Run isolated context harness
+        run: bash database/prototypes/iam-context/run.sh
