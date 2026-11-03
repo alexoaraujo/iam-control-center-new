@@ -13,11 +13,27 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   const previewHost = new URL(baseURL).hostname;
   const context = page.context();
 
+  // Record only non-sensitive navigation metadata for Vercel hosts. This lets
+  // CI distinguish an unexpected Preview alias from a missing route interception.
+  page.on("request", (request) => {
+    const requestUrl = new URL(request.url());
+    if (requestUrl.hostname.endsWith(".vercel.app")) {
+      console.log(
+        `Browser request: ${request.method()} ${requestUrl.hostname}${requestUrl.pathname}`
+      );
+    }
+  });
+
   // Vercel Trusted Sources requires the OIDC header on every request to the
-  // protected Preview origin, including the Auth0 callback navigation. Keep
-  // the token strictly scoped to that origin; never forward it to Auth0.
+  // exact protected Preview origin, including the Auth0 callback navigation.
+  // Never forward the token to Auth0 or to a different Vercel deployment.
   await context.route("**/*", async (route) => {
     const requestUrl = new URL(route.request().url());
+    if (requestUrl.hostname.endsWith(".vercel.app")) {
+      console.log(
+        `Playwright route: ${route.request().method()} ${requestUrl.hostname}${requestUrl.pathname}`
+      );
+    }
     if (requestUrl.hostname === previewHost) {
       const headers = {
         ...route.request().headers(),
