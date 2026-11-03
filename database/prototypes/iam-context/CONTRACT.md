@@ -34,6 +34,7 @@ The prototype does not cryptographically bind issuer, subject, identity, members
 | SEC-07 tenant row isolation with tenant A context | Executable RLS test | Harness behavior only |
 | SEC-10 runtime reads verifier registry | Executable permission-denial test | Test registry only |
 | SEC-14 context after transaction | Executable cleanup test | Harness behavior only |
-| SEC-05/06/08/09/11/12/13/15/16 | Not implemented in this prototype | PENDING |
+| SEC-05/06/08/09/11/12/13/15 | Not implemented in this prototype | PENDING |
+| SEC-16 | Runtime role attributes, membership closure, and effective database/schema/table privileges | Executable assertion against disposable LOGIN/group-role fixtures | Harness behavior only |
 
 No PASS in this document represents Neon, Auth0, Vercel, or production evidence.
