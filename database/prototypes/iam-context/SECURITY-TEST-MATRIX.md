@@ -20,7 +20,7 @@ No row in this matrix is evidence from Neon, Auth0, Vercel, or Production.
 | SEC-13 | Revocation races with concurrent write | Not implemented | PENDING | Two-session test after consistency semantics are approved |
 | SEC-14 | Context survives transaction boundary | Transaction-local GUC must disappear after COMMIT | IMPLEMENTED — test adapter | Repeat with connection reuse/pooling and actual verifier |
 | SEC-15 | Identity without membership enumerates tenants | Not implemented | PENDING | Query-level enumeration tests with no active membership |
-| SEC-16 | Runtime role has SUPERUSER/BYPASSRLS or inherited privilege | Partial role-attribute assertion only | PARTIAL | Add recursive membership closure and effective privilege assertions |
+| SEC-16 | Runtime role has SUPERUSER/BYPASSRLS or inherited privilege | Exact disposable LOGIN-to-group membership, recursive membership closure, prohibited role attributes, and effective database/schema/table privilege assertions | IMPLEMENTED — disposable fixture only | Repeat against actual Neon LOGIN and inspect all effective privileges and membership paths |
 
 ## Interpretation
 
