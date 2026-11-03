@@ -1,6 +1,10 @@
 name: IAM Context Harness (PostgreSQL 18)
 
 on:
+  pull_request:
+    paths:
+      - "iam-ctx-poc-01-harness/**"
+      - ".github/workflows/iam-context-harness.yml"
   push:
     branches:
       - IAM-CTX-POC-01-Harness-draft-0.1
@@ -19,7 +23,7 @@ concurrency:
 jobs:
   postgres-harness:
     name: PostgreSQL 18 disposable harness
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     services:
@@ -28,7 +32,7 @@ jobs:
         env:
           POSTGRES_DB: iam_ctx_test
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: iam_ctx_test_only
+          POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
         ports:
           - 5432:5432
         options: >-
@@ -48,7 +52,7 @@ jobs:
 
       - name: Verify disposable PostgreSQL server
         env:
-          PGPASSWORD: iam_ctx_test_only
+          PGPASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
           PGAPPNAME: iam-context-harness-disposable
         run: |
           set -euo pipefail
