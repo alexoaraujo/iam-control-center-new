@@ -153,3 +153,14 @@ Cada conclusão deve apontar SHA, run ID, job, ambiente e artefato. CI PostgreSQ
 Auth0 permanece como IdP. Neon permanece como PostgreSQL. O bootstrap de roles existe somente em Development, mas os LOGINs não possuem credenciais e a migration 0001 não foi executada. O cliente Neon está implementado como scaffold server-only, mas não executa query real. Preview está bloqueado por limite gratuito de deployment; Production não foi alterada.
 
 Próximas ações permitidas: continuar revisão de código e testes em branches Draft, preparar teste PostgreSQL descartável e atualizar a cadeia de PRs. Provisionamento de credenciais, execução da migration em Neon, alteração de roles, mudança de pooler e deploy Production exigem autorização específica separada.
+
+
+## 9. Adendo de reconciliação de identidade Neon — 03/11/2026
+
+A consulta mais recente identificou dois projetos Neon ativos. A variável Vercel `NEON_PROJECT_ID` aponta para `floral-surf-85783683` em Development e Preview, enquanto este documento e a operação SQL de roles referem-se a `wandering-wildflower-90908845`. Não assumir que os endpoints `DATABASE_URL` apontam para o mesmo projeto sem validar a identidade da conexão. A decisão de projeto canônico está BLOCKED até reconciliação explícita.
+
+A inspeção read-only de `wandering-wildflower-90908845` / Development confirmou os atributos catalogais e memberships da topologia IAM proposta, ACLs de database restritas e ausência dos schemas/tabelas IAM. Entretanto, tentativas de conexão como `iam_migrator_login` e `iam_app_runtime_login` retornaram `missing authentication credentials: required password`. Portanto, a topologia de roles está confirmada, mas a autenticação real permanece BLOCKED.
+
+Importante: o campo `authentication_method` da API administrativa Neon não deve ser usado como substituto dos atributos SQL `pg_roles.rolcanlogin` e `rolinherit`. Use consultas catalogais read-only para essas afirmações.
+
+Detalhes, IDs de branches e evidências: [neon-project-identity-reconciliation.md](./neon-project-identity-reconciliation.md).
