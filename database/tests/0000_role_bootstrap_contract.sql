@@ -112,8 +112,14 @@ BEGIN
      OR has_database_privilege('iam_app_runtime', current_database(), 'CREATE') THEN
     RAISE EXCEPTION 'LOGIN/runtime roles must not have database CREATE';
   END IF;
-  IF has_database_privilege('PUBLIC', current_database(), 'CONNECT')
-     OR has_database_privilege('PUBLIC', current_database(), 'TEMP') THEN
+  IF EXISTS (
+    SELECT 1
+      FROM pg_database d
+      CROSS JOIN LATERAL aclexplode(COALESCE(d.datacl, acldefault('d', d.datdba))) acl
+     WHERE d.datname = current_database()
+       AND acl.grantee = 0
+       AND acl.privilege_type IN ('CONNECT','TEMPORARY')
+  ) THEN
     RAISE EXCEPTION 'PUBLIC must not retain ambient CONNECT or TEMP on the IAM database';
   END IF;
   IF has_database_privilege('iam_owner', current_database(), 'CONNECT')
