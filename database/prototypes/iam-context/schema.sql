@@ -52,8 +52,9 @@ STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, ctx_lab
 AS $function$
-DECLARE resolved_tenant uuid;
-DECLARE supplied_token text;
+DECLARE
+  resolved_tenant uuid;
+  supplied_token text;
 BEGIN
   supplied_token := current_setting('app.context_token', true);
   IF supplied_token IS NULL OR supplied_token = '' THEN
