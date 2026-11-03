@@ -2,6 +2,15 @@
 
 Migrations are versioned, checksum-verified proposals. This PR replaces the unsafe prototype proposal; it is not authorization to execute.
 
+## Connection contract
+
+- Application runtime uses `DATABASE_URL` with TLS and the least-privileged runtime login.
+- Canonical Neon Production, Development and Preview currently report `pooler_enabled=false`; do not use a `-pooler` hostname until Neon confirms pooling is enabled and a real connection test passes.
+- While pooler remains disabled, use the verified direct endpoint for Development runtime testing only. The runtime identity and connection are still BLOCKED until a real credential and `SELECT 1` test exist.
+- Migration execution uses `DATABASE_MIGRATION_URL` with a direct endpoint and a dedicated migrator identity; never expose it to the web runtime.
+- The repository has no implemented migration runner. These variable names define a boundary, not proof of connectivity or execution.
+- See [Neon connection pooling](../../docs/architecture/neon-connection-pooling.md).
+
 ## Required review sequence
 
 1. Review `docs/architecture/iam-decisions.md` and `docs/architecture/tenant-context-rfc.md`.
