@@ -54,11 +54,17 @@ BEGIN
     RAISE EXCEPTION 'runtime membership closure reaches a prohibited role';
   END IF;
 
-  IF has_database_privilege(session_user, current_database(), 'CREATE')
-     OR has_schema_privilege(current_user, 'ctx_lab', 'CREATE')
-     OR has_table_privilege(current_user, 'ctx_lab.test_context_registry', 'SELECT')
-     OR NOT has_table_privilege(current_user, 'ctx_lab.tenant_records', 'SELECT') THEN
-    RAISE EXCEPTION 'runtime effective database/schema/table privileges violate the prototype contract';
+  IF has_database_privilege(session_user, current_database(), 'CREATE') THEN
+    RAISE EXCEPTION 'runtime LOGIN unexpectedly has database CREATE';
+  END IF;
+  IF has_schema_privilege(current_user, 'ctx_lab', 'CREATE') THEN
+    RAISE EXCEPTION 'runtime group unexpectedly has schema CREATE';
+  END IF;
+  IF has_table_privilege(current_user, 'ctx_lab.test_context_registry', 'SELECT') THEN
+    RAISE EXCEPTION 'runtime group unexpectedly has registry SELECT';
+  END IF;
+  IF NOT has_table_privilege(current_user, 'ctx_lab.tenant_records', 'SELECT') THEN
+    RAISE EXCEPTION 'runtime group is missing tenant_records SELECT';
   END IF;
 END
 $role_assert$;
