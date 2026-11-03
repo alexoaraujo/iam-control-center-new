@@ -34,18 +34,25 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
         `Playwright route: ${route.request().method()} ${requestUrl.hostname}${requestUrl.pathname}`
       );
     }
-    if (requestUrl.hostname === previewHost) {
-      const headers = {
-        ...route.request().headers(),
-        "x-vercel-trusted-oidc-idp-token": trustedOidcToken,
-      };
-      console.log(
-        `Trusted Sources header attached: ${route.request().method()} ${requestUrl.pathname}`
-      );
-      await route.continue({ headers });
+
+    if (requestUrl.hostname !== previewHost) {
+      await route.continue();
       return;
     }
-    await route.continue();
+
+    // Fetch only this Preview request with the Trusted Sources token and do not
+    // follow redirects in the API client. The browser receives the redirect,
+    // then the next Preview navigation is intercepted independently. This keeps
+    // the OIDC header off Auth0 and every other origin.
+    const headers = {
+      ...route.request().headers(),
+      "x-vercel-trusted-oidc-idp-token": trustedOidcToken,
+    };
+    console.log(
+      `Trusted Sources header attached: ${route.request().method()} ${requestUrl.pathname}`
+    );
+    const response = await route.fetch({ headers, maxRedirects: 0 });
+    await route.fulfill({ response });
   });
 
   // Anonymous access must enter the Auth0 Authorization Code + PKCE flow.
