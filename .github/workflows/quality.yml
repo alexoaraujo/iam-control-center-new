@@ -126,9 +126,9 @@ jobs:
       name: Preview
     permissions:
       contents: read
+      checks: read
       id-token: write
     env:
-      E2E_BASE_URL: https://iam-control-center-preview.vercel.app
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
     steps:
@@ -140,6 +140,45 @@ jobs:
         with:
           node-version: 24
 
+
+      - name: Resolve the exact Vercel Preview URL for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status" \\
+            --jq '[.statuses[] | select(.context == "Vercel")] | last | .state // "missing"')"
+          if [ "${status}" != "success" ]; then
+            echo "::error::Vercel Preview status is not successful for ${COMMIT_SHA} (state: ${status})."
+            exit 1
+          fi
+
+          checks="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/check-runs?per_page=100")"
+          preview_host="$(jq -er --arg sha "${COMMIT_SHA}" '
+            [ .check_runs[]
+              | select(
+                  .head_sha == $sha
+                  and .app.slug == "vercel"
+                  and .name == "Vercel Preview Comments"
+                  and .conclusion == "success"
+                )
+              | (.output.summary // "")
+              | try (capture("https://vercel\\.live/open-feedback/(?<host>[^/?#]+)").host) catch empty
+            ]
+            | unique
+            | if length == 1 then .[0] else error("Expected exactly one Vercel Preview URL for this SHA") end
+          ' <<< "${checks}")"
+
+          case "${preview_host}" in
+            *.vercel.app) ;;
+            *) echo "::error::Resolved Preview host is not a Vercel deployment hostname."; exit 1 ;;
+          esac
+
+          echo "Resolved exact-SHA Vercel Preview host: ${preview_host}"
+          printf 'E2E_BASE_URL=https://%s\\n' "${preview_host}" >> "$GITHUB_ENV"
 
       - name: Install isolated Playwright runner
         run: |
