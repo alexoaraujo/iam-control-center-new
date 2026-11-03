@@ -197,3 +197,34 @@ A API administrativa Neon listou apenas a role proprietária no Preview. A consu
 5. Não alterar Production, não habilitar Neon Auth e não trocar Auth0 como IdP.
 
 Nenhuma variável, secret, role, membership, schema, policy ou database foi alterado nesta etapa. Nenhuma migration ou deploy foi executado.
+
+## 9. Execução autorizada: alinhamento Vercel — 03/11/2026
+
+O usuário autorizou alinhar Vercel somente em Development e Preview, mantendo Production intocada. Foi atualizada a variável não secreta `NEON_PROJECT_ID` para `wandering-wildflower-90908845`, preservando os targets `development` e `preview`. A leitura posterior com `decrypt=false` confirmou o novo valor e os dois targets.
+
+### 9.1 Estado das conexões após inspeção de metadados
+
+A inspeção atual de variáveis (sem descriptografar valores) encontrou:
+
+| Variável | Target | Estado / observação |
+|---|---|---|
+| `NEON_PROJECT_ID` | Development, Preview | Atualizada para `wandering-wildflower-90908845`; confirmação read-back PASS |
+| `DATABASE_URL` | Development | Secret existente; comentário indica runtime mínimo em Development, mas endpoint/role real não pode ser confirmado sem testar credencial |
+| `DATABASE_URL` | Preview | Secret existente; comentário identifica `iam_app_runtime_dev_safe`; não corresponde ao nome da role runtime dedicado documentado no branch canônico; endpoint/role real não confirmado |
+| `DATABASE_URL` | Production | Secret existente; não lido nem alterado; Production intocada |
+| `DATABASE_MIGRATION_URL` | Nenhum target retornado na listagem atual | NOT CONFIGURED / não localizada nesta consulta; não criar automaticamente |
+
+### 9.2 Bloqueio para atualização de DATABASE_URL
+
+Em Development do projeto canônico, `iam_app_runtime_login` existe como LOGIN, mas a autenticação real não foi comprovada; as tentativas anteriores retornaram `missing authentication credentials: required password`. Em Preview, a role IAM runtime e a família de roles IAM estão ausentes. Portanto, não é seguro substituir os secrets `DATABASE_URL` com URLs administrativas, nem presumir que os secrets existentes apontam para o projeto/branch canônico.
+
+A autorização de alinhamento foi executada na parte não secreta (`NEON_PROJECT_ID`). A substituição das URLs foi suspensa até provisionar e comprovar credenciais runtime dedicadas em Development e preparar/revisar o bootstrap isolado de Preview. Nenhum secret foi descriptografado, exposto ou alterado. Não foi redefinida senha de role.
+
+### 9.3 Estado de execução
+
+- `NEON_PROJECT_ID` Development/Preview: **PASS — atualizado e confirmado**.
+- `DATABASE_URL` Development: **BLOCKED — credencial/endpoint não comprovados**.
+- `DATABASE_URL` Preview: **BLOCKED — roles IAM ausentes e secret não alinhado comprovadamente**.
+- `DATABASE_MIGRATION_URL`: **NOT CONFIGURED / não localizada na listagem atual**.
+- Production: **NOT TOUCHED**.
+- Migration, bootstrap Preview, role/password changes e deploy Production: **não executados**.
