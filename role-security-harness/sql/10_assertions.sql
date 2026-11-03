@@ -23,7 +23,7 @@ BEGIN
 END $role_attribute_matrix$;
 
 DO $membership_matrix$
-DECLARE item record; actual record;
+DECLARE item record; actual record; contract_membership_count integer;
 BEGIN
   FOR item IN SELECT * FROM (VALUES
     ('iam_migrator_login', 'iam_migrator', false, true, false),
