@@ -35,8 +35,9 @@ The workflow is deliberately privileged because it uses the Neon Management API 
 4. Accepts only a numeric PR number from the event and constructs the branch name internally.
 5. Ignores fork PRs.
 6. Checks the Production → Development ancestry and fails closed if it differs.
-7. Deletes only the exact branch whose parent is the expected Development branch.
-8. Never logs the API key or connection strings.
+7. Serializes all lifecycle events globally for this repository/project, reducing concurrent branch-quota races.
+8. Does not delete branches on close because deterministic name and parent do not prove automation provenance; the 14-day TTL remains the fallback.
+9. Never logs the API key or connection strings.
 
 Do not add checkout, scripts, artifacts, package installation, or commands sourced from PR content to this workflow.
 
@@ -69,7 +70,7 @@ This workflow runs only after it is merged into the default branch. Keep its PR 
 - retry/synchronize reuses the same branch;
 - expiration is set to approximately 14 days;
 - fork PR does not create a branch;
-- close does not delete a branch automatically; existing branches expire under their verified TTL,
+- close does not delete a branch automatically; existing branches retain their verified TTL,
 - missing configuration, wrong ancestry, quota exhaustion, and API failures fail closed.
 
 A successful GitHub workflow run proves only the lifecycle API operation for that event. It does not prove database runtime connectivity, tenant isolation, RLS, or application integration.
