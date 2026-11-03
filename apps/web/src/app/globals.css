@@ -173,7 +173,7 @@ h1,h2,h3,p { margin-top: 0; }
 }
 @media (max-width: 900px) {
   .sidebar { width: 74px; padding: 22px 9px 12px; align-items: center; }
-  .brand { padding: 0 0 28px; }.brand-copy,.workspace-label,.workspace-switcher > span:not(.workspace-avatar),.nav-caption,.nav-link:not(.nav-link--active) { display: none; }
+  .brand { padding: 0 0 28px; }.brand-copy,.workspace-label,.workspace-switcher > span:not(.workspace-avatar),.nav-caption { display: none; }
   .workspace-switcher { padding: 7px; margin-bottom: 20px; border: 0; background: transparent; }
   .nav-link { justify-content: center; width: 46px; padding: 0; font-size: 0; }
   .nav-icon { font-size: 17px; }
