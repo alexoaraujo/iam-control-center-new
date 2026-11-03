@@ -38,7 +38,18 @@ The current Neon branch inventory identifies:
 
 The previous structural inventory for this project reported only the `public` schema and no application namespaces/tables. The current API role listing exposed only the administrative owner role. These API/structural observations do **not** prove SQL-effective role attributes, grants, membership, RLS, or runtime login. Authenticated SQL inventory is still required; do not assume that roles or namespaces observed in `floral-surf-85783683` exist here.
 
-### 2.3 Common gates
+### 2.3 Authenticated SQL inventory — Development and Preview, 2026-11-03
+
+A read-only catalog query was executed successfully against the canonical project database `Iam-control-center` on both branches:
+
+| Environment | Branch ID | Effective SQL user | Non-system schemas | Relations in inspected schemas | Matching `iam_%` / `app_runtime%` roles | Matching memberships |
+|---|---|---|---:|---:|---:|---:|
+| Development | `br-nameless-wave-b49yqod7` | `Iam-control-center_owner` | `public` only | 0 | 0 | 0 |
+| Preview | `br-broad-base-b4gnjmg5` | `Iam-control-center_owner` | `public` only | 0 | 0 | 0 |
+
+The query inspected `pg_namespace`, `pg_class`, `pg_roles`, and `pg_auth_members`. It returned no application schemas or relations, no role names matching `iam_%` or `app_runtime%`, and no memberships involving those role-name patterns. This is direct SQL evidence for Development and Preview at the query time; it does not establish runtime readiness. In particular, there is no dedicated runtime login to authenticate with in these branches, no RLS policy evidence, and no table grants to validate. The owner session is administrative and must not be used as application runtime. Production was not queried or changed.
+
+### 2.4 Common gates
 
 - Migration execution is **BLOCKED** until canonical branch/database ownership and the owner/migrator role chain are independently reviewed and verified.
 - Runtime access is **BLOCKED** until the dedicated least-privilege login is tested as an actual session.
