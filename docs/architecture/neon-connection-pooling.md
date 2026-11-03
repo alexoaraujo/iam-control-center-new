@@ -2,7 +2,19 @@
 
 ## Status and scope
 
-This document defines the connection contract for IAM Control Center. It does not create a database client, rotate credentials, change a Neon role, update Vercel variables, or run migrations. Those actions require a separately reviewed implementation and environment-specific verification.
+This document defines the target connection contract for IAM Control Center. It does not create a database client, rotate credentials, change a Neon role, update Vercel variables, enable a pooler, or run migrations. Those actions require a separately reviewed implementation and environment-specific verification.
+
+## Live provider snapshot — 2026-11-03
+
+Canonical Neon project `wandering-wildflower-90908845` (`control-center`) was inspected through the provider API. The Production, Development, and Preview endpoints all reported `pooler_enabled: false`. The API returned pooled-hostname fields containing `-pooler`, but those hostnames are not evidence that PgBouncer is enabled. Therefore the required pooled runtime endpoint is **NOT CONFIGURED / BLOCKED** in all three branches at this snapshot. Do not put a `-pooler` hostname into `DATABASE_URL` until the provider confirms the pooler is enabled and a real connection test succeeds. No pooler setting was changed.
+
+| Branch | Branch ID | Endpoint ID | `pooler_enabled` | Current evidence |
+|---|---|---|---:|---|
+| Production | `br-dry-mouse-b4gyjp04` | `ep-dawn-river-b4xl1228` | `false` | API inventory only; no connection test |
+| Development | `br-nameless-wave-b49yqod7` | `ep-shiny-glade-b4awlrlg` | `false` | API inventory only; no connection test |
+| Preview | `br-broad-base-b4gnjmg5` | `ep-soft-night-b4xgjlht` | `false` | API inventory only; no connection test |
+
+The runtime/direct split below is an architecture target, not a statement that either URL is operational. The Vercel `DATABASE_URL` values were not decrypted or inspected; their hostname, branch, role, and pooling mode remain unverified. Production configuration was not changed.
 
 ## Connection classes
 
