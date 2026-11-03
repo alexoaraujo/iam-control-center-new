@@ -55,7 +55,6 @@ BEGIN
   END IF;
 
   IF has_database_privilege(session_user, current_database(), 'CREATE')
-     OR has_database_privilege(session_user, current_database(), 'TEMP')
      OR has_schema_privilege(current_user, 'ctx_lab', 'CREATE')
      OR has_table_privilege(current_user, 'ctx_lab.test_context_registry', 'SELECT')
      OR NOT has_table_privilege(current_user, 'ctx_lab.tenant_records', 'SELECT') THEN
