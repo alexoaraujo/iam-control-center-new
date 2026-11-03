@@ -16,7 +16,7 @@ concurrency:
 jobs:
   quality:
     name: quality
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     outputs:
       preview_required: ${{ steps.preview-impact.outputs.preview_required }}
@@ -80,7 +80,7 @@ jobs:
     name: preview-deployment
     if: github.event_name == 'pull_request' && needs.quality.outputs.preview_required == 'true'
     needs: quality
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     environment:
       name: Preview
