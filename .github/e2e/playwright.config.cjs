@@ -11,6 +11,9 @@ module.exports = defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL,
     headless: true,
+    // Service workers can take ownership of navigations before Playwright routing.
+    // Block them so every Preview request passes through the OIDC-scoped route.
+    serviceWorkers: "block",
     actionTimeout: 15000,
     navigationTimeout: 60000,
     trace: "off",
