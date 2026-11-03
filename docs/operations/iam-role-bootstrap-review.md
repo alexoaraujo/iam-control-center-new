@@ -1,6 +1,6 @@
 # IAM role bootstrap — revisão independente
 
-**Status: PROPOSTA / DRAFT / NÃO EXECUTAR NO NEON**
+**Status: PR DRAFT / TOPOLOGIA EM REVISÃO / BOOTSTRAP EXECUTADO SOMENTE EM DEVELOPMENT SOB AUTORIZAÇÃO ESPECÍFICA**
 
 Este bootstrap é pré-requisito separado da migration `0001_initial_iam_schema.sql`. A migration 0001 não cria roles: exige sessão autenticada como `iam_migrator_login`, a cadeia de `SET ROLE` para `iam_migrator` e `iam_owner`, e privilégio `CREATE` no database.
 
@@ -41,7 +41,7 @@ O SQL proposto exige que o principal seja uma sessão direta, não-superuser, co
 4. Não são concedidos privilégios de schema/tabela/sequence, policies RLS, permissões de aplicação, seeds, extensões ou ownership fora do necessário.
 5. Runtime permanece **default-deny**. A role runtime não poderá acessar as tabelas IAM até que grants mínimos e políticas RLS sejam objeto de uma revisão separada.
 6. O SQL não é chamado pela inicialização da aplicação, CI de deploy ou Vercel.
-7. Não executar em Production. Uma futura execução em Development exige autorização específica, snapshot/recovery verificado, revisão do SQL exato, validação do owner do database e plano para provisionar as credenciais sem expô-las.
+7. Não executar em Preview ou Production. O bootstrap foi executado em Development após autorização específica e preflight. O recovery point usado foi uma branch operacional copy-on-write, sem proteção contra exclusão e sem teste de restore; portanto, não equivale a snapshot restaurável comprovado.
 
 ## Testes
 
@@ -59,14 +59,14 @@ O workflow PostgreSQL 18 deve validar:
 
 Esses testes validam o SQL em PostgreSQL 18 descartável. Não provam privilégios, memberships, autenticação ou comportamento RLS reais no Neon.
 
-## Ordem de execução futura — bloqueada
+## Estado operacional após o bootstrap
 
-1. Revisar e aprovar esta topologia e o SQL.
-2. Confirmar snapshot/recovery e database/branch alvo.
-3. Autorizar separadamente o bootstrap em Development.
-4. Executar bootstrap sem senha e verificar catálogo/ownership por consultas read-only.
-5. Provisionar credenciais LOGIN por caminho seguro; nunca reutilizar a credencial administrativa.
-6. Validar autenticação real do migrator e do runtime, sem conceder grants de runtime ainda.
-7. Só então reavaliar a migration 0001 da PR #57. Preview e Production permanecem bloqueados até aprovações próprias.
+1. Bootstrap aplicado somente em Development, no database `Iam-control-center`, a partir do arquivo `database/bootstrap/0000_iam_roles.sql` com blob SHA `e39ec33c5b72e697acca4cff5d6675d190ff8d90`.
+2. As cinco roles IAM, as três memberships da topologia e os ACLs de database foram observados no catálogo após a execução.
+3. As cinco memberships adicionais em que `Iam-control-center_owner` é membro foram identificadas como associações gerenciadas pelo Neon (`grantor=cloud_admin`); não foram removidas.
+4. A validação inicial do teste falhou porque contava essas associações provider-managed. O teste foi corrigido para medir somente memberships concedidas aos cinco principals IAM. A correção ainda depende de CI no novo SHA.
+5. Credenciais LOGIN não foram provisionadas. Não configurar `DATABASE_URL` de aplicação com o principal administrativo.
+6. Não executar a migration `0001` até o CI atualizado, revisão da cadeia PR #57 → PR #80 e validação de autenticação do migrator estarem concluídos.
+7. Preview e Production continuam bloqueados e não foram alterados.
 
-**Nenhuma etapa desta lista foi executada no Neon por esta PR. Auth0 permanece como IdP; Neon Auth não faz parte desta proposta.**
+**Auth0 permanece como IdP; Neon Auth não faz parte desta arquitetura.**
