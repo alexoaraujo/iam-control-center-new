@@ -1,90 +1,122 @@
--- CI-only contract test. Disposable PostgreSQL 18 only; never run against Neon.
+-- CI-only assertions against the disposable PostgreSQL 18 bootstrap fixture.
+-- The bootstrap and migration runner create the roles and authenticate the
+-- migrator login. This file must not GRANT memberships or simulate a login.
 \set ON_ERROR_STOP on
 
--- iam_migrator_login is created once by bootstrap.sql with a disposable CI password.
-
-GRANT iam_owner TO iam_migrator
-  WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
-GRANT iam_migrator TO iam_migrator_login
-  WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
-
 DO $assert_role_attributes$
-DECLARE membership record;
+DECLARE
+  membership record;
 BEGIN
-  IF (SELECT NOT rolcanlogin OR rolinherit OR rolbypassrls
-      FROM pg_roles WHERE rolname='iam_migrator_login') THEN
-    RAISE EXCEPTION 'migrator login must be LOGIN, NOINHERIT, NOBYPASSRLS';
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_roles
+     WHERE rolname = 'iam_migrator_login'
+       AND rolcanlogin AND NOT rolinherit AND NOT rolsuper AND NOT rolbypassrls
+  ) THEN
+    RAISE EXCEPTION 'migrator login must be LOGIN, NOINHERIT, NOSUPERUSER, NOBYPASSRLS';
   END IF;
+
   IF EXISTS (
     SELECT 1 FROM pg_roles
-    WHERE rolname IN ('iam_owner','iam_migrator','iam_app_runtime')
-      AND (rolcanlogin OR rolbypassrls)
+     WHERE rolname IN ('iam_owner','iam_migrator','iam_app_runtime')
+       AND (rolcanlogin OR rolsuper OR rolbypassrls)
   ) THEN
-    RAISE EXCEPTION 'group roles must remain NOLOGIN/NOBYPASSRLS';
-  END IF;
-  IF NOT has_database_privilege('iam_owner',current_database(),'CREATE') THEN
-    RAISE EXCEPTION 'iam_owner must have CREATE on the target database';
+    RAISE EXCEPTION 'group roles must remain NOLOGIN/NOSUPERUSER/NOBYPASSRLS';
   END IF;
 
-  SELECT m.admin_option,m.inherit_option,m.set_option INTO membership
-  FROM pg_auth_members m
-  JOIN pg_roles member_role ON member_role.oid=m.member
-  JOIN pg_roles granted_role ON granted_role.oid=m.roleid
-  WHERE member_role.rolname='iam_migrator' AND granted_role.rolname='iam_owner';
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'iam_migrator -> iam_owner membership is missing';
-  END IF;
-  IF membership.admin_option OR membership.inherit_option OR NOT membership.set_option THEN
-    RAISE EXCEPTION 'iam_migrator -> iam_owner membership must be ADMIN FALSE, INHERIT FALSE, SET TRUE';
+  IF NOT has_database_privilege('iam_owner', current_database(), 'CREATE')
+     OR has_database_privilege('iam_migrator_login', current_database(), 'CREATE')
+     OR has_database_privilege('iam_app_runtime_login', current_database(), 'CREATE') THEN
+    RAISE EXCEPTION 'database CREATE must be held only by iam_owner';
   END IF;
 
-  SELECT m.admin_option,m.inherit_option,m.set_option INTO membership
-  FROM pg_auth_members m
-  JOIN pg_roles member_role ON member_role.oid=m.member
-  JOIN pg_roles granted_role ON granted_role.oid=m.roleid
-  WHERE member_role.rolname='iam_migrator_login' AND granted_role.rolname='iam_migrator';
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'iam_migrator_login -> iam_migrator membership is missing';
+  SELECT m.admin_option, m.inherit_option, m.set_option
+    INTO membership
+    FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid = m.member
+    JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+   WHERE member_role.rolname = 'iam_migrator'
+     AND granted_role.rolname = 'iam_owner';
+  IF NOT FOUND OR membership.admin_option OR membership.inherit_option OR NOT membership.set_option THEN
+    RAISE EXCEPTION 'iam_migrator -> iam_owner must be ADMIN FALSE, INHERIT FALSE, SET TRUE';
   END IF;
-  IF membership.admin_option OR membership.inherit_option OR NOT membership.set_option THEN
-    RAISE EXCEPTION 'iam_migrator_login -> iam_migrator membership must be ADMIN FALSE, INHERIT FALSE, SET TRUE';
+
+  SELECT m.admin_option, m.inherit_option, m.set_option
+    INTO membership
+    FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid = m.member
+    JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+   WHERE member_role.rolname = 'iam_migrator_login'
+     AND granted_role.rolname = 'iam_migrator';
+  IF NOT FOUND OR membership.admin_option OR membership.inherit_option OR NOT membership.set_option THEN
+    RAISE EXCEPTION 'iam_migrator_login -> iam_migrator must be ADMIN FALSE, INHERIT FALSE, SET TRUE';
   END IF;
 
   IF EXISTS (
-    SELECT 1 FROM pg_auth_members m
-    JOIN pg_roles member_role ON member_role.oid=m.member
-    JOIN pg_roles granted_role ON granted_role.oid=m.roleid
-    WHERE member_role.rolname='iam_migrator_login' AND granted_role.rolname='iam_owner'
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = 'iam_migrator_login'
+       AND granted_role.rolname = 'iam_owner'
   ) THEN
     RAISE EXCEPTION 'migrator login must use the intermediary iam_migrator role';
   END IF;
-  IF pg_has_role('iam_migrator_login','iam_owner','USAGE') THEN
+
+  IF pg_has_role('iam_migrator_login', 'iam_owner', 'USAGE') THEN
     RAISE EXCEPTION 'migrator login must not inherit owner privileges';
   END IF;
-  IF pg_has_role('iam_app_runtime','iam_owner','MEMBER')
-     OR pg_has_role('iam_app_runtime','iam_migrator','MEMBER') THEN
+  IF NOT pg_has_role('iam_migrator_login', 'iam_owner', 'MEMBER') THEN
+    RAISE EXCEPTION 'migrator login must retain the explicit transitive SET path to owner';
+  END IF;
+  IF pg_has_role('iam_app_runtime_login', 'iam_owner', 'MEMBER')
+     OR pg_has_role('iam_app_runtime_login', 'iam_migrator', 'MEMBER')
+     OR pg_has_role('iam_app_runtime', 'iam_owner', 'MEMBER')
+     OR pg_has_role('iam_app_runtime', 'iam_migrator', 'MEMBER') THEN
     RAISE EXCEPTION 'runtime must not be a member of owner or migrator';
   END IF;
-END $assert_role_attributes$;
+END
+$assert_role_attributes$;
 
-SET SESSION AUTHORIZATION iam_migrator_login;
-SET ROLE iam_migrator;
-DO $assert_migrator_role$
+DO $assert_no_unexpected_iam_edges$
+DECLARE edge_count integer;
 BEGIN
-  IF session_user <> 'iam_migrator_login' OR current_user <> 'iam_migrator' THEN
-    RAISE EXCEPTION 'first role transition failed: session_user %, current_user %',
-      session_user,current_user;
+  SELECT count(*)
+    INTO edge_count
+    FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid = m.member
+    JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+   WHERE member_role.rolname IN (
+           'iam_owner','iam_migrator','iam_migrator_login',
+           'iam_app_runtime','iam_app_runtime_login'
+         );
+  IF edge_count <> 3 THEN
+    RAISE EXCEPTION 'expected exactly three memberships granted to IAM principals; found %', edge_count;
   END IF;
-END $assert_migrator_role$;
+  IF EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+     WHERE member_role.rolname IN (
+       'iam_owner','iam_migrator','iam_migrator_login',
+       'iam_app_runtime','iam_app_runtime_login'
+     )
+       AND m.admin_option
+  ) THEN
+    RAISE EXCEPTION 'IAM principals must not hold ADMIN OPTION memberships';
+  END IF;
+END
+$assert_no_unexpected_iam_edges$;
 
-SET ROLE iam_owner;
-DO $assert_owner_role$
+DO $assert_session_role_contract$
 BEGIN
-  IF session_user <> 'iam_migrator_login' OR current_user <> 'iam_owner' THEN
-    RAISE EXCEPTION 'owner role transition failed: session_user %, current_user %',
-      session_user,current_user;
+  -- The runner executes migration 0001 through an authenticated
+  -- iam_migrator_login session and performs both SET ROLE transitions.
+  -- This block runs as the disposable test administrator and checks the
+  -- membership/privilege contract; it does not impersonate that session.
+  IF NOT pg_has_role('iam_migrator_login', 'iam_migrator', 'MEMBER')
+     OR NOT pg_has_role('iam_migrator', 'iam_owner', 'MEMBER') THEN
+    RAISE EXCEPTION 'migrator role-assumption chain is incomplete';
   END IF;
-  IF (SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user) THEN
-    RAISE EXCEPTION 'iam_owner must not have BYPASSRLS';
-  END IF;
-END $assert_owner_role$;
+  RAISE NOTICE 'PASS local migrator role-assumption contract: exact memberships, no inherited owner privileges, no runtime escalation';
+END
+$assert_session_role_contract$;
