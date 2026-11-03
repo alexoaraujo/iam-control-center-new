@@ -44,6 +44,8 @@ jobs:
           --health-retries 20
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/iam_schema_test
+      MIGRATOR_DATABASE_URL: postgresql://iam_migrator_login@localhost:5432/iam_schema_test
+      MIGRATOR_TEST_PASSWORD: disposable-ci-only
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
