@@ -1,10 +1,23 @@
 \set ON_ERROR_STOP on
 
--- Refuse the default postgres database before creating cluster-level roles.
+-- This fixture creates cluster-level roles. Fail closed unless the target is
+-- the disposable PostgreSQL 18 service used by this harness.
 DO $$
+DECLARE
+  v_version integer := current_setting('server_version_num')::integer;
+  v_application_name text := current_setting('application_name', true);
 BEGIN
-  IF current_database() = 'postgres' THEN
-    RAISE EXCEPTION 'Refusing to install fixture in default postgres database';
+  IF current_database() <> 'iam_ctx_test' THEN
+    RAISE EXCEPTION 'Refusing fixture outside database iam_ctx_test; found %', current_database();
+  END IF;
+  IF v_version < 180000 OR v_version >= 190000 THEN
+    RAISE EXCEPTION 'Refusing fixture outside PostgreSQL 18; found %', current_setting('server_version');
+  END IF;
+  IF session_user <> 'postgres' THEN
+    RAISE EXCEPTION 'Refusing fixture unless connected as disposable service principal postgres';
+  END IF;
+  IF v_application_name <> 'iam-context-harness-disposable' THEN
+    RAISE EXCEPTION 'Refusing fixture without explicit disposable harness application_name';
   END IF;
 END $$;
 
@@ -143,7 +156,6 @@ SET search_path = pg_catalog
 AS $fn$
   SELECT 'privileged fixture operation'::text
 $fn$;
-
 
 CREATE TABLE iam_ctx.identities (
   identity_id text PRIMARY KEY,
