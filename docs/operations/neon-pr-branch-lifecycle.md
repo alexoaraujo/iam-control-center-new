@@ -9,9 +9,9 @@ Create one short-lived Neon branch for each same-repository pull request, using 
 | Name | GitHub location | Purpose |
 |---|---|---|
 | `NEON_API_KEY` | Repository Actions secret | Neon Management API authentication |
-| `NEON_PROJECT_ID` | Repository Actions variable | Neon project selector |
+| `NEON_PROJECT_ID` | Repository Actions variable | Must equal the canonical project ID `wandering-wildflower-90908845`; workflow rejects any other value |
 
-The Neon GitHub integration previously installed these names. Confirm their presence in repository Settings before enabling the workflow. Never print, copy into logs, or commit secret values.
+The Neon GitHub integration previously installed these names. Confirm their presence in repository Settings before enabling the workflow. The workflow also compares `NEON_PROJECT_ID` to the canonical project ID `wandering-wildflower-90908845`. Never print, copy into logs, or commit secret values.
 
 ## Lifecycle
 
@@ -21,7 +21,7 @@ The Neon GitHub integration previously installed these names. Confirm their pres
 - Parent: the unique branch named `development`, which must itself be a child of the unique default Production branch.
 - Idempotency: an existing branch is reused only when its parent is the expected Development branch. It is never replaced automatically.
 - Expiration: 14 days, refreshed on open/reopen/synchronize.
-- Close: delete only the exact PR branch after verifying its parent and confirming it has no children; then verify that it is absent.
+- Close: automatic deletion is intentionally disabled. A deterministic branch name and parent do not prove that the workflow created the branch. Existing branches retain their previously assigned 14-day expiration; manual cleanup requires a separate provenance check.
 - Capacity: fail closed at 10 total project branches (current Free-plan limit). Permanent branches are never removed to make room.
 - No migration, seed, compute endpoint, connection-string export, Vercel environment update, or Production operation is performed.
 
@@ -56,7 +56,7 @@ The Neon API inspection connected as `Administrador`; it does not prove the appl
 
 ## Capacity and cost
 
-The workflow creates a branch without a compute endpoint. It does not automatically provide a per-PR `DATABASE_URL` to Vercel. That is a separate integration and must be designed with scoped credentials and explicit environment handling. The Free-plan ceiling is 10 branches per project; the workflow checks the current count before creation and Neon remains the authoritative quota enforcement if concurrent PR events race. A rejected create operation fails the job; no permanent branch is removed. API requests have bounded connection and total timeouts.
+The workflow creates a branch without a compute endpoint. It does not automatically provide a per-PR `DATABASE_URL` to Vercel. That is a separate integration and must be designed with scoped credentials and explicit environment handling. The Free-plan ceiling is 10 branches per project; the workflow checks the current count before creation and serializes lifecycle events globally to reduce quota races. Neon remains the authoritative quota enforcement. A rejected create operation fails the job; no permanent branch is removed. API requests have bounded connection and total timeouts.
 
 Development currently has an active read-write compute endpoint. The lifecycle workflow does not create additional endpoints for PR branches.
 
@@ -69,7 +69,7 @@ This workflow runs only after it is merged into the default branch. Keep its PR 
 - retry/synchronize reuses the same branch;
 - expiration is set to approximately 14 days;
 - fork PR does not create a branch;
-- close deletes only the matching child branch;
+- close does not delete a branch automatically; existing branches expire under their verified TTL,
 - missing configuration, wrong ancestry, quota exhaustion, and API failures fail closed.
 
 A successful GitHub workflow run proves only the lifecycle API operation for that event. It does not prove database runtime connectivity, tenant isolation, RLS, or application integration.
