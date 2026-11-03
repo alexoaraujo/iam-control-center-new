@@ -164,3 +164,27 @@ A inspeção read-only de `wandering-wildflower-90908845` / Development confirmo
 Importante: o campo `authentication_method` da API administrativa Neon não deve ser usado como substituto dos atributos SQL `pg_roles.rolcanlogin` e `rolinherit`. Use consultas catalogais read-only para essas afirmações.
 
 Detalhes, IDs de branches e evidências: [neon-project-identity-reconciliation.md](./neon-project-identity-reconciliation.md).
+
+
+## 10. Decisão canônica e reconciliação pós-seleção — 03/11/2026
+
+O usuário confirmou `wandering-wildflower-90908845` como projeto Neon canônico. Essa decisão substitui o status “decisão de identidade BLOCKED” descrito no adendo da seção 9. A arquitetura de identidade está decidida; a configuração operacional da aplicação ainda não está alinhada.
+
+### 10.1 Divergência Vercel ainda ativa
+
+Consulta de metadados Vercel com `decrypt=false` confirmou:
+- `NEON_PROJECT_ID=floral-surf-85783683` nos ambientes Development e Preview.
+- Nenhuma variável `NEON_PROJECT_ID` em Production.
+- `DATABASE_URL` existe em Development, Preview e Production; `DATABASE_MIGRATION_URL` existe em Development e Preview. Os valores secretos não foram descriptografados, portanto a identidade de projeto/branch desses endpoints não está confirmada por esta consulta.
+
+Resultado: **BLOCKED — roteamento ainda aponta para o projeto antigo em Development e Preview**. Não afirmar que o app está conectado ao projeto canônico até corrigir e testar as conexões.
+
+### 10.2 Estado de roles por branch
+
+Read-only SQL em `wandering-wildflower-90908845` confirmou em Development as cinco roles IAM, seus atributos `pg_roles` e memberships documentadas na seção 2.1. Em Preview, a API de roles retornou somente `Iam-control-center_owner`; consulta catalogal confirmou que as roles IAM e schemas `iam`, `audit` e `app_private` estão ausentes. Portanto, Preview ainda requer bootstrap próprio, que não foi executado.
+
+As consultas de autenticação como `iam_migrator_login` e `iam_app_runtime_login` anteriormente retornaram `missing authentication credentials: required password`. A autenticação real continua **BLOCKED**.
+
+### 10.3 Limite de execução
+
+Nenhuma alteração foi feita em Vercel, Neon ou Auth0. O próximo passo operacional é obter aprovação específica para atualizar `NEON_PROJECT_ID` em Development e Preview e alinhar os endpoints secretos com as branches Development e Preview do projeto canônico. Não alterar Production, não descriptografar/exibir secrets, não executar migrations e não habilitar Neon Auth. Auth0 continua sendo o único provedor de identidade.
