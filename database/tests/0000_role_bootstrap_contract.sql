@@ -83,6 +83,23 @@ BEGIN
     RAISE EXCEPTION 'IAM role memberships do not match the reviewed topology';
   END IF;
 
+  IF (
+    SELECT count(*)
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname IN (
+       'iam_owner','iam_migrator','iam_migrator_login',
+       'iam_app_runtime','iam_app_runtime_login'
+     )
+        OR granted_role.rolname IN (
+       'iam_owner','iam_migrator','iam_migrator_login',
+       'iam_app_runtime','iam_app_runtime_login'
+     )
+  ) <> 3 THEN
+    RAISE EXCEPTION 'IAM bootstrap must create exactly the three reviewed memberships and no others';
+  END IF;
+
   IF EXISTS (
     SELECT 1
       FROM pg_auth_members m
