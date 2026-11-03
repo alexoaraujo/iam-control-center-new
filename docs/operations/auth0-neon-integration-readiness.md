@@ -14,27 +14,35 @@ Scope: IAM Control Center only. Auth0 remains the sole OIDC identity provider. N
 - The current web package does not declare `pg` or another PostgreSQL driver.
 - The repository's proposed migration is in PR #57 and must remain a review artifact until ownership and role assumptions are proven.
 
-## 2. Verified Neon state and blockers
+## 2. Neon state — historical evidence separated from canonical project
+
+### 2.1 Historical project (evidence dated 01/11/2026)
 
 Project: `floral-surf-85783683`; database: `iam_control_center`.
 
-Branches:
-- `development` — ready
-- `preview` — ready
-- `production` — ready and primary
+The prior schema comparison and PR #57 review checklist reported namespaces `iam`, `audit`, and `app_private`, no application tables, and the role-chain observations below. This is historical evidence for that project only; it must not be projected onto the current canonical project. Migration 0001's clean-database preflight must not be weakened based on this document.
 
-The schema comparison reports the namespaces `iam`, `audit`, and `app_private` already exist on the branches inspected, while the PR #57 review checklist records no application tables. This conflicts with migration 0001's strict clean-database preflight, which rejects any pre-existing target namespace. Do not weaken or bypass that preflight until ownership and namespace contents are checked directly.
+- `iam_owner`, `iam_migrator`, and `iam_app_runtime` were recorded as group roles with NOLOGIN/NOBYPASSRLS.
+- `iam_migrator_login` could assume `iam_migrator`; no membership path from migrator to `iam_owner` was observed.
+- The SQL connector session was fixed to the administrative principal and did not prove a real runtime login session.
+- The administrative principal had BYPASSRLS and was not acceptable as application runtime.
 
-PR #57's review checklist records:
-- `iam_owner`, `iam_migrator`, and `iam_app_runtime` as group roles with NOLOGIN/NOBYPASSRLS;
-- `iam_migrator_login` can assume `iam_migrator`, but no membership path from migrator to `iam_owner` was observed;
-- the available SQL connector session is fixed to the administrative principal and cannot prove a real runtime login session;
-- the administrative principal has BYPASSRLS and is not acceptable as application runtime.
+### 2.2 Canonical project (current target)
 
-Therefore:
-- migration execution is **BLOCKED** until the owner/migrator role chain is explicitly reviewed and verified;
-- runtime access is **BLOCKED** until the dedicated login is tested as an actual session;
-- no role membership change is authorized by this document;
+Project: `wandering-wildflower-90908845` (`control-center`); database: `Iam-control-center`.
+
+The current Neon branch inventory identifies:
+- `production` — `br-dry-mouse-b4gyjp04` (primary/default);
+- `development` — `br-nameless-wave-b49yqod7`;
+- `preview` — `br-broad-base-b4gnjmg5`.
+
+The previous structural inventory for this project reported only the `public` schema and no application namespaces/tables. The current API role listing exposed only the administrative owner role. These API/structural observations do **not** prove SQL-effective role attributes, grants, membership, RLS, or runtime login. Authenticated SQL inventory is still required; do not assume that roles or namespaces observed in `floral-surf-85783683` exist here.
+
+### 2.3 Common gates
+
+- Migration execution is **BLOCKED** until canonical branch/database ownership and the owner/migrator role chain are independently reviewed and verified.
+- Runtime access is **BLOCKED** until the dedicated least-privilege login is tested as an actual session.
+- No role membership change is authorized by this document.
 - Production must remain untouched.
 
 ## 3. Target application architecture
@@ -52,7 +60,7 @@ Therefore:
 
 - Use the `pg` / node-postgres driver in the Node.js Vercel runtime, not an Edge runtime.
 - Application traffic uses Neon's pooled connection string in `DATABASE_URL` (hostname includes `-pooler`).
-- Schema migration tooling, when separately approved, uses a direct non-pooled connection in `DATABASE_URL_UNPOOLED`.
+- Schema migration tooling, when separately approved, uses a direct non-pooled connection in `DATABASE_MIGRATION_URL`.
 - Keep both values server-side only. Never prefix them with `NEXT_PUBLIC_`, print them in logs, expose them through health responses, or commit them.
 - Use a bounded connection pool and deterministic shutdown/cleanup appropriate to the deployed runtime. Do not instantiate a new pool per request.
 - Do not add ORM or migration tooling until the repository's migration ownership workflow is approved; keep SQL migrations as the single schema source of truth unless a separate architecture decision changes that.
