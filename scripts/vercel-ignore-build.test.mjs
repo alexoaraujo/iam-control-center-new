@@ -14,6 +14,13 @@ test("skips Preview for documentation-only changes", () => {
   );
 });
 
+test("builds Preview when the Auth0 CI workflow changes", () => {
+  assert.equal(
+    hasBuildRelevantChanges([".github/workflows/quality.yml"]),
+    true,
+  );
+});
+
 test("builds Preview when web application code changes", () => {
   assert.equal(
     shouldBuild({
