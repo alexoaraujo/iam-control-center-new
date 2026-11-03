@@ -68,7 +68,7 @@ jobs:
 
       - name: Install isolated IAM context fixture
         env:
-          PGPASSWORD: iam_ctx_test_only
+          PGPASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
           PGAPPNAME: iam-context-harness-disposable
         run: |
           set -euo pipefail
@@ -78,7 +78,7 @@ jobs:
 
       - name: Execute SEC-01 through SEC-16
         env:
-          PGPASSWORD: iam_ctx_test_only
+          PGPASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
           PGAPPNAME: iam-context-harness-disposable
         run: |
           set -euo pipefail
