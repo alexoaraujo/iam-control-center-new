@@ -112,6 +112,19 @@ BEGIN
      OR has_database_privilege('iam_app_runtime', current_database(), 'CREATE') THEN
     RAISE EXCEPTION 'LOGIN/runtime roles must not have database CREATE';
   END IF;
+  IF has_database_privilege('PUBLIC', current_database(), 'CONNECT')
+     OR has_database_privilege('PUBLIC', current_database(), 'TEMP') THEN
+    RAISE EXCEPTION 'PUBLIC must not retain ambient CONNECT or TEMP on the IAM database';
+  END IF;
+  IF has_database_privilege('iam_owner', current_database(), 'CONNECT')
+     OR has_database_privilege('iam_owner', current_database(), 'TEMP')
+     OR has_database_privilege('iam_migrator', current_database(), 'CONNECT')
+     OR has_database_privilege('iam_migrator', current_database(), 'TEMP')
+     OR has_database_privilege('iam_app_runtime', current_database(), 'TEMP')
+     OR has_database_privilege('iam_migrator_login', current_database(), 'TEMP')
+     OR has_database_privilege('iam_app_runtime_login', current_database(), 'TEMP') THEN
+    RAISE EXCEPTION 'IAM roles must not have database CONNECT (except LOGINs) or TEMP';
+  END IF;
 END
 $database_privileges$;
 
