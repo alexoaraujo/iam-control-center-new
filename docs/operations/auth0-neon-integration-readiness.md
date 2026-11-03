@@ -1,178 +1,153 @@
-# Auth0 + Neon PostgreSQL — readiness and execution gates
+# Auth0 + Neon PostgreSQL — prontidão e gates de execução
 
-Status: **DRAFT / implementation blocked on database ownership and role-chain evidence**.
+**Status: PARCIAL / EXECUÇÃO DA MIGRATION BLOQUEADA.**
 
-Date: 2026-11-01  
-Scope: IAM Control Center only. Auth0 remains the sole OIDC identity provider. Neon provides PostgreSQL only. Do not enable Neon Auth or Managed Better Auth.
+**Data de revisão:** 03/11/2026  
+**Projeto:** IAM Control Center  
+**Neon canônico:** wandering-wildflower-90908845  
+**Decisão de identidade:** Auth0 permanece como único provedor OIDC. Neon fornece PostgreSQL. Neon Auth / Managed Better Auth não deve ser habilitado.
 
-## 1. Verified repository state
+## 1. Estado atual verificado no repositório
 
-- The web application uses `@auth0/nextjs-auth0@4.33.0`.
-- `apps/web/src/lib/auth0.ts` constructs `Auth0Client` from server-side environment variables.
-- `.env.example` already declares `DATABASE_URL`, but no PostgreSQL driver or database access module is present in the inspected source.
-- `GET /api/health` currently reports `status: scaffold` and only checks whether Auth0 and database configuration values are present. It does not perform a database connection or OIDC flow.
-- The current web package does not declare `pg` or another PostgreSQL driver.
-- The repository's proposed migration is in PR #57 and must remain a review artifact until ownership and role assumptions are proven.
+- O web app utiliza @auth0/nextjs-auth0 4.33.0.
+- apps/web/src/lib/auth0.ts constrói Auth0Client no servidor.
+- A PR #69 adiciona @neondatabase/serverless 1.2.0 e apps/web/src/lib/db.ts como módulo server-only.
+- getSql() valida DATABASE_URL e instancia o factory neon(connectionString).
+- O cliente ainda não executa query real, não comprova sessão, TLS, grants ou RLS.
+- GET /api/health verifica presença/configuração; não comprova conectividade PostgreSQL.
+- DATABASE_MIGRATION_URL existe como variável Vercel em Development e Preview, mas não há executor de migrations implementado nesta branch.
+- A migration 0001 da PR #57 continua como artefato revisável, não executada.
 
-## 2. Neon state — historical evidence separated from canonical project
+## 2. Neon — inventário canônico atualizado
 
-### 2.1 Historical project (evidence dated 01/11/2026)
+Projeto: wandering-wildflower-90908845 (control-center), PostgreSQL 18, plano free_v3.
 
-Project: `floral-surf-85783683`; database: `iam_control_center`.
+Branches:
+- production — br-dry-mouse-b4gyjp04, primary/default.
+- development — br-nameless-wave-b49yqod7.
+- preview — br-broad-base-b4gnjmg5.
+- recovery-development-pre-bootstrap-2026-11-02 — br-fancy-wind-b4ura0x5.
 
-The prior schema comparison and PR #57 review checklist reported namespaces `iam`, `audit`, and `app_private`, no application tables, and the role-chain observations below. This is historical evidence for that project only; it must not be projected onto the current canonical project. Migration 0001's clean-database preflight must not be weakened based on this document.
+As quatro branches estão READY. Production, Development e Preview não estão marcadas como protected no inventário da API. Pooler está desabilitado nos três endpoints consultados. Não alterar pooler até testar compatibilidade do driver e do fluxo de transação.
 
-- `iam_owner`, `iam_migrator`, and `iam_app_runtime` were recorded as group roles with NOLOGIN/NOBYPASSRLS.
-- `iam_migrator_login` could assume `iam_migrator`; no membership path from migrator to `iam_owner` was observed.
-- The SQL connector session was fixed to the administrative principal and did not prove a real runtime login session.
-- The administrative principal had BYPASSRLS and was not acceptable as application runtime.
+### 2.1 Development — roles e memberships observadas por SQL read-only
 
-### 2.2 Canonical project (current target)
+O bootstrap de roles foi executado somente em Development, sob autorização específica. O catálogo PostgreSQL confirmou:
 
-Project: `wandering-wildflower-90908845` (`control-center`); database: `Iam-control-center`.
+| Role | LOGIN | INHERIT | SUPERUSER | CREATEDB | CREATEROLE | REPLICATION | BYPASSRLS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| iam_owner | Não | Não | Não | Não | Não | Não | Não |
+| iam_migrator | Não | Não | Não | Não | Não | Não | Não |
+| iam_migrator_login | Sim | Não | Não | Não | Não | Não | Não |
+| iam_app_runtime | Não | Sim | Não | Não | Não | Não | Não |
+| iam_app_runtime_login | Sim | Sim | Não | Não | Não | Não | Não |
 
-The current Neon branch inventory identifies:
-- `production` — `br-dry-mouse-b4gyjp04` (primary/default);
-- `development` — `br-nameless-wave-b49yqod7`;
-- `preview` — `br-broad-base-b4gnjmg5`.
+Memberships:
+- iam_migrator_login → iam_migrator: INHERIT FALSE / SET TRUE / ADMIN FALSE.
+- iam_migrator → iam_owner: INHERIT FALSE / SET TRUE / ADMIN FALSE.
+- iam_app_runtime_login → iam_app_runtime: INHERIT TRUE / SET FALSE / ADMIN FALSE.
 
-The previous structural inventory for this project reported only the `public` schema and no application namespaces/tables. The current API role listing exposed only the administrative owner role. These API/structural observations do **not** prove SQL-effective role attributes, grants, membership, RLS, or runtime login. Authenticated SQL inventory is still required; do not assume that roles or namespaces observed in `floral-surf-85783683` exist here.
+O Neon mantém memberships provider-managed em que Iam-control-center_owner é membro e cloud_admin é grantor. Essas associações não são memberships concedidas aos principals IAM e não devem ser revogadas como correção dos testes.
 
-### 2.3 Authenticated SQL inventory — Development and Preview, 2026-11-03
+Iam-control-center_owner é principal administrativo do Neon e possui atributos administrativos, incluindo CREATEDB, CREATEROLE, REPLICATION e BYPASSRLS. Não usar essa role como DATABASE_URL do runtime.
 
-A read-only catalog query was executed successfully against the canonical project database `Iam-control-center` on both branches:
+O database tem somente o schema public e nenhuma relação de aplicação. A migration 0001 não foi executada. iam_owner tem CREATE no database; os dois LOGINs têm CONNECT explícito, sem CREATE.
 
-| Environment | Branch ID | Effective SQL user | Non-system schemas | Relations in inspected schemas | Matching `iam_%` / `app_runtime%` roles | Matching memberships |
-|---|---|---|---:|---:|---:|---:|
-| Development | `br-nameless-wave-b49yqod7` | `Iam-control-center_owner` | `public` only | 0 | 0 | 0 |
-| Preview | `br-broad-base-b4gnjmg5` | `Iam-control-center_owner` | `public` only | 0 | 0 | 0 |
+### 2.2 Credenciais e autenticação dos LOGINs
 
-The query inspected `pg_namespace`, `pg_class`, `pg_roles`, and `pg_auth_members`. It returned no application schemas or relations, no role names matching `iam_%` or `app_runtime%`, and no memberships involving those role-name patterns. This is direct SQL evidence for Development and Preview at the query time; it does not establish runtime readiness. In particular, there is no dedicated runtime login to authenticate with in these branches, no RLS policy evidence, and no table grants to validate. The owner session is administrative and must not be used as application runtime. Production was not queried or changed.
+Nenhuma senha foi provisionada para iam_migrator_login ou iam_app_runtime_login.
 
-### 2.4 Common gates
+Uma tentativa read-only de conexão pelo conector Neon com role_name iam_migrator_login e iam_app_runtime_login retornou “missing authentication credentials: required password”. Assim:
+- os atributos LOGIN e as memberships estão verificados;
+- a autenticação real dos principals ainda não está provada;
+- o runtime e o migrator não estão prontos para uso pela aplicação;
+- a emissão de credenciais exige processo separado, secret store e autorização específica.
 
-- Migration execution is **BLOCKED** until canonical branch/database ownership and the owner/migrator role chain are independently reviewed and verified.
-- Runtime access is **BLOCKED** until the dedicated least-privilege login is tested as an actual session.
-- No role membership change is authorized by this document.
-- Production must remain untouched.
+### 2.3 Preview e Production
 
-## 3. Target application architecture
+O inventário de branches, roles, databases e relações lista somente a role proprietária do database e nenhuma tabela de aplicação em Preview e Production. Não foi executado bootstrap nesses branches. Production não foi alterada.
 
-### Identity boundary
+A role owner do Neon não deve ser usada como runtime. Não promover migration, schema ou deploy com base somente no bootstrap Development.
 
-1. Auth0 authenticates the human and issues the OIDC session/token.
-2. The web server obtains the authenticated session from the Auth0 SDK; client-supplied identity, tenant IDs, role names, or permission claims are not trusted as authorization input.
-3. The durable external identity key is the pair `(issuer, subject)` from the verified Auth0 identity. Email is profile data, not an identity key or authorization key.
-4. The application resolves the internal identity and active tenant membership in PostgreSQL.
-5. Authorization is evaluated from server-side membership/role/permission data. Tenant context must be established by a trusted server-side mechanism; a caller-settable PostgreSQL GUC alone is not an isolation boundary.
-6. Database queries use a dedicated least-privilege runtime login, never `Administrador`, `iam_owner`, or `iam_migrator`.
+## 3. Vercel — variáveis e deploy
 
-### Connection strategy
+O projeto Vercel iam-control-center está no plano Hobby e usa Next.js / Node 24.x.
 
-- Use the `pg` / node-postgres driver in the Node.js Vercel runtime, not an Edge runtime.
-- Application traffic uses Neon's pooled connection string in `DATABASE_URL` (hostname includes `-pooler`).
-- Schema migration tooling, when separately approved, uses a direct non-pooled connection in `DATABASE_MIGRATION_URL`.
-- Keep both values server-side only. Never prefix them with `NEXT_PUBLIC_`, print them in logs, expose them through health responses, or commit them.
-- Use a bounded connection pool and deterministic shutdown/cleanup appropriate to the deployed runtime. Do not instantiate a new pool per request.
-- Do not add ORM or migration tooling until the repository's migration ownership workflow is approved; keep SQL migrations as the single schema source of truth unless a separate architecture decision changes that.
+Metadados de variáveis consultados sem descriptografar valores:
+- AUTH0_DOMAIN e AUTH0_CLIENT_ID: configuração não secreta nos três ambientes.
+- AUTH0_CLIENT_SECRET e AUTH0_SECRET: secrets separados por Development, Preview e Production.
+- APP_BASE_URL: localhost em Development, domínio vercel.app em Production e Preview limitado à branch fix/next16-proxy-r2.
+- DATABASE_URL: entradas em Development, Preview e Production.
+- DATABASE_MIGRATION_URL: entradas em Development e Preview; não há entrada de Production.
+- NEON_PROJECT_ID: Development e Preview; não configurado em Production.
 
-### Auth0-to-database lifecycle
+A presença de uma variável não prova validade, conectividade ou correspondência correta do endpoint. Valores de secrets não foram lidos nem exibidos.
 
-1. Verify the Auth0 session server-side.
-2. Read issuer and subject only from the verified session/token claims.
-3. Upsert or resolve `iam.identities` by `(issuer, subject)`; do not match identities by email.
-4. Resolve tenant membership through an explicit server-authorized tenant selection or invitation flow.
-5. Reject absent, suspended, revoked, or ambiguous membership.
-6. Establish the trusted tenant context and execute tenant-scoped queries under the runtime role.
-7. Record security-relevant outcomes in the audit schema without logging bearer tokens, session cookies, database URLs, or secrets.
+A Vercel recusou novas deployments por limite gratuito diário (build-rate-limit). Não solicitar upgrade e não repetir builds até a janela gratuita permitir. Builds de Preview ausentes devem ser classificados como BLOCKED, não como falha de código nem PASS.
 
-This lifecycle cannot be enabled against the current migration baseline because its RLS policies and runtime grants are intentionally absent (default-deny). A separate reviewed migration must define and test the trusted tenant-context mechanism, RLS policies, and minimum runtime grants before application data access is enabled.
+## 4. Auth0 — identidade e evidência
 
-## 4. Read-only preflight required before changing migration 0001
+Auth0 permanece o único IdP. O SDK v4 deve obter a sessão no servidor; identidade externa é o par issuer + subject. E-mail é dado de perfil, não chave primária de identidade ou autorização.
 
-Run the following only as a read-only diagnostic on **Development** and **Preview**. Do not run it on Production as part of this task. Do not include passwords or connection strings in the output.
+A PR #55 possui execução E2E real de Auth0 no Preview:
+- SHA: 678dbcf595937625e98974db787e189d9d8b81b2.
+- Workflow: run 41562860012.
+- Job auth0-e2e: SUCCESS.
+- O run incluiu login/callback/sessão/logout e preflight de Trusted Sources conforme os logs do job.
 
-```sql
-SELECT current_database() AS database_name,
-       current_user AS effective_user,
-       current_setting('server_version') AS server_version;
+Essa evidência vale somente para o SHA e o Preview testados. Não comprova que todas as configurações Auth0, todos os ambientes ou os callbacks de Production estejam corretos. Não houve leitura direta do dashboard Auth0 nesta sessão; callbacks, logout URLs, web origins e conexões devem ser confirmados no tenant antes de qualquer promoção.
 
-SELECT n.nspname AS schema_name,
-       r.rolname AS schema_owner
-FROM pg_namespace n
-JOIN pg_roles r ON r.oid = n.nspowner
-WHERE n.nspname IN ('iam', 'audit', 'app_private')
-ORDER BY n.nspname;
+## 5. Arquitetura-alvo
 
-SELECT n.nspname AS schema_name,
-       c.relname AS relation_name,
-       c.relkind AS relation_kind,
-       r.rolname AS relation_owner,
-       c.relrowsecurity AS rls_enabled,
-       c.relforcerowsecurity AS rls_forced
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace
-JOIN pg_roles r ON r.oid = c.relowner
-WHERE n.nspname IN ('iam', 'audit', 'app_private')
-  AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
-ORDER BY n.nspname, c.relname;
+### Fronteira de identidade
 
-SELECT rolname, rolcanlogin, rolinherit, rolcreaterole,
-       rolcreatedb, rolbypassrls
-FROM pg_roles
-WHERE rolname IN (
-  'iam_owner', 'iam_migrator', 'iam_app_runtime',
-  'iam_migrator_login', 'iam_app_runtime_login',
-  'app_runtime', 'app_runtime_login'
-)
-ORDER BY rolname;
+1. Auth0 autentica o usuário e emite a sessão OIDC.
+2. O servidor valida a sessão por meio do SDK Auth0.
+3. A identidade durável é resolvida por issuer + subject.
+4. O backend resolve identity e membership ativo no PostgreSQL.
+5. Tenant selecionado, membership e permissões são validados no servidor.
+6. GUC isolado ou tenant_id fornecido pelo cliente não autoriza acesso.
+7. Queries utilizam login runtime dedicado, nunca Iam-control-center_owner, iam_owner ou iam_migrator.
 
-SELECT member.rolname AS member_role,
-       granted.rolname AS granted_role,
-       m.admin_option,
-       m.inherit_option,
-       m.set_option
-FROM pg_auth_members m
-JOIN pg_roles granted ON granted.oid = m.roleid
-JOIN pg_roles member ON member.oid = m.member
-WHERE granted.rolname IN ('iam_owner', 'iam_migrator', 'iam_app_runtime')
-   OR member.rolname IN (
-     'iam_migrator_login', 'iam_app_runtime_login',
-     'app_runtime_login'
-   )
-ORDER BY granted.rolname, member.rolname;
-```
+### Conexão PostgreSQL
 
-Capture results separately for Development and Preview, including timestamp and branch ID. Redact all secrets. The administrative connector session is not a substitute for connecting as the dedicated runtime login.
+- O runtime deve usar o módulo server-only e @neondatabase/serverless.
+- DATABASE_URL é exclusiva do runtime; não expor ao bundle cliente.
+- DATABASE_MIGRATION_URL deve permanecer separada e não pode ser acessada pelo runtime web.
+- Não habilitar pooler até validar prepared statements, transações, estado de sessão, advisory locks e comportamento do driver.
+- Não instanciar cliente/pool por request sem estratégia de ciclo de vida adequada.
+- Não adicionar ORM nem executor de migration sem ADR/revisão própria.
 
-## 5. Implementation sequence and acceptance criteria
+### Autorização e RLS
 
-| Order | Work | Acceptance evidence | Gate |
+A baseline 0001 mantém default-deny: ainda não existem grants/policies de runtime para dados IAM. O contexto de tenant precisa de mecanismo confiável, validade, revogação e validação na própria operação. A assinatura de contexto não substitui a consulta de identity, membership e tenant ativos.
+
+## 6. Gates antes de qualquer migration
+
+| Ordem | Trabalho | Evidência exigida | Estado |
 |---|---|---|---|
-| 1 | Resolve namespace ownership and existing objects | Read-only catalog output for Development and Preview | Required |
-| 2 | Approve migration preflight strategy for existing empty namespaces | Reviewed SQL diff and PostgreSQL 18 tests proving owner checks and refusal on unexpected objects | Required |
-| 3 | Resolve migrator-to-owner membership design | Explicit role graph, NOBYPASSRLS checks, actual SET ROLE proof | Separate explicit approval required before Neon membership mutation |
-| 4 | Implement PostgreSQL driver and server-only pool | Frozen-lockfile CI, unit tests, no secret leakage | Required |
-| 5 | Implement database connectivity diagnostics | Health endpoint returns only connected/unavailable and safe metadata; no credentials or SQL errors | Required |
-| 6 | Implement Auth0 identity resolution | Tests use verified issuer+subject; email changes do not create a new identity | Required |
-| 7 | Design trusted tenant context, policies, and runtime grants | Adversarial cross-tenant tests with actual runtime login | Required |
-| 8 | Validate Development | Actual connection and migration on Development only, after separate explicit execution approval | Required |
-| 9 | Validate Preview | Actual Preview deployment and runtime-role connection | Required |
-| 10 | Production | Independent review, recovery plan, explicit Production approval | Not authorized |
+| 1 | Cliente Neon server-only | Dependência, módulo e testes unitários mockados | PASS parcial |
+| 2 | Query PostgreSQL real descartável | SELECT 1, timeout e erro de conexão | Pendente |
+| 3 | Credenciais dedicadas Development | Autenticação real como iam_migrator_login e iam_app_runtime_login | BLOCKED |
+| 4 | Ownership e migration 0001 | SQL revisado, checksum, preflight, rollback | Pendente |
+| 5 | Runtime grants e RLS | Testes com role runtime autenticada e cross-tenant | Pendente |
+| 6 | Auth0 + API | 401/403, membership revogado, tenant suspenso | Parcial |
+| 7 | Preview | Deployment, SHA, health e conexão runtime | BLOCKED por limite Vercel |
+| 8 | Production | Aprovação específica, recuperação e rollback ensaiado | Não autorizado |
 
-## 6. Required CI and security tests
+## 7. CI e evidências
 
-- PostgreSQL 18 disposable database: migration contract, schema ownership, idempotency/refusal behavior, cross-tenant composite foreign keys, audit actor identity consistency.
-- Runtime role tests: no BYPASSRLS, no ownership, no DDL, no role management, no migration ledger access.
-- RLS tests using the actual runtime role: default-deny before policies; after policy migration, tenant A cannot read or mutate tenant B.
-- Auth0 tests: unauthenticated requests rejected; issuer and subject sourced from verified session; no email-based identity linking; suspended/revoked membership denied.
-- Health tests: no connection string, password, hostname, issuer, client secret, session secret, token, SQL statement, or stack trace in response.
-- CI must report the tested commit SHA. A green disposable PostgreSQL service does not prove Neon credentials, role membership, Vercel environment variables, Auth0 callback, or live RLS.
+- PR #55: Auth0 E2E PASS no SHA indicado acima.
+- PR #57 + #80: quality e testes PostgreSQL 18 descartáveis PASS no SHA bed63d16ef7da090e08d369b2413cf61a3a41914; Preview falhou exclusivamente no status Vercel por build-rate-limit.
+- PR #74: harness PostgreSQL 18 descartável 16/16 PASS local no SHA ef3667e1733ebc4b40dede211cb9115ff867c317; não prova crypto ou RLS no Neon.
+- PR #69: driver Neon e factory server-only implementados, mas sem query real.
 
-## 7. Current decision
+Cada conclusão deve apontar SHA, run ID, job, ambiente e artefato. CI PostgreSQL descartável não prova credenciais, grants, TLS, pooling ou RLS no Neon.
 
-**Integration status: BLOCKED / NOT CONFIGURED.**
+## 8. Decisão atual
 
-Auth0 remains the identity provider. Neon remains the PostgreSQL provider. The repository has an Auth0 SDK configuration and a database configuration placeholder, but no database driver or real database access layer has been verified. No migration, DDL, DML, role change, membership change, secret provisioning, Vercel variable change, merge, or Production deployment is performed by this readiness record.
+**Integração Auth0 + Neon: PARCIAL. Migration executável: BLOCKED.**
 
-Next permitted work is code and test preparation in a Draft PR. Any Neon role membership mutation and any migration execution require their own explicit approval after the preflight evidence and exact SQL diff are presented.
+Auth0 permanece como IdP. Neon permanece como PostgreSQL. O bootstrap de roles existe somente em Development, mas os LOGINs não possuem credenciais e a migration 0001 não foi executada. O cliente Neon está implementado como scaffold server-only, mas não executa query real. Preview está bloqueado por limite gratuito de deployment; Production não foi alterada.
+
+Próximas ações permitidas: continuar revisão de código e testes em branches Draft, preparar teste PostgreSQL descartável e atualizar a cadeia de PRs. Provisionamento de credenciais, execução da migration em Neon, alteração de roles, mudança de pooler e deploy Production exigem autorização específica separada.
