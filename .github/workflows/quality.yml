@@ -142,7 +142,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      E2E_BASE_URL: https://iam-control-center-preview.vercel.app
+      E2E_BASE_URL: https://iam-control-center-git-fix-426b37-alexoaraujo83-8387s-projects.vercel.app
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
     steps:
