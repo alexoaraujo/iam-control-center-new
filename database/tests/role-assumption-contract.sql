@@ -117,7 +117,6 @@ BEGIN
      OR NOT pg_has_role('iam_migrator', 'iam_owner', 'MEMBER') THEN
     RAISE EXCEPTION 'migrator role-assumption chain is incomplete';
   END IF;
+  RAISE NOTICE 'PASS local migrator role-assumption contract: exact memberships, no inherited owner privileges, no runtime escalation';
 END
 $assert_session_role_contract$;
-
-RAISE NOTICE 'PASS local migrator role-assumption contract: exact memberships, no inherited owner privileges, no runtime escalation';
