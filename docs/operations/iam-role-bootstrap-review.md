@@ -41,7 +41,7 @@ O SQL proposto exige que o principal seja uma sessão direta, não-superuser, co
 
 O workflow PostgreSQL 18 deve validar:
 - atributos de cada role e ausência de atributos administrativos;
-- `rolpassword IS NULL` após bootstrap;
+- ausência de password hash no catálogo protegido `pg_authid` após bootstrap;
 - opções exatas das três memberships;
 - `CREATE` somente para `iam_owner` e `CONNECT` explícito para os dois logins;
 - ausência de `CREATE` para runtime e logins;
