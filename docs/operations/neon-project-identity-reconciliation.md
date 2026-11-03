@@ -1,0 +1,158 @@
+# Reconciliação de identidade dos projetos Neon — IAM Control Center
+
+**Data/hora da verificação:** 03/11/2026, 16:57 BRT  
+**Branch de código consultada:** `chore/dependencies-refresh-reconciled`  
+**HEAD da branch consultada:** `a43c9d1c80c5ef00294566cfd0dd5d4abb8c7f82`  
+**Escopo:** inventário read-only; nenhum secret foi descriptografado; nenhuma alteração foi feita em Neon, Vercel ou Auth0.
+
+## 1. Resultado executivo
+
+Foram encontrados dois projetos Neon ativos associados ao trabalho IAM:
+
+- `floral-surf-85783683`, nome `iam-control-center`, região `aws-sa-east-1`.
+- `wandering-wildflower-90908845`, nome `control-center`, região `aws-us-east-2`.
+
+Há uma divergência de identidade do projeto:
+- A variável não secreta `NEON_PROJECT_ID` do Vercel está configurada como `floral-surf-85783683` em Development e Preview. Não há essa variável em Production.
+- O documento `docs/operations/auth0-neon-integration-readiness.md` declara `wandering-wildflower-90908845` como Neon canônico.
+- A revisão SQL e o bootstrap de roles documentados e consultados nesta execução ocorreram em Development de `wandering-wildflower-90908845`.
+
+**Decisão operacional:** a identidade do projeto efetivamente utilizado pela aplicação permanece **BLOCKED / RECONCILIATION REQUIRED**. Não alterar `NEON_PROJECT_ID`, `DATABASE_URL` ou `DATABASE_MIGRATION_URL` até confirmar explicitamente qual projeto deve ser canônico e alinhar os endpoints por ambiente. Não executar migration enquanto essa correspondência não estiver resolvida.
+
+## 2. Projeto A — `floral-surf-85783683`
+
+| Campo | Evidência observada |
+|---|---|
+| Nome | `iam-control-center` |
+| Região | `aws-sa-east-1` |
+| PostgreSQL | 18 |
+| Criação | 24/10/2026 |
+| Production | `br-super-flower-b6k7w8wp`, READY, primary/default |
+| Development | `br-bitter-rain-b6j4sexv`, READY |
+| Preview | `br-holy-rain-b6i380c9`, READY |
+| Proteção de branches | As três aparecem como `protected=false` |
+| Database | `iam_control_center`, owner `iam_owner` nas três branches |
+
+### 2.1 Roles observadas pela API administrativa
+
+Development e Preview listam, entre outras, as roles `iam_owner`, `iam_migrator`, `iam_migrator_login`, `iam_app_runtime` e `iam_app_runtime_login`. Também aparece uma segunda família de roles `app_runtime` / `app_runtime_login`; a última aparece com método de autenticação `password` na API administrativa.
+
+A API de roles expõe `authentication_method`, que **não substitui** a leitura dos atributos catalogais PostgreSQL (`rolcanlogin`, `rolinherit`, `rolbypassrls`, etc.). Não inferir `NOLOGIN` apenas a partir de `authentication_method=no_login`.
+
+A consulta SQL read-only ao projeto A não foi concluída: a conexão administrativa retornou `missing authentication credentials: required password`. Portanto, não há nesta auditoria evidência SQL de memberships, ACLs, schema ou flags RLS do projeto A.
+
+## 3. Projeto B — `wandering-wildflower-90908845`
+
+| Campo | Evidência observada |
+|---|---|
+| Nome | `control-center` |
+| Região | `aws-us-east-2` |
+| PostgreSQL | 18 |
+| Criação | 02/11/2026 |
+| Production | `br-dry-mouse-b4gyjp04`, READY, primary/default |
+| Development | `br-nameless-wave-b49yqod7`, READY |
+| Preview | `br-broad-base-b4gnjmg5`, READY |
+| Recovery | `br-fancy-wind-b4ura0x5`, READY |
+| Proteção de branches | As quatro aparecem como `protected=false` |
+| Database Development | `Iam-control-center`, owner `Iam-control-center_owner` |
+
+### 3.1 Atributos catalogais PostgreSQL observados em Development
+
+Consulta read-only em `pg_roles`, executada em 03/11/2026:
+
+| Role | LOGIN | INHERIT | SUPERUSER | CREATEDB | CREATEROLE | REPLICATION | BYPASSRLS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `iam_owner` | Não | Não | Não | Não | Não | Não | Não |
+| `iam_migrator` | Não | Não | Não | Não | Não | Não | Não |
+| `iam_app_runtime` | Não | Sim | Não | Não | Não | Não | Não |
+| `iam_migrator_login` | Sim | Não | Não | Não | Não | Não | Não |
+| `iam_app_runtime_login` | Sim | Sim | Não | Não | Não | Não | Não |
+
+A role administrativa `Iam-control-center_owner` é LOGIN, não é SUPERUSER, mas possui CREATEDB, CREATEROLE, REPLICATION e BYPASSRLS. Ela é owner do database e não pode ser usada como runtime nem como sessão migrator.
+
+### 3.2 Memberships observadas
+
+| Membro | Role concedida | INHERIT | SET | ADMIN |
+|---|---|---:|---:|---:|
+| `iam_migrator_login` | `iam_migrator` | false | true | false |
+| `iam_migrator` | `iam_owner` | false | true | false |
+| `iam_app_runtime_login` | `iam_app_runtime` | true | false | false |
+
+Também existem memberships provider-managed em que `Iam-control-center_owner` é membro de roles IAM, com ADMIN OPTION. Essas associações são do proprietário administrativo do Neon; não são memberships concedidas aos principals IAM e não devem ser revogadas como correção do teste.
+
+### 3.3 ACLs e estado do schema observados
+
+| Verificação | Resultado |
+|---|---|
+| Owner do database | `Iam-control-center_owner` |
+| `iam_owner` tem CREATE no database | Sim |
+| `iam_migrator_login` tem CONNECT | Sim |
+| `iam_app_runtime_login` tem CONNECT | Sim |
+| Logins têm CREATE no database | Não |
+| Runtime login tem TEMP | Não |
+| PUBLIC tem CONNECT | Não |
+| Schema `iam` existe | Não |
+| Schema `audit` existe | Não |
+| Relações em `iam`, `audit`, `app_private` | 0 |
+
+A consulta confirma o estado limpo necessário para a proposta 0001 neste database, mas não autoriza sua execução.
+
+### 3.4 Autenticação real dos logins
+
+Tentativas read-only de conexão via Neon como `iam_migrator_login` e `iam_app_runtime_login` retornaram:
+
+`missing authentication credentials: required password`
+
+Portanto:
+- Atributos e memberships das roles estão confirmados por catálogo.
+- Autenticação real desses principals permanece **BLOCKED**.
+- Não há prova de query runtime com a role dedicada.
+- Não usar a role administrativa para simular runtime ou migrator.
+
+## 4. Compatibilidade da migration 0001
+
+A migration `database/migrations/0001_initial_iam_schema.sql` exige:
+- `session_user = iam_migrator_login`;
+- `current_user = iam_owner`;
+- cadeia de `SET ROLE` permitida por `iam_migrator_login → iam_migrator → iam_owner`;
+- atributos não privilegiados e memberships exatas.
+
+O runner de teste descartável `database/tests/run.sh` prepara a sessão autenticada executando `SET ROLE iam_migrator;` e depois `SET ROLE iam_owner;` antes de enviar o SQL da migration. Assim, a ausência de `SET ROLE` dentro do próprio arquivo 0001 não é, isoladamente, um defeito: o futuro executor deverá reproduzir explicitamente essa cadeia e preservar `session_user`.
+
+No Neon Development do Projeto B, a topologia de memberships e os atributos das roles são compatíveis com esse preflight. **A execução continua bloqueada** porque os logins não autenticam pelo conector e ainda não existe executor operacional aprovado para `DATABASE_MIGRATION_URL`.
+
+A migration mantém RLS enabled/forced sem policies e sem grants de runtime: default-deny intencional. O harness PostgreSQL 18 descartável não comprova RLS ou credenciais no Neon.
+
+## 5. Estado do código e das PRs
+
+- PR #57: merged em 03/11/2026 às 13:17 UTC.
+- PR #69: merged em 03/11/2026 às 13:42 UTC.
+- PR #48: permanece Draft; HEAD consultado `a43c9d1c80c5ef00294566cfd0dd5d4abb8c7f82`.
+- PR #81: permanece Draft; não faz parte desta mudança de inventário.
+- `apps/web/src/lib/db.ts` instancia `neon(DATABASE_URL)`, mas não executa query. Os testes do módulo usam mock. A presença do cliente não comprova conexão PostgreSQL.
+
+## 6. Próximas ações e gates
+
+| Ordem | Ação | Estado |
+|---|---|---|
+| 1 | Confirmar se o projeto canônico é `floral-surf-85783683` ou `wandering-wildflower-90908845` | BLOCKED — conflito entre Vercel e documentação/operação |
+| 2 | Alinhar `NEON_PROJECT_ID` e endpoints por Development/Preview ao projeto escolhido | Aguardando 1; não alterar automaticamente |
+| 3 | Provisionar credenciais dedicadas em Development por processo aprovado | BLOCKED |
+| 4 | Provar conexão `SELECT 1` com `iam_app_runtime_login` | BLOCKED |
+| 5 | Provar conexão migrator e cadeia `SET ROLE` sem owner/admin como sessão | BLOCKED |
+| 6 | Executar harness RLS com role runtime real e cenários cross-tenant | Pendente |
+| 7 | Revisar checksum, runner, rollback e proposta 0001 | Pendente |
+| 8 | Aprovar execução em Development separadamente | Não autorizada |
+| 9 | Preview e Production | Não autorizadas; Production intocada |
+
+## 7. Não execução
+
+Nesta verificação:
+- nenhum secret ou connection string foi descriptografado, impresso ou alterado;
+- nenhuma variável Vercel foi alterada;
+- nenhuma role, membership, grant, schema, policy ou branch Neon foi alterada;
+- nenhuma migration ou SQL de escrita foi executado;
+- nenhum deploy foi disparado;
+- Production permaneceu intocada.
+
+**Conclusão:** o Projeto B tem evidência SQL read-only útil da topologia IAM e do estado limpo em Development, mas não tem autenticação dos logins comprovada. O Projeto A é o projeto indicado atualmente pela variável Vercel `NEON_PROJECT_ID` em Development e Preview, porém não tem nesta auditoria evidência SQL equivalente. A seleção do projeto canônico precisa ser resolvida antes de conectar aplicação, credenciais e migration.
