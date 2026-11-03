@@ -4,7 +4,11 @@
 
 BEGIN;
 DO $preflight$
-DECLARE role_name text; role_row record;
+DECLARE
+  role_name text;
+  role_row record;
+  session_role_row record;
+  expected_inherit boolean;
 BEGIN
   IF current_user <> 'iam_owner' THEN
     RAISE EXCEPTION 'effective current_user must be iam_owner; got %', current_user;
@@ -12,16 +16,105 @@ BEGIN
   IF NOT has_database_privilege(current_user, current_database(), 'CREATE') THEN
     RAISE EXCEPTION 'iam_owner must have CREATE privilege on database %', current_database();
   END IF;
-  FOREACH role_name IN ARRAY ARRAY['iam_owner','iam_migrator','iam_app_runtime'] LOOP
-    SELECT rolcanlogin, rolbypassrls INTO role_row FROM pg_roles WHERE rolname=role_name;
-    IF NOT FOUND THEN RAISE EXCEPTION 'required role % missing; migration does not create roles', role_name; END IF;
-    IF role_row.rolbypassrls THEN RAISE EXCEPTION 'role % must be NOBYPASSRLS', role_name; END IF;
-  END LOOP;
-  IF (SELECT rolcanlogin FROM pg_roles WHERE rolname='iam_owner')
-     OR (SELECT rolcanlogin FROM pg_roles WHERE rolname='iam_migrator')
-     OR (SELECT rolcanlogin FROM pg_roles WHERE rolname='iam_app_runtime') THEN
-    RAISE EXCEPTION 'iam_owner, iam_migrator and iam_app_runtime must be NOLOGIN';
+
+  SELECT rolcanlogin, rolinherit, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
+    INTO session_role_row
+    FROM pg_roles
+   WHERE rolname = session_user;
+  IF NOT FOUND OR session_user <> 'iam_migrator_login'
+     OR NOT session_role_row.rolcanlogin OR session_role_row.rolinherit
+     OR session_role_row.rolsuper OR session_role_row.rolcreatedb
+     OR session_role_row.rolcreaterole OR session_role_row.rolreplication
+     OR session_role_row.rolbypassrls THEN
+    RAISE EXCEPTION 'migration session must be a non-privileged LOGIN role';
   END IF;
+
+  -- Fail closed if any IAM group role has an administrative attribute.
+  -- INHERIT is part of the declared role contract, not an incidental default.
+  FOREACH role_name IN ARRAY ARRAY['iam_owner','iam_migrator','iam_app_runtime'] LOOP
+    expected_inherit := (role_name = 'iam_app_runtime');
+    SELECT rolcanlogin, rolinherit, rolsuper, rolcreatedb, rolcreaterole,
+           rolreplication, rolbypassrls
+      INTO role_row
+      FROM pg_roles
+     WHERE rolname = role_name;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'required role % missing; migration does not create roles', role_name;
+    END IF;
+    IF role_row.rolcanlogin THEN
+      RAISE EXCEPTION 'role % must be NOLOGIN', role_name;
+    END IF;
+    IF role_row.rolinherit IS DISTINCT FROM expected_inherit THEN
+      RAISE EXCEPTION 'role % has unexpected INHERIT attribute', role_name;
+    END IF;
+    IF role_row.rolsuper OR role_row.rolcreatedb OR role_row.rolcreaterole
+       OR role_row.rolreplication OR role_row.rolbypassrls THEN
+      RAISE EXCEPTION 'role % has a prohibited administrative attribute', role_name;
+    END IF;
+  END LOOP;
+
+  -- Require the exact two-step migration capability chain; no direct
+  -- login-to-owner grant and no inherited/admin membership is accepted.
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = 'iam_migrator_login'
+       AND granted_role.rolname = 'iam_migrator'
+       AND m.inherit_option IS FALSE
+       AND m.set_option IS TRUE
+       AND m.admin_option IS FALSE
+  ) OR NOT EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = 'iam_migrator'
+       AND granted_role.rolname = 'iam_owner'
+       AND m.inherit_option IS FALSE
+       AND m.set_option IS TRUE
+       AND m.admin_option IS FALSE
+  ) OR EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = 'iam_migrator_login'
+       AND granted_role.rolname = 'iam_owner'
+  ) THEN
+    RAISE EXCEPTION 'migration requires the exact iam_migrator_login -> iam_migrator -> iam_owner SET chain';
+  END IF;
+
+  -- Check the complete SET-capable membership graph, including the session
+  -- login. The expected migrator -> owner path is allowed; privileged targets
+  -- (including provider-managed neon_superuser) are never allowed.
+  IF EXISTS (
+    WITH RECURSIVE role_memberships(root_role, granted_role, path) AS (
+      SELECT root.oid, m.roleid, ARRAY[root.oid, m.roleid]::oid[]
+        FROM pg_roles root
+        JOIN pg_auth_members m ON m.member = root.oid
+       WHERE root.rolname IN ('iam_owner','iam_migrator','iam_app_runtime',session_user)
+      UNION ALL
+      SELECT rm.root_role, m.roleid, rm.path || m.roleid
+        FROM role_memberships rm
+        JOIN pg_auth_members m ON m.member = rm.granted_role
+       WHERE NOT m.roleid = ANY(rm.path)
+    )
+    SELECT 1
+      FROM role_memberships rm
+      JOIN pg_roles granted ON granted.oid = rm.granted_role
+     WHERE granted.rolname = 'neon_superuser'
+        OR granted.rolsuper
+        OR granted.rolcreatedb
+        OR granted.rolcreaterole
+        OR granted.rolreplication
+        OR granted.rolbypassrls
+  ) THEN
+    RAISE EXCEPTION 'IAM roles or migration session have membership in a privileged role';
+  END IF;
+
   IF to_regnamespace('iam') IS NOT NULL OR to_regnamespace('audit') IS NOT NULL
      OR to_regnamespace('app_private') IS NOT NULL THEN
     RAISE EXCEPTION 'migration 0001 requires a clean database; target schema already exists';
