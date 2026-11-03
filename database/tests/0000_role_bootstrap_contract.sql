@@ -88,11 +88,11 @@ BEGIN
       FROM pg_auth_members m
       JOIN pg_roles member_role ON member_role.oid = m.member
       JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     -- Count memberships granted TO IAM principals only. Neon automatically
+     -- attaches the database owner to newly created roles through cloud_admin
+     -- (ADMIN OPTION); those provider-managed owner edges are not part of the
+     -- application's three-edge membership graph and must not be revoked here.
      WHERE member_role.rolname IN (
-       'iam_owner','iam_migrator','iam_migrator_login',
-       'iam_app_runtime','iam_app_runtime_login'
-     )
-        OR granted_role.rolname IN (
        'iam_owner','iam_migrator','iam_migrator_login',
        'iam_app_runtime','iam_app_runtime_login'
      )
