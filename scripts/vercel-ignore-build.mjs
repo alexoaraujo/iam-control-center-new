@@ -23,7 +23,11 @@ export function shouldBuild({ environment, previousSha, currentSha, changedFiles
 }
 
 function diffFiles(base, head) {
-  const output = execFileSync("git", ["diff", "--name-only", `${base}...${head}`], {
+  const gitRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  const output = execFileSync("git", ["-C", gitRoot, "diff", "--name-only", `${base}...${head}`], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
