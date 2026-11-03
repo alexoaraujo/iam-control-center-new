@@ -11,6 +11,56 @@ BEGIN
         FROM pg_roles WHERE rolname = current_user) THEN
     RAISE EXCEPTION 'runtime group role has a prohibited administrative attribute';
   END IF;
+
+  IF NOT pg_has_role(session_user, 'iam_app_runtime', 'MEMBER') THEN
+    RAISE EXCEPTION 'runtime LOGIN is not a member of the expected runtime group';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = session_user
+       AND granted_role.rolname <> 'iam_app_runtime'
+  ) THEN
+    RAISE EXCEPTION 'runtime LOGIN has an unexpected direct role membership';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+     WHERE member_role.rolname = 'iam_app_runtime'
+  ) THEN
+    RAISE EXCEPTION 'runtime group role has an unexpected nested role membership';
+  END IF;
+
+  IF EXISTS (
+    WITH RECURSIVE role_closure(role_oid) AS (
+      SELECT oid FROM pg_roles WHERE rolname = session_user
+      UNION
+      SELECT m.roleid
+        FROM role_closure c
+        JOIN pg_auth_members m ON m.member = c.role_oid
+    )
+    SELECT 1
+      FROM role_closure c
+      JOIN pg_roles r ON r.oid = c.role_oid
+     WHERE r.rolsuper OR r.rolcreatedb OR r.rolcreaterole
+        OR r.rolreplication OR r.rolbypassrls
+        OR r.rolname = 'neon_superuser'
+  ) THEN
+    RAISE EXCEPTION 'runtime membership closure reaches a prohibited role';
+  END IF;
+
+  IF has_database_privilege(session_user, current_database(), 'CREATE')
+     OR has_database_privilege(session_user, current_database(), 'TEMP')
+     OR has_schema_privilege(current_user, 'ctx_lab', 'CREATE')
+     OR has_table_privilege(current_user, 'ctx_lab.test_context_registry', 'SELECT')
+     OR NOT has_table_privilege(current_user, 'ctx_lab.tenant_records', 'SELECT') THEN
+    RAISE EXCEPTION 'runtime effective database/schema/table privileges violate the prototype contract';
+  END IF;
 END
 $role_assert$;
 
