@@ -12,42 +12,47 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
 
   const previewHost = new URL(baseURL).hostname;
   const context = page.context();
+  const cdp = await context.newCDPSession(page);
+  const trustedHeader = "x-vercel-trusted-oidc-idp-token";
 
-  // Record only non-sensitive navigation metadata for Vercel hosts. This lets
-  // CI distinguish an unexpected Preview alias from a missing route interception.
-  page.on("request", (request) => {
-    const requestUrl = new URL(request.url());
-    if (requestUrl.hostname.endsWith(".vercel.app")) {
-      console.log(
-        `Browser request: ${request.method()} ${requestUrl.hostname}${requestUrl.pathname}`
-      );
-    }
+  // CDP Fetch pauses every network request, including redirect hops. Playwright
+  // route.continue() only modified the first request in the chain, leaving the
+  // Auth0 callback without the Trusted Sources header.
+  await cdp.send("Fetch.enable", {
+    patterns: [{ urlPattern: "*", requestStage: "Request" }],
   });
 
-  // Vercel Trusted Sources requires the OIDC header on every request to the
-  // exact protected Preview origin, including redirects and the Auth0 callback.
-  // Continue the browser request normally so Playwright can intercept each
-  // redirect hop independently; route.fetch()+fulfill() bypassed that routing.
-  // Explicitly strip the header from every non-Preview origin.
-  await context.route("**/*", async (route) => {
-    const requestUrl = new URL(route.request().url());
-    if (requestUrl.hostname.endsWith(".vercel.app")) {
-      console.log(
-        `Playwright route: ${route.request().method()} ${requestUrl.hostname}${requestUrl.pathname}`
-      );
-    }
+  cdp.on("Fetch.requestPaused", async ({ requestId, request }) => {
+    try {
+      const requestUrl = new URL(request.url);
+      const headers = Object.entries(request.headers)
+        .filter(([name]) => name.toLowerCase() !== trustedHeader)
+        .map(([name, value]) => ({ name, value: String(value) }));
 
-    const headers = { ...route.request().headers() };
-    if (requestUrl.hostname === previewHost) {
-      headers["x-vercel-trusted-oidc-idp-token"] = trustedOidcToken;
-      console.log(
-        `Trusted Sources header attached: ${route.request().method()} ${requestUrl.pathname}`
-      );
-    } else {
-      delete headers["x-vercel-trusted-oidc-idp-token"];
-    }
+      // Attach the token only to the exact Preview hostname. Auth0 and every
+      // other origin explicitly receive no Trusted Sources header.
+      if (requestUrl.hostname === previewHost) {
+        headers.push({ name: trustedHeader, value: trustedOidcToken });
+      }
 
-    await route.continue({ headers });
+      if (
+        requestUrl.hostname === previewHost ||
+        requestUrl.hostname === "iam-control-center.us.auth0.com"
+      ) {
+        console.log(
+          `CDP request: ${request.method} ${requestUrl.hostname}${requestUrl.pathname}; trusted header: ${requestUrl.hostname === previewHost ? "attached" : "stripped"}`
+        );
+      }
+
+      await cdp.send("Fetch.continueRequest", { requestId, headers });
+    } catch {
+      // Fail closed: never continue a request if host scoping or header
+      // construction fails.
+      await cdp.send("Fetch.failRequest", {
+        requestId,
+        errorReason: "Aborted",
+      });
+    }
   });
 
   // Anonymous access must enter the Auth0 Authorization Code + PKCE flow.
@@ -80,4 +85,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   await expect(page).toHaveURL((url) => url.origin === new URL(baseURL).origin, { timeout: 60000 });
   await page.goto("/protected");
   await expect(page).toHaveURL(/auth0\.com/, { timeout: 30000 });
+
+  await cdp.send("Fetch.disable");
+  await cdp.detach();
 });
