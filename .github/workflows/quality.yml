@@ -87,9 +87,10 @@ jobs:
     permissions:
       contents: read
       statuses: read
+      checks: read
       deployments: write
     steps:
-      - name: Wait for successful Vercel Preview deployment
+      - name: Wait for an exact-SHA READY Vercel Preview deployment
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -98,18 +99,44 @@ jobs:
           set -euo pipefail
           for attempt in $(seq 1 36); do
             state="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status" --jq '[.statuses[] | select(.context == "Vercel")] | first | .state // "missing"')"
-            if [ "${state}" = "success" ]; then
-              echo "Vercel status is successful for ${COMMIT_SHA}."
-              exit 0
-            fi
             if [ "${state}" = "failure" ] || [ "${state}" = "error" ]; then
               echo "::error::Vercel reported ${state} for ${COMMIT_SHA}."
               exit 1
             fi
-            echo "Waiting for Vercel status (attempt ${attempt}/36); current state: ${state}."
+
+            checks="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/check-runs?per_page=100")"
+            preview_host="$(jq -er --arg sha "${COMMIT_SHA}" '
+              [ .check_runs[]
+                | select(
+                    .head_sha == $sha
+                    and .app.slug == "vercel"
+                    and .name == "Vercel Preview Comments"
+                    and .conclusion == "success"
+                  )
+                | (.output.summary // "")
+                | try (capture("https://vercel\\.live/open-feedback/(?<host>[^/?#]+)").host) catch empty
+              ]
+              | unique
+              | if length == 1 then .[0] else empty end
+            ' <<< "${checks}" 2>/dev/null || true)"
+
+            if [ "${state}" = "success" ] && [ -n "${preview_host}" ]; then
+              case "${preview_host}" in
+                *.vercel.app)
+                  echo "Exact-SHA Vercel Preview is ready: ${preview_host}"
+                  exit 0
+                  ;;
+                *)
+                  echo "::error::Vercel returned a non-deployment hostname for ${COMMIT_SHA}."
+                  exit 1
+                  ;;
+              esac
+            fi
+
+            echo "Waiting for exact-SHA Vercel Preview (attempt ${attempt}/36); status: ${state}; deployment URL: ${preview_host:-missing}."
             sleep 20
           done
-          echo "::error::Timed out waiting for a successful Vercel status for ${COMMIT_SHA}."
+          echo "::error::No exact-SHA READY Vercel Preview deployment was found for ${COMMIT_SHA}."
           exit 1
 
   auth0-e2e:
