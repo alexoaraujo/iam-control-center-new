@@ -1,11 +1,11 @@
 -- Experimental only: disposable PostgreSQL harness. Never run against Neon.
 \set ON_ERROR_STOP on
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE ROLE iam_ctx_poc_owner NOLOGIN;
 CREATE ROLE iam_ctx_poc_runtime NOLOGIN;
 CREATE SCHEMA iam_ctx_poc AUTHORIZATION iam_ctx_poc_owner;
 CREATE SCHEMA iam_ctx_private AUTHORIZATION iam_ctx_poc_owner;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA iam_ctx_private;
 REVOKE ALL ON SCHEMA iam_ctx_private FROM PUBLIC;
 
 SET ROLE iam_ctx_poc_owner;
@@ -29,7 +29,7 @@ INSERT INTO iam_ctx_poc.records VALUES
 
 CREATE FUNCTION iam_ctx_private.issue_context(p_tenant uuid, p_ttl_seconds integer DEFAULT 60)
 RETURNS text LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, iam_ctx_private, public
+SET search_path = pg_catalog, iam_ctx_private
 AS $fn$
 DECLARE payload text; secret_value bytea;
 BEGIN
@@ -39,7 +39,7 @@ BEGIN
     'tenant_id', p_tenant::text,
     'exp', floor(extract(epoch FROM clock_timestamp()))::bigint + p_ttl_seconds)::text;
   RETURN encode(convert_to(payload, 'UTF8'), 'hex') || '.' ||
-    encode(public.hmac(convert_to(payload, 'UTF8'), secret_value, 'sha256'), 'hex');
+    encode(iam_ctx_private.hmac(convert_to(payload, 'UTF8'), secret_value, 'sha256'), 'hex');
 END
 $fn$;
 
@@ -148,11 +148,9 @@ BEGIN
     RAISE EXCEPTION 'ASSERTION FAILED: runtime disabled RLS';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
-  BEGIN
-    EXECUTE 'SET ROLE iam_ctx_poc_owner';
-    RAISE EXCEPTION 'ASSERTION FAILED: runtime assumed owner role';
-  EXCEPTION WHEN insufficient_privilege THEN NULL;
-  END;
+  IF pg_has_role(current_user, 'iam_ctx_poc_owner', 'MEMBER') THEN
+    RAISE EXCEPTION 'ASSERTION FAILED: runtime is a member of owner role';
+  END IF;
   UPDATE iam_ctx_poc.records SET record_key = 'tampered' WHERE tenant_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   IF FOUND THEN RAISE EXCEPTION 'ASSERTION FAILED: cross-tenant UPDATE changed a row'; END IF;
   DELETE FROM iam_ctx_poc.records WHERE tenant_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
