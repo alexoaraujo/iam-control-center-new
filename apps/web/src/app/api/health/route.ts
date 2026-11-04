@@ -25,7 +25,7 @@ export async function GET() {
 
   try {
     const sql = getSql();
-    const rows = await sql`SELECT current_user = 'iam_app_runtime_login' AS runtime_role_verified`;
+    const rows = await sql`SELECT current_user = ${EXPECTED_DATABASE_ROLE} AS runtime_role_verified`;
     const databaseRoleVerified = rows[0]?.runtime_role_verified === true;
 
     if (!databaseRoleVerified) {
