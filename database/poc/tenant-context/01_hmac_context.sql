@@ -139,7 +139,7 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   BEGIN
-    EXECUTE $ddl$CREATE OR REPLACE FUNCTION iam_ctx_private.current_tenant_id() RETURNS uuid LANGUAGE sql AS $fn$ SELECT NULL::uuid $fn$ddl$;
+    EXECUTE $ddl$CREATE OR REPLACE FUNCTION iam_ctx_private.current_tenant_id() RETURNS uuid LANGUAGE sql AS $fn$ SELECT NULL::uuid $fn$ $ddl$;
     RAISE EXCEPTION 'ASSERTION FAILED: runtime replaced verifier';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
