@@ -228,3 +228,34 @@ A autorização de alinhamento foi executada na parte não secreta (`NEON_PROJEC
 - `DATABASE_MIGRATION_URL`: **NOT CONFIGURED / não localizada na listagem atual**.
 - Production: **NOT TOUCHED**.
 - Migration, bootstrap Preview, role/password changes e deploy Production: **não executados**.
+
+## 11. Read-back Vercel e Neon — 04/11/2026
+
+Consulta atual de metadados Vercel do projeto `iam-control-center`, com `decrypt=false`, e consulta read-only do projeto Neon canônico:
+
+| Item | Resultado atual | Classificação |
+|---|---|---|
+| Vercel `NEON_PROJECT_ID` | `wandering-wildflower-90908845` em Development e Preview; ausente em Production | PASS — read-back confirmado |
+| Vercel `DATABASE_URL` | Presente em Development, Preview e Production; valores não descriptografados | NOT VERIFIED — projeto, branch e role dos endpoints não comprovados |
+| Vercel `DATABASE_MIGRATION_URL` | Não retornada na listagem atual em nenhum ambiente | NOT CONFIGURED — snapshot atual |
+| GitHub Actions variable `NEON_PROJECT_ID` | Não acessível pelo conector nesta auditoria | NOT VERIFIED — workflow da PR #56 depende dela |
+| Neon `wandering-wildflower-90908845` | PostgreSQL 18, plano Free, 4 branches, limite informado de 10 | PASS — projeto localizado |
+
+### 11.1 Topologia atual do projeto canônico
+
+| Branch | ID | Parent | Estado |
+|---|---|---|---|
+| production | `br-dry-mouse-b4gyjp04` | default | READY |
+| development | `br-nameless-wave-b49yqod7` | production | READY |
+| preview | `br-broad-base-b4gnjmg5` | production | READY |
+| recovery-development-pre-bootstrap-2026-11-02 | `br-fancy-wind-b4ura0x5` | development | READY |
+
+O workflow da PR #56 exige exatamente uma Production default READY e uma Development filha direta de Production READY. A topologia atual satisfaz esse preflight. O workflow cria `preview/pr-<number>` como filha de Development; não deve reutilizar a branch `preview` existente, que é filha direta de Production.
+
+### 11.2 Limites e pendências
+
+- A decisão de projeto canônico `wandering-wildflower-90908845` está confirmada e o read-back Vercel de Development/Preview já está alinhado.
+- A variável do GitHub Actions é distinta da variável Vercel; confirmar manualmente em Settings → Secrets and variables → Actions → Variables que `NEON_PROJECT_ID` tenha o valor canônico antes de ativar o workflow da PR #56.
+- Não descriptografar nem substituir `DATABASE_URL` sem validar endpoint, branch e autenticação runtime dedicada.
+- `DATABASE_MIGRATION_URL` permanece não configurada neste snapshot; não criar nem usar URL administrativa como substituta.
+- Nenhuma migration, alteração de role/grant, credencial, secret ou deployment Production foi executada nesta leitura.
