@@ -45,7 +45,7 @@ $fn$;
 
 CREATE FUNCTION iam_ctx_private.current_tenant_id()
 RETURNS uuid LANGUAGE plpgsql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, iam_ctx_private, public
+SET search_path = pg_catalog, iam_ctx_private
 AS $fn$
 DECLARE
   token text; payload_hex text; signature_hex text; payload text;
@@ -60,7 +60,7 @@ BEGIN
   IF claims->>'v' <> '1' OR claims->>'kid' <> 'poc-v1' THEN RETURN NULL; END IF;
   SELECT secret INTO STRICT secret_value FROM iam_ctx_private.signing_keys
     WHERE key_id = claims->>'kid' AND active;
-  expected_signature := public.hmac(convert_to(payload, 'UTF8'), secret_value, 'sha256');
+  expected_signature := iam_ctx_private.hmac(convert_to(payload, 'UTF8'), secret_value, 'sha256');
   IF expected_signature <> decode(signature_hex, 'hex') THEN RETURN NULL; END IF;
   IF (claims->>'exp')::bigint <= floor(extract(epoch FROM clock_timestamp()))::bigint THEN RETURN NULL; END IF;
   RETURN (claims->>'tenant_id')::uuid;
