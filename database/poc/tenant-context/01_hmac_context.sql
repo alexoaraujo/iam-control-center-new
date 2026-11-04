@@ -91,7 +91,7 @@ $fn$;
 
 SELECT iam_ctx_private.issue_context('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 60) AS token_a \gset
 SELECT iam_ctx_private.issue_context('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 60) AS token_b \gset
-SELECT iam_ctx_private.issue_context('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 0) AS expired_token \gset
+SELECT iam_ctx_private.issue_context('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 1) AS expired_token \gset
 
 SET ROLE iam_ctx_poc_runtime;
 SELECT set_config('app.tenant_context', :'token_a', false);
@@ -109,6 +109,7 @@ SELECT set_config('app.tenant_context',
 SELECT public.assert_true((SELECT count(*) = 0 FROM iam_ctx_poc.records),
   'payload tenant tampering must expose no rows');
 
+SELECT pg_sleep(2);
 SELECT set_config('app.tenant_context', :'expired_token', false);
 SELECT public.assert_true((SELECT count(*) = 0 FROM iam_ctx_poc.records),
   'expired context must expose no rows');
