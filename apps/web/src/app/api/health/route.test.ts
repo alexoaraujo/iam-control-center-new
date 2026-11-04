@@ -25,8 +25,8 @@ describe("GET /api/health", () => {
     vi.unstubAllEnvs();
   });
 
-  it("returns healthy only after a successful database query", async () => {
-    sqlMock.mockResolvedValue([{ health_check: 1 }]);
+  it("returns healthy only when the database is reachable through the expected runtime role", async () => {
+    sqlMock.mockResolvedValue([{ runtime_role_verified: true }]);
 
     const response = await GET();
     const body = await response.json();
@@ -39,11 +39,25 @@ describe("GET /api/health", () => {
       authConfigured: false,
       databaseConfigured: true,
       databaseReachable: true,
+      databaseRoleVerified: true,
     });
     expect(getSqlMock).toHaveBeenCalledOnce();
     expect(sqlMock).toHaveBeenCalledOnce();
     expect(JSON.stringify(body)).not.toContain("secret");
     expect(JSON.stringify(body)).not.toContain("postgres://");
+    expect(sqlMock.mock.calls[0]).toBeDefined();
+  });
+
+  it("fails readiness when the database is reachable through an unexpected role", async () => {
+    sqlMock.mockResolvedValue([{ runtime_role_verified: false }]);
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body.ok).toBe(false);
+    expect(body.databaseReachable).toBe(true);
+    expect(body.databaseRoleVerified).toBe(false);
   });
 
   it("fails closed when DATABASE_URL is not configured", async () => {
@@ -56,6 +70,7 @@ describe("GET /api/health", () => {
     expect(body.ok).toBe(false);
     expect(body.databaseConfigured).toBe(false);
     expect(body.databaseReachable).toBe(false);
+    expect(body.databaseRoleVerified).toBe(false);
     expect(getSqlMock).not.toHaveBeenCalled();
   });
 
@@ -73,6 +88,7 @@ describe("GET /api/health", () => {
     expect(body.status).toBe("unavailable");
     expect(body.databaseConfigured).toBe(true);
     expect(body.databaseReachable).toBe(false);
+    expect(body.databaseRoleVerified).toBe(false);
     expect(serialized).not.toContain("secret");
     expect(serialized).not.toContain("postgres://");
     expect(serialized).not.toContain("connection failed");
