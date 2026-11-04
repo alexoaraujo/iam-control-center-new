@@ -27,6 +27,7 @@ describe("GET /api/health whitespace configuration", () => {
       authConfigured: false,
       databaseConfigured: false,
       databaseReachable: false,
+      databaseRoleVerified: false,
     });
 
     const serialized = JSON.stringify(body);
