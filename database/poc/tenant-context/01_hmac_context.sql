@@ -139,7 +139,44 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   BEGIN
-    EXECUTE 'CREATE OR REPLACE FUNCTION iam_ctx_private.current_tenant_id() RETURNS uuid LANGUAGE sql AS $ SELECT NULL::uuid $';
+    EXECUTE 'CREATE OR REPLACE FUNCTION iam_ctx_private.current_tenant_id() RETURNS uuid LANGUAGE sql AS $fn$ SELECT NULL::uuid $fn
+    RAISE EXCEPTION 'ASSERTION FAILED: runtime replaced verifier';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    EXECUTE 'ALTER TABLE iam_ctx_poc.records DISABLE ROW LEVEL SECURITY';
+    RAISE EXCEPTION 'ASSERTION FAILED: runtime disabled RLS';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  IF pg_has_role(current_user, 'iam_ctx_poc_owner', 'MEMBER') THEN
+    RAISE EXCEPTION 'ASSERTION FAILED: runtime is a member of owner role';
+  END IF;
+  UPDATE iam_ctx_poc.records SET record_key = 'tampered' WHERE tenant_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  IF FOUND THEN RAISE EXCEPTION 'ASSERTION FAILED: cross-tenant UPDATE changed a row'; END IF;
+  DELETE FROM iam_ctx_poc.records WHERE tenant_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  IF FOUND THEN RAISE EXCEPTION 'ASSERTION FAILED: cross-tenant DELETE removed a row'; END IF;
+  UPDATE iam_ctx_poc.records SET record_key = 'tenant-a-updated'
+    WHERE tenant_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  IF NOT FOUND THEN RAISE EXCEPTION 'ASSERTION FAILED: own-tenant UPDATE was denied'; END IF;
+END
+$test$;
+RESET ROLE;
+
+-- Transaction-local GUC must not leak to the next transaction on a pooled session.
+BEGIN;
+SET ROLE iam_ctx_poc_runtime;
+SELECT set_config('app.tenant_context', :'token_a', true);
+SELECT public.assert_true((SELECT count(*) = 1 FROM iam_ctx_poc.records),
+  'transaction-local context must authorize its tenant');
+RESET ROLE;
+COMMIT;
+SET ROLE iam_ctx_poc_runtime;
+SELECT public.assert_true((SELECT count(*) = 0 FROM iam_ctx_poc.records),
+  'transaction-local context must not leak after COMMIT');
+RESET ROLE;
+
+SELECT 'IAM-CTX-POC-01 SQL assertions completed' AS result;
+;
     RAISE EXCEPTION 'ASSERTION FAILED: runtime replaced verifier';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
