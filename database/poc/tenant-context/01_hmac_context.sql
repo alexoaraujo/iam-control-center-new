@@ -77,7 +77,7 @@ CREATE POLICY tenant_isolation ON iam_ctx_poc.records
 REVOKE ALL ON ALL TABLES IN SCHEMA iam_ctx_private FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA iam_ctx_private FROM PUBLIC;
 GRANT USAGE ON SCHEMA iam_ctx_poc, iam_ctx_private TO iam_ctx_poc_runtime;
-GRANT SELECT, INSERT ON iam_ctx_poc.records TO iam_ctx_poc_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON iam_ctx_poc.records TO iam_ctx_poc_runtime;
 GRANT EXECUTE ON FUNCTION iam_ctx_private.current_tenant_id() TO iam_ctx_poc_runtime;
 RESET ROLE;
 
@@ -138,8 +138,43 @@ BEGIN
     RAISE EXCEPTION 'ASSERTION FAILED: runtime invoked issuer';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
+  BEGIN
+    EXECUTE 'CREATE OR REPLACE FUNCTION iam_ctx_private.current_tenant_id() RETURNS uuid LANGUAGE sql AS $ SELECT NULL::uuid $';
+    RAISE EXCEPTION 'ASSERTION FAILED: runtime replaced verifier';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    EXECUTE 'ALTER TABLE iam_ctx_poc.records DISABLE ROW LEVEL SECURITY';
+    RAISE EXCEPTION 'ASSERTION FAILED: runtime disabled RLS';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    EXECUTE 'SET ROLE iam_ctx_poc_owner';
+    RAISE EXCEPTION 'ASSERTION FAILED: runtime assumed owner role';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  UPDATE iam_ctx_poc.records SET record_key = 'tampered' WHERE tenant_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  IF FOUND THEN RAISE EXCEPTION 'ASSERTION FAILED: cross-tenant UPDATE changed a row'; END IF;
+  DELETE FROM iam_ctx_poc.records WHERE tenant_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  IF FOUND THEN RAISE EXCEPTION 'ASSERTION FAILED: cross-tenant DELETE removed a row'; END IF;
+  UPDATE iam_ctx_poc.records SET record_key = 'tenant-a-updated'
+    WHERE tenant_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  IF NOT FOUND THEN RAISE EXCEPTION 'ASSERTION FAILED: own-tenant UPDATE was denied'; END IF;
 END
 $test$;
+RESET ROLE;
+
+-- Transaction-local GUC must not leak to the next transaction on a pooled session.
+BEGIN;
+SET ROLE iam_ctx_poc_runtime;
+SELECT set_config('app.tenant_context', :'token_a', true);
+SELECT public.assert_true((SELECT count(*) = 1 FROM iam_ctx_poc.records),
+  'transaction-local context must authorize its tenant');
+RESET ROLE;
+COMMIT;
+SET ROLE iam_ctx_poc_runtime;
+SELECT public.assert_true((SELECT count(*) = 0 FROM iam_ctx_poc.records),
+  'transaction-local context must not leak after COMMIT');
 RESET ROLE;
 
 SELECT 'IAM-CTX-POC-01 SQL assertions completed' AS result;
