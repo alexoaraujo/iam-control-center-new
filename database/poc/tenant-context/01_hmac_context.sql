@@ -163,6 +163,9 @@ $test$;
 RESET ROLE;
 
 -- Transaction-local GUC must not leak to the next transaction on a pooled session.
+-- Clear the prior session-scoped test token: SET LOCAL restores this baseline at COMMIT.
+SELECT set_config('app.tenant_context', '', false);
+
 BEGIN;
 SET ROLE iam_ctx_poc_runtime;
 SELECT set_config('app.tenant_context', :'token_a', true);
