@@ -1,62 +1,80 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { getSqlMock, sqlMock } = vi.hoisted(() => ({
+  getSqlMock: vi.fn(),
+  sqlMock: vi.fn(),
+}));
+
+vi.mock("../../../lib/db", () => ({
+  getSql: getSqlMock,
+}));
+
 import { GET } from "./route";
 
 describe("GET /api/health", () => {
-  afterEach(() => vi.unstubAllEnvs());
+  beforeEach(() => {
+    vi.stubEnv("AUTH0_DOMAIN", "");
+    vi.stubEnv("AUTH0_CLIENT_ID", "");
+    vi.stubEnv("DATABASE_URL", "postgres://iam_user:secret@localhost/iam");
+    getSqlMock.mockReset();
+    sqlMock.mockReset();
+    getSqlMock.mockReturnValue(sqlMock);
+  });
 
-  it("returns scaffold status and only public configuration booleans", async () => {
-    vi.stubEnv("AUTH0_DOMAIN", "example.auth0.com");
-    vi.stubEnv("AUTH0_CLIENT_ID", "public-client-id");
-    vi.stubEnv("AUTH0_CLIENT_SECRET", "must-not-appear-client-secret");
-    vi.stubEnv("AUTH0_SECRET", "must-not-appear-session-secret");
-    vi.stubEnv(
-      "DATABASE_URL",
-      "postgres://iam_user:must-not-appear-db-password@localhost/iam",
-    );
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
-    const response = GET();
+  it("returns healthy only after a successful database query", async () => {
+    sqlMock.mockResolvedValue([{ health_check: 1 }]);
+
+    const response = await GET();
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body).toEqual({
       ok: true,
       service: "iam-control-center-web",
-      status: "scaffold",
-      authConfigured: true,
+      status: "healthy",
+      authConfigured: false,
       databaseConfigured: true,
+      databaseReachable: true,
     });
-
-    const serialized = JSON.stringify(body);
-    expect(serialized).not.toContain("must-not-appear");
-    expect(serialized).not.toContain("postgres://");
-    expect(serialized).not.toContain("example.auth0.com");
-  });
-
-  it("reports each integration independently when configuration is partial", async () => {
-    vi.stubEnv("AUTH0_DOMAIN", "example.auth0.com");
-    vi.stubEnv("AUTH0_CLIENT_ID", "");
-    vi.stubEnv("DATABASE_URL", "postgres://user:password@localhost/iam");
-
-    const response = GET();
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.authConfigured).toBe(false);
-    expect(body.databaseConfigured).toBe(true);
+    expect(getSqlMock).toHaveBeenCalledOnce();
+    expect(sqlMock).toHaveBeenCalledOnce();
+    expect(JSON.stringify(body)).not.toContain("secret");
     expect(JSON.stringify(body)).not.toContain("postgres://");
   });
 
-  it("reports integrations as unconfigured when required values are absent", async () => {
-    vi.stubEnv("AUTH0_DOMAIN", "");
-    vi.stubEnv("AUTH0_CLIENT_ID", "");
+  it("fails closed when DATABASE_URL is not configured", async () => {
     vi.stubEnv("DATABASE_URL", "");
 
-    const response = GET();
+    const response = await GET();
     const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body.authConfigured).toBe(false);
+    expect(response.status).toBe(503);
+    expect(body.ok).toBe(false);
     expect(body.databaseConfigured).toBe(false);
-    expect(body.status).toBe("scaffold");
+    expect(body.databaseReachable).toBe(false);
+    expect(getSqlMock).not.toHaveBeenCalled();
+  });
+
+  it("does not expose database provider errors", async () => {
+    sqlMock.mockRejectedValue(
+      new Error("connection failed: postgres://iam_user:secret@host/iam"),
+    );
+
+    const response = await GET();
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    expect(response.status).toBe(503);
+    expect(body.ok).toBe(false);
+    expect(body.status).toBe("unavailable");
+    expect(body.databaseConfigured).toBe(true);
+    expect(body.databaseReachable).toBe(false);
+    expect(serialized).not.toContain("secret");
+    expect(serialized).not.toContain("postgres://");
+    expect(serialized).not.toContain("connection failed");
   });
 });
