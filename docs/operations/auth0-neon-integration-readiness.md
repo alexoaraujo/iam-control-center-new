@@ -188,3 +188,9 @@ As consultas de autenticação como `iam_migrator_login` e `iam_app_runtime_logi
 ### 10.3 Limite de execução
 
 Nenhuma alteração foi feita em Vercel, Neon ou Auth0. O próximo passo operacional é obter aprovação específica para atualizar `NEON_PROJECT_ID` em Development e Preview e alinhar os endpoints secretos com as branches Development e Preview do projeto canônico. Não alterar Production, não descriptografar/exibir secrets, não executar migrations e não habilitar Neon Auth. Auth0 continua sendo o único provedor de identidade.
+
+## 11. Read-back atual — 04/11/2026
+
+O read-back Vercel com `decrypt=false` confirmou `NEON_PROJECT_ID=wandering-wildflower-90908845` em Development e Preview; Production não possui essa variável. `DATABASE_URL` existe nos três ambientes, mas seus valores não foram descriptografados e a identidade dos endpoints permanece NOT VERIFIED. `DATABASE_MIGRATION_URL` não foi retornada na listagem atual e está classificada NOT CONFIGURED neste snapshot. A topologia do projeto Neon canônico (Production → Development, com Preview e recovery existentes) foi confirmada em leitura somente.
+
+A variável `NEON_PROJECT_ID` do GitHub Actions é independente da variável Vercel e continua NOT VERIFIED; confirmar seu valor canônico antes de ativar o workflow privilegiado da PR #56. Nenhuma migration, credencial, role, secret ou configuração Production foi alterada. Consulte [neon-project-identity-reconciliation.md](./neon-project-identity-reconciliation.md) para IDs e estado das branches.
