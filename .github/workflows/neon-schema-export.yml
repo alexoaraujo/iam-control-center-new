@@ -2,12 +2,6 @@ name: Neon post-hardening schema export
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - chore/reconcile-neon-source-schema-baseline
-    paths:
-      - ".github/workflows/neon-schema-export.yml"
-      - "database/scripts/export-neon-schema.sh"
 
 permissions:
   contents: read
