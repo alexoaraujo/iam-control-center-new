@@ -7,6 +7,10 @@
 -- entry atomically with the DDL. session_user must be iam_migrator_login.
 
 BEGIN;
+-- The login is intentionally not a direct member of iam_owner. Follow the
+-- reviewed two-step role chain so the effective role is iam_owner while the
+-- authenticated session identity remains iam_migrator_login.
+SET LOCAL ROLE iam_migrator;
 SET LOCAL ROLE iam_owner;
 SELECT iam.acquire_migration_lock();
 
