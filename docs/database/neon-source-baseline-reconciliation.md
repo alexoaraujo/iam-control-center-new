@@ -195,6 +195,18 @@ Além das tabelas ausentes, faltam na proposta os 7 ENUMs, a view `iam.v_effecti
 
 **Classificação da divergência:** estrutural e semântica, não apenas diferença de nomenclatura. Não é seguro “completar” a migration 0001 em lugar, pois ela pode ter sido aplicada em ambientes ou registrada em ledgers. A estratégia precisa preservar histórico e separar bootstrap de banco novo da reconciliação de instalações existentes.
 
+### Revisão de segurança direcionada — `iam.set_tenant_context`
+
+Consulta read-only adicional da definição completa confirmou:
+
+- A função apenas define GUCs transacionais `iam.tenant_id`, `iam.identity_id`, `iam.expires_at`, `iam.nonce` e `iam.signature`, chama `app_private.current_tenant_id()` com schema qualificado e limpa o contexto antes de lançar `42501` quando a validação falha.
+- Não foi observado SQL dinâmico nem referência a objetos de aplicação não qualificados no corpo; `set_config` é função de catálogo `pg_catalog`.
+- ACL concede EXECUTE a `iam_app_runtime` e `iam_worker`, além de `iam_owner`.
+- As policies tenant-scoped inspecionadas referenciam `app_private.current_tenant_id()`; não dependem diretamente de resolução de nomes via `public`.
+- A função auxiliar `app_private.current_tenant_id()` mantém `search_path=pg_catalog, app_private, iam`.
+
+**Refinamento da classificação:** o `public` no search_path de `iam.set_tenant_context` é desnecessário para o corpo atualmente observado e viola o padrão mínimo de hardening, mas não foi identificada, nesta revisão estática, uma referência não qualificada explorável. Manter como hardening pendente; a correção proposta é restringir o search_path após validar a assinatura/definição e testar comportamento e grants em branch descartável. Nenhuma alteração na fonte.
+
 ## Próximas etapas obrigatórias
 
 1. Extrair DDL estrutural fiel e sem dados da fonte: schemas, tipos, sequências, tabelas, constraints, índices, view, funções, triggers, policies, grants, owners e configurações RLS.
