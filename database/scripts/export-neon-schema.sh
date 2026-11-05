@@ -104,7 +104,7 @@ fi
 # either as three quoted identifiers or as one comma-separated GUC string.
 # The source catalog check above binds this exact setting to this function;
 # here verify that both the function and the exact ordered setting survived.
-if ! grep -Eq 'current_tenant_id[[:space:]]*[(][)]' "$dump_tmp"; then
+if ! grep -Eq 'current_tenant_id"?[[:space:]]*[(][)]' "$dump_tmp"; then
   echo "ERRO: pg_dump não incluiu app_private.current_tenant_id(); export descartado." >&2
   exit 8
 fi
