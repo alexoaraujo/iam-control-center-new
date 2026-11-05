@@ -62,6 +62,18 @@ pg_dump \
   --file="$dump_tmp"
 
 test -s "$dump_tmp"
+
+# pg_dump precisa transportar o índice e a configuração da função; não basta
+# confirmar esses objetos no catálogo da origem.
+if ! grep -Fq 'context_keys_one_active_idx' "$dump_tmp"; then
+  echo "ERRO: pg_dump não incluiu context_keys_one_active_idx; export descartado." >&2
+  exit 7
+fi
+if ! grep -Fq 'current_tenant_id' "$dump_tmp" || ! grep -Fq "search_path TO 'pg_catalog', 'app_private', 'iam'" "$dump_tmp"; then
+  echo "ERRO: pg_dump não incluiu o search_path hardened de current_tenant_id(); export descartado." >&2
+  exit 8
+fi
+
 {
   printf '%s\n' '-- Required extension dependency (not application objects from public).' \
     'CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;' ''
@@ -69,6 +81,11 @@ test -s "$dump_tmp"
 } > "$tmp"
 
 test -s "$tmp"
+if ! grep -Fq 'CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;' "$tmp" ||
+   ! grep -Fq 'context_keys_one_active_idx' "$tmp"; then
+  echo "ERRO: validação final do dump falhou; arquivo não será publicado." >&2
+  exit 9
+fi
 mv "$tmp" "$out"
 rm -f "$dump_tmp"
 trap - EXIT
