@@ -45,7 +45,7 @@ jobs:
 
           raw = os.environ["NEON_SCHEMA_EXPORT_URL"]
           u = urlparse(raw)
-          allowed_host = "ep-damp-bar-b6d84mxg.c-2.sa-east-1.aws.neon.tech"
+          allowed_host = "ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech"
           if u.scheme not in ("postgres", "postgresql"):
               raise SystemExit("Connection must use PostgreSQL URI scheme")
           if u.hostname != allowed_host or (u.hostname or "").endswith("-pooler.c-2.sa-east-1.aws.neon.tech"):
@@ -87,7 +87,19 @@ jobs:
             --workdir /workspace \
             --env PGHOST --env PGPORT --env PGDATABASE --env PGUSER --env PGSSLMODE --env PGPASSFILE \
             postgres:18-bookworm \
-            bash database/scripts/export-neon-schema.sh artifacts/iam_database_schema.sql
+            bash -c '
+              set -euo pipefail
+              test -n "${PGPASSFILE:-}"
+              test -r "$PGPASSFILE"
+              mode="$(stat -c "%a" "$PGPASSFILE")"
+              entries="$(wc -l < "$PGPASSFILE" | tr -d " ")"
+              if [[ "$mode" != "600" || "$entries" != "1" ]]; then
+                echo "::error::Neon passfile is not readable with the expected mode and one entry."
+                exit 1
+              fi
+              printf "Passfile validated: readable=true mode=%s entries=%s\\n" "$mode" "$entries"
+              bash database/scripts/export-neon-schema.sh artifacts/iam_database_schema.sql
+            '
           rm -f .neon-schema-export.pgpass
           test -s artifacts/iam_database_schema.sql
           sha256sum artifacts/iam_database_schema.sql | tee artifacts/iam_database_schema.sql.sha256
@@ -96,7 +108,8 @@ jobs:
             echo "branch=${GITHUB_REF_NAME}"
             echo "commit=${GITHUB_SHA}"
             echo "database=iam_database"
-            echo "source_host=ep-damp-bar-b6d84mxg.c-2.sa-east-1.aws.neon.tech"
+            echo "source_branch=main"
+            echo "source_host=ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech"
             echo "format=plain SQL, schema-only"
             echo "schemas=iam,audit,app_private"
             echo "extension_dependency=pgcrypto in public"
