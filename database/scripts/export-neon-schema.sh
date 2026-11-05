@@ -100,8 +100,12 @@ if ! grep -Fq 'context_keys_one_active_idx' "$dump_tmp"; then
   echo "ERRO: pg_dump não incluiu context_keys_one_active_idx; export descartado." >&2
   exit 7
 fi
-if ! grep -Fq 'current_tenant_id' "$dump_tmp" || ! grep -Fq "search_path TO 'pg_catalog', 'app_private', 'iam'" "$dump_tmp"; then
-  echo "ERRO: pg_dump não incluiu o search_path hardened de current_tenant_id(); export descartado." >&2
+# PostgreSQL may serialize a GUC value as one SQL string or as a
+# comma-separated identifier list. Accept both pg_dump representations,
+# while requiring the exact ordered allowlist and the target function.
+if ! grep -Fq '"app_private"."current_tenant_id"()' "$dump_tmp" ||
+   ! grep -Eq "search_path TO ('pg_catalog', 'app_private', 'iam'|'pg_catalog, app_private, iam'|pg_catalog, app_private, iam)(;|$)" "$dump_tmp"; then
+  echo "ERRO: pg_dump não incluiu o search_path hardened de app_private.current_tenant_id(); export descartado." >&2
   exit 8
 fi
 
