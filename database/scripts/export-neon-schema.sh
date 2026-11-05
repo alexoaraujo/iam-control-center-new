@@ -118,10 +118,10 @@ import sys
 
 dump = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
 patterns = (
-    r'search_path\\s+TO\\s+"pg_catalog"\\s*,\\s*"app_private"\\s*,\\s*"iam"(?:;|\\s|$)',
-    r"search_path\\s+TO\\s+'pg_catalog'\\s*,\\s*'app_private'\\s*,\\s*'iam'(?:;|\\s|$)",
-    r"search_path\\s+TO\\s+'pg_catalog,\\s*app_private,\\s*iam'(?:;|\\s|$)",
-    r"search_path\\s+TO\\s+pg_catalog,\\s*app_private,\\s*iam(?:;|\\s|$)",
+    r'search_path\s+TO\s+"pg_catalog"\s*,\s*"app_private"\s*,\s*"iam"(?:;|\s|$)',
+    r"search_path\s+TO\s+'pg_catalog'\s*,\s*'app_private'\s*,\s*'iam'(?:;|\s|$)",
+    r"search_path\s+TO\s+'pg_catalog,\s*app_private,\s*iam'(?:;|\s|$)",
+    r"search_path\s+TO\s+pg_catalog,\s*app_private,\s*iam(?:;|\s|$)",
 )
 if not any(re.search(pattern, dump, re.IGNORECASE) for pattern in patterns):
     raise SystemExit(1)
