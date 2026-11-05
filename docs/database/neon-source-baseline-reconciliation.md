@@ -100,6 +100,31 @@ O ledger da fonte contém a migration `0001_context_key_hardening`, checksum SHA
 
 Observação: a fonte e uma branch isolada anteriormente consultada apresentaram ledger idêntico. A origem temporal dessa igualdade não foi estabelecida. Este documento não atribui causa nem presume execução independente.
 
+## Extração detalhada — rodada 1 (catálogo read-only)
+
+Em 2026-11-05 foi executada uma extração adicional de metadados diretamente do catálogo PostgreSQL da mesma fonte. A consulta composta retornou parte do snapshot estrutural, mas a resposta foi truncada pelo limite de saída; portanto, esta rodada **não é classificada como export DDL integral**.
+
+Evidências detalhadas obtidas em consultas menores:
+
+- PostgreSQL 18.6; schemas `iam`, `audit` e `app_private` pertencem a `iam_owner`.
+- 7 ENUMs: `api_key_status`, `audit_outcome`, `identity_status`, `invitation_status`, `membership_status`, `session_status` e `tenant_status`.
+- View `iam.v_effective_membership_permissions`: owner `iam_owner`, opção `security_invoker=true`; delega a resolução para `iam.effective_permissions(id)`.
+- Contagens confirmadas novamente: 23 relações tabulares, 20 com RLS, 20 com FORCE RLS, 41 policies e 12 triggers não internos.
+- As ACLs de tabelas foram extraídas sem consultar linhas de dados. Foram observados privilégios distintos para `iam_app_runtime`, `iam_worker` e `iam_migrator`; a extração integral e a matriz efetiva por operação ainda precisam ser normalizadas.
+- As 9 funções foram identificadas e suas definições obtidas em consulta separada. Entre elas há 6 funções `SECURITY DEFINER` nos schemas examinados.
+
+### Achado de hardening: `iam.set_tenant_context(...)`
+
+A função `iam.set_tenant_context(uuid, uuid, bigint, text, text)` é `SECURITY DEFINER`, pertence a `iam_owner` e atualmente declara:
+
+```sql
+SET search_path TO 'pg_catalog', 'app_private', 'iam', 'public'
+```
+
+Isso diverge do padrão de hardening já observado em `app_private.current_tenant_id()` e dos demais caminhos SECURITY DEFINER que restringem o `search_path`. A consulta de ACL também confirmou que `PUBLIC` tem apenas `USAGE` no schema `public` (sem `CREATE`), e que as roles `iam_owner`, `iam_migrator`, `iam_migrator_login`, `iam_app_runtime` e `iam_worker` consultadas não têm `CREATE` em `public`. Portanto, o achado é uma **divergência de hardening a corrigir/justificar**, não evidência isolada de exploração ou de escalada efetiva.
+
+Ação de baseline: avaliar a definição pretendida e remover `public` do `search_path` dessa função em uma migration de reconciliação separada, depois de validar dependências e comportamento em PostgreSQL descartável. Nenhuma alteração foi aplicada na fonte.
+
 ## Próximas etapas obrigatórias
 
 1. Extrair DDL estrutural fiel e sem dados da fonte: schemas, tipos, sequências, tabelas, constraints, índices, view, funções, triggers, policies, grants, owners e configurações RLS.
@@ -126,6 +151,7 @@ Observação: a fonte e uma branch isolada anteriormente consultada apresentaram
 | Fonte oficial confirmada | PASS |
 | Inventário estrutural agregado | PASS |
 | Divergência bootstrap × fonte identificada | PASS |
+| Extração detalhada parcial do catálogo | PASS (escopo parcial; saída composta truncada) |
 | Export DDL integral sem dados | PENDING |
 | Baseline reconciliada e versionada | PENDING |
 | Fixture integral fiel à fonte | PENDING |
