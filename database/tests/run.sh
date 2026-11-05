@@ -57,7 +57,7 @@ SQL
 echo "Running migration over an authenticated non-privileged LOGIN session..."
 {
   printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
-  cat database/migrations/0001_initial_iam_schema.sql
+  cat database/migrations/0001_context_key_hardening.sql
 } | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
 
 # Schema contract checks intentionally run as the disposable test administrator
