@@ -39,7 +39,7 @@ export PGHOST PGPORT PGDATABASE PGUSER PGSSLMODE PGPASSWORD
 # Diagnóstico não sensível: identifica a role efetiva e separa cada etapa
 # para localizar falhas de autorização sem ampliar privilégios.
 echo "[schema-export] checking connection identity and schema usage"
-psql -X --no-password -v ON_ERROR_STOP=1 -Atq \\
+psql -X --no-password -v ON_ERROR_STOP=1 -Atq \
   -c "SELECT current_user || '|' || session_user || '|app_private_usage=' || has_schema_privilege(current_user, 'app_private', 'USAGE') || '|app_private_create=' || has_schema_privilege(current_user, 'app_private', 'CREATE');"
 
 # --extension isolado não garante dependências transitivas no pg_dump.
