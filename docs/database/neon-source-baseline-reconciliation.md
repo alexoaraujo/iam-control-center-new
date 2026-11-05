@@ -273,6 +273,10 @@ Consultas read-only ao catálogo da fonte oficial. Nenhuma linha de aplicação 
 - **Sequences:** três objetos associados a audit.events, audit.outbox e iam.security_events; owner iam_owner.
 - **Funções:** definições integrais de 9 funções extraídas em rodada anterior, incluindo corpo, SECURITY DEFINER, owner, proconfig e ACL.
 
+### Constraints — segunda extração sem truncamento
+
+Uma consulta filtrada por `contype <> 'n'` retornou as 101 constraints de integridade com definições completas e metadados de validação/deferrability: 24 CHECK, 33 FOREIGN KEY, 23 PRIMARY KEY e 21 UNIQUE. Todas as 101 estão `convalidated=true`; nenhuma é deferrable ou initially deferred. As 143 constraints NOT NULL foram contabilizadas separadamente por coluna (`attnotnull`). A contagem confere: 101 + 143 = 244.
+
 ### Limites da extração
 
 - A tentativa agregada de retornar todas as 244 constraints foi truncada pela saída da ferramenta. Portanto, não classificar constraints como exportadas integralmente nesta rodada.
