@@ -63,8 +63,8 @@ BEGIN
 
   IF NOT EXISTS (
     SELECT 1
-      FROM unnest(coalesce(v_search_path, ARRAY[]::text[])) AS setting
-     WHERE setting = 'search_path=pg_catalog, app_private, iam, public'
+      FROM unnest(coalesce(v_search_path, ARRAY[]::text[])) AS s(value)
+     WHERE s.value = 'search_path=pg_catalog, app_private, iam, public'
   ) THEN
     RAISE EXCEPTION 'function search_path differs from the reviewed source state: %',
       coalesce(v_search_path::text, '<unset>');
@@ -106,7 +106,7 @@ BEGIN
      WHERE i.indexrelid = to_regclass('app_private.context_keys_one_active_idx')
        AND i.indisunique
        AND i.indisvalid
-       AND i.indpred IS NOT NULL
+       AND pg_get_expr(i.indpred, i.indrelid) = '(active IS TRUE)'
   ) THEN
     RAISE EXCEPTION 'partial unique index verification failed';
   END IF;
