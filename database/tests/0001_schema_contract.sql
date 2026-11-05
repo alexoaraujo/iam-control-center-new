@@ -2,13 +2,16 @@
 -- Run as the disposable PostgreSQL administrator after migration 0001 commits.
 \set ON_ERROR_STOP on
 
+SELECT set_config('ci.migration_checksum', :'migration_checksum', false);
+SELECT set_config('ci.source_sha', :'source_sha', false);
+
 DO $assert_migration$
 DECLARE
   v_index record;
   v_function record;
   v_ledger record;
-  v_expected_checksum text := :'migration_checksum';
-  v_expected_source text := :'source_sha';
+  v_expected_checksum text := current_setting('ci.migration_checksum');
+  v_expected_source text := current_setting('ci.source_sha');
 BEGIN
   SELECT i.indisunique, i.indisvalid, pg_get_expr(i.indpred, i.indrelid) AS predicate
     INTO v_index
