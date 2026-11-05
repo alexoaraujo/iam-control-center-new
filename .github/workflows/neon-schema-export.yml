@@ -54,12 +54,12 @@ jobs:
               raise SystemExit("Connection database is not the allowlisted source database")
           user = unquote(u.username or "")
           password = unquote(u.password or "")
-          if not user or not password or "\\n" in password or "\\r" in password:
+          if not user or not password or "\n" in password or "\r" in password:
               raise SystemExit("Connection URI must contain valid credentials without line breaks")
           port = u.port or 5432
           delimiter = "PGPASSWORD_" + uuid.uuid4().hex
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-              f.write(f"PGPASSWORD<<{delimiter}\\n{password}\\n{delimiter}\\n")
+              f.write(f"PGPASSWORD<<{delimiter}\n{password}\n{delimiter}\n")
               for key, value in {
                   "PGHOST": allowed_host,
                   "PGPORT": str(port),
@@ -67,7 +67,7 @@ jobs:
                   "PGUSER": user,
                   "PGSSLMODE": "require",
               }.items():
-                  f.write(f"{key}={value}\\n")
+                  f.write(f"{key}={value}\n")
           PY
           unset NEON_SCHEMA_EXPORT_URL
           echo "Connection target validated; credentials were not logged."
