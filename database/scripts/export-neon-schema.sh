@@ -50,6 +50,28 @@ if [[ -z "$extension_meta" || "$extension_meta" != *"|public" ]]; then
 fi
 printf 'Dependência confirmada: pgcrypto %s\n' "${extension_meta%%|*}"
 
+# Fail closed se o catálogo da origem não apresentar o hardening esperado.
+index_meta="$(psql -X --no-password -v ON_ERROR_STOP=1 -Atq \
+  -c "SELECT pg_get_indexdef(to_regclass('app_private.context_keys_one_active_idx')::oid)
+      WHERE to_regclass('app_private.context_keys_one_active_idx') IS NOT NULL;")"
+if [[ "$index_meta" != *"UNIQUE INDEX context_keys_one_active_idx"* || "$index_meta" != *"WHERE (active IS TRUE)"* ]]; then
+  echo "ERRO: índice parcial único pós-hardening ausente ou divergente na origem." >&2
+  exit 5
+fi
+
+function_meta="$(psql -X --no-password -v ON_ERROR_STOP=1 -Atq \
+  -c "SELECT array_to_string(p.proconfig, ', ')
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'app_private'
+        AND p.proname = 'current_tenant_id'
+        AND p.prokind = 'f';")"
+if [[ "$function_meta" != *"search_path=pg_catalog, app_private, iam"* ]]; then
+  echo "ERRO: search_path pós-hardening de app_private.current_tenant_id() ausente ou divergente." >&2
+  exit 6
+fi
+printf 'Hardening confirmado: índice parcial único e search_path restrito.\n'
+
 pg_dump \
   --no-password \
   --format=plain \
