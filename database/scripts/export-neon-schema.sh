@@ -36,9 +36,16 @@ trap 'rm -f "$tmp" "$dump_tmp"' EXIT
 
 export PGHOST PGPORT PGDATABASE PGUSER PGSSLMODE PGPASSFILE
 
+# Diagnóstico não sensível: identifica a role efetiva e separa cada etapa
+# para localizar falhas de autorização sem ampliar privilégios.
+echo "[schema-export] checking connection identity and schema usage"
+psql -X --no-password -v ON_ERROR_STOP=1 -Atq \\
+  -c "SELECT current_user || '|' || session_user || '|app_private_usage=' || has_schema_privilege(current_user, 'app_private', 'USAGE') || '|app_private_create=' || has_schema_privilege(current_user, 'app_private', 'CREATE');"
+
 # --extension isolado não garante dependências transitivas no pg_dump.
 # Portanto, validar pgcrypto na origem e emitir seu CREATE EXTENSION
 # explicitamente antes do DDL que referencia public.hmac(...).
+echo "[schema-export] checking pgcrypto extension metadata"
 extension_meta="$(psql -X --no-password -v ON_ERROR_STOP=1 -Atq \
   -c "SELECT e.extversion || '|' || n.nspname
       FROM pg_extension e
@@ -51,6 +58,7 @@ fi
 printf 'Dependência confirmada: pgcrypto %s\n' "${extension_meta%%|*}"
 
 # Fail closed se o catálogo da origem não apresentar o hardening esperado.
+echo "[schema-export] checking hardened partial index metadata"
 index_meta="$(psql -X --no-password -v ON_ERROR_STOP=1 -Atq \
   -c "SELECT pg_get_indexdef(to_regclass('app_private.context_keys_one_active_idx')::oid)
       WHERE to_regclass('app_private.context_keys_one_active_idx') IS NOT NULL;")"
@@ -59,6 +67,7 @@ if [[ "$index_meta" != *"UNIQUE INDEX context_keys_one_active_idx"* || "$index_m
   exit 5
 fi
 
+echo "[schema-export] checking hardened function configuration"
 function_meta="$(psql -X --no-password -v ON_ERROR_STOP=1 -Atq \
   -c "SELECT array_to_string(p.proconfig, ', ')
       FROM pg_proc p
