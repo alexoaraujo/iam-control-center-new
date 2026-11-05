@@ -125,6 +125,46 @@ Isso diverge do padrão de hardening já observado em `app_private.current_tenan
 
 Ação de baseline: avaliar a definição pretendida e remover `public` do `search_path` dessa função em uma migration de reconciliação separada, depois de validar dependências e comportamento em PostgreSQL descartável. Nenhuma alteração foi aplicada na fonte.
 
+## Extração estrutural por objeto — rodada 2 (2026-11-05)
+
+A listagem e as consultas de catálogo foram divididas por objeto para evitar o truncamento da consulta composta anterior. O inventário confirmado nesta rodada é:
+
+| Elemento | Quantidade |
+|---|---:|
+| Tabelas base | 23 |
+| Views | 1 |
+| Colunas nas tabelas/views | 182 |
+| Constraints nas tabelas | 244 |
+| Índices | 63 |
+| Sequências | 3 |
+| ENUMs | 7 |
+| Triggers não internos | 12 |
+| Policies RLS | 41 |
+
+As 3 sequências pertencem a `audit.events`, `audit.outbox` e `iam.security_events`; todas têm owner `iam_owner`.
+
+### Flags RLS confirmadas por relação
+
+- 20 tabelas têm RLS habilitado e FORCE RLS.
+- 3 tabelas não têm RLS: `app_private.context_keys`, `iam.permissions` e `iam.schema_migrations`.
+- A view `iam.v_effective_membership_permissions` usa `security_invoker=true`.
+- A presença de RLS/FORCE não prova isolamento correto por si só; as expressões das policies, grants, funções chamadas e testes com roles reais ainda precisam ser validados em fixture integral.
+
+### Triggers identificados
+
+- `audit.events`: `audit_events_no_truncate` e `audit_events_no_update`, ambos chamam `audit.reject_event_mutation()`.
+- `iam.access_policies`, `iam.groups`, `iam.identities`, `iam.identity_providers`, `iam.memberships`, `iam.organizations`, `iam.roles`, `iam.service_accounts`, `iam.sessions` e `iam.tenants`: triggers `*_touch` que chamam `iam.touch_updated_at()`.
+
+### Restrições sensíveis confirmadas por definição
+
+- `iam.identity_providers` rejeita chaves de segredo em texto puro no JSON `configuration`.
+- `iam.api_keys.key_hash` e `iam.invitations.token_hash` têm tamanho fixo de 32 bytes.
+- `iam.idempotency_keys.request_hash` tem tamanho fixo de 32 bytes.
+- `iam.sessions.token_fingerprint`, quando presente, tem tamanho fixo de 32 bytes.
+- `app_private.context_keys.secret` exige ao menos 32 bytes. Somente a definição da coluna/constraint foi consultada; nenhum valor foi lido.
+
+Esta rodada fornece inventário detalhado de colunas, defaults, constraints, índices e demais metadados. Ainda não é um artefato DDL canônico reproduzível: faltam consolidar todas as definições SQL em arquivo versionado, verificar owners/ACLs de todos os tipos/rotinas/objetos e validar a ordem de dependências em PostgreSQL descartável.
+
 ## Próximas etapas obrigatórias
 
 1. Extrair DDL estrutural fiel e sem dados da fonte: schemas, tipos, sequências, tabelas, constraints, índices, view, funções, triggers, policies, grants, owners e configurações RLS.
