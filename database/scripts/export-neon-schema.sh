@@ -108,7 +108,25 @@ if ! grep -Eq 'current_tenant_id"?[[:space:]]*[(][)]' "$dump_tmp"; then
   echo "ERRO: pg_dump não incluiu app_private.current_tenant_id(); export descartado." >&2
   exit 8
 fi
-if ! grep -Eq "search_path[[:space:]]+TO[[:space:]]+('pg_catalog',[[:space:]]*'app_private',[[:space:]]*'iam'|'pg_catalog,[[:space:]]*app_private,[[:space:]]*iam'|pg_catalog,[[:space:]]*app_private,[[:space:]]*iam)(;|[[:space:]]|$)" "$dump_tmp"; then
+# --quote-all-identifiers faz pg_dump 18 serializar os itens do GUC
+# como identificadores SQL entre aspas duplas (não como strings simples).
+# Aceitar as representações válidas sem relaxar a ordem exata do search_path.
+if ! python3 - "$dump_tmp" <<'PY'
+import pathlib
+import re
+import sys
+
+dump = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+patterns = (
+    r'search_path\\s+TO\\s+"pg_catalog"\\s*,\\s*"app_private"\\s*,\\s*"iam"(?:;|\\s|$)',
+    r"search_path\\s+TO\\s+'pg_catalog'\\s*,\\s*'app_private'\\s*,\\s*'iam'(?:;|\\s|$)",
+    r"search_path\\s+TO\\s+'pg_catalog,\\s*app_private,\\s*iam'(?:;|\\s|$)",
+    r"search_path\\s+TO\\s+pg_catalog,\\s*app_private,\\s*iam(?:;|\\s|$)",
+)
+if not any(re.search(pattern, dump, re.IGNORECASE) for pattern in patterns):
+    raise SystemExit(1)
+PY
+then
   echo "ERRO: pg_dump não serializou o search_path hardened esperado; export descartado." >&2
   exit 8
 fi
