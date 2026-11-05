@@ -38,9 +38,9 @@ jobs:
             echo "::error::Configure NEON_SCHEMA_EXPORT_URL in the neon-schema-export GitHub Environment."
             exit 1
           }
-          umask 077
           python3 - <<'PY'
           import os
+          import uuid
           from urllib.parse import unquote, urlparse
 
           raw = os.environ["NEON_SCHEMA_EXPORT_URL"]
@@ -54,25 +54,20 @@ jobs:
               raise SystemExit("Connection database is not the allowlisted source database")
           user = unquote(u.username or "")
           password = unquote(u.password or "")
-          if not user or not password:
-              raise SystemExit("Connection URI must contain credentials")
+          if not user or not password or "\\n" in password or "\\r" in password:
+              raise SystemExit("Connection URI must contain valid credentials without line breaks")
           port = u.port or 5432
-
-          def esc(value):
-              return value.replace("\\", "\\\\").replace(":", "\\:")
-          with open(".neon-schema-export.pgpass", "w", encoding="utf-8") as f:
-              f.write(":".join(esc(x) for x in (allowed_host, str(port), "iam_database", user, password)) + "\n")
-          os.chmod(".neon-schema-export.pgpass", 0o600)
+          delimiter = "PGPASSWORD_" + uuid.uuid4().hex
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+              f.write(f"PGPASSWORD<<{delimiter}\\n{password}\\n{delimiter}\\n")
               for key, value in {
                   "PGHOST": allowed_host,
                   "PGPORT": str(port),
                   "PGDATABASE": "iam_database",
                   "PGUSER": user,
                   "PGSSLMODE": "require",
-                  "PGPASSFILE": "/workspace/.neon-schema-export.pgpass",
               }.items():
-                  f.write(f"{key}={value}\n")
+                  f.write(f"{key}={value}\\n")
           PY
           unset NEON_SCHEMA_EXPORT_URL
           echo "Connection target validated; credentials were not logged."
@@ -86,22 +81,14 @@ jobs:
             --user "$(id -u):$(id -g)" \
             --volume "$GITHUB_WORKSPACE:/workspace" \
             --workdir /workspace \
-            --env PGHOST --env PGPORT --env PGDATABASE --env PGUSER --env PGSSLMODE --env PGPASSFILE \
+            --env PGHOST --env PGPORT --env PGDATABASE --env PGUSER --env PGSSLMODE --env PGPASSWORD \
             postgres:18-bookworm \
             bash -c '
               set -euo pipefail
-              test -n "${PGPASSFILE:-}"
-              test -r "$PGPASSFILE"
-              mode="$(stat -c "%a" "$PGPASSFILE")"
-              entries="$(wc -l < "$PGPASSFILE" | tr -d " ")"
-              if [[ "$mode" != "600" || "$entries" != "1" ]]; then
-                echo "::error::Neon passfile is not readable with the expected mode and one entry."
-                exit 1
-              fi
-              printf "Passfile validated: readable=true mode=%s entries=%s\\n" "$mode" "$entries"
+              test -n "${PGPASSWORD:-}"
+              echo "Password environment validated; value not logged."
               bash database/scripts/export-neon-schema.sh artifacts/iam_database_schema.sql
             '
-          rm -f .neon-schema-export.pgpass
           test -s artifacts/iam_database_schema.sql
           sha256sum artifacts/iam_database_schema.sql | tee artifacts/iam_database_schema.sql.sha256
           {
@@ -131,4 +118,4 @@ jobs:
       - name: Remove credential material
         if: always()
         shell: bash
-        run: rm -f .neon-schema-export.pgpass
+        run: unset PGPASSWORD NEON_SCHEMA_EXPORT_URL
