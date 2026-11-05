@@ -100,12 +100,16 @@ if ! grep -Fq 'context_keys_one_active_idx' "$dump_tmp"; then
   echo "ERRO: pg_dump não incluiu context_keys_one_active_idx; export descartado." >&2
   exit 7
 fi
-# PostgreSQL may serialize a GUC value as one SQL string or as a
-# comma-separated identifier list. Accept both pg_dump representations,
-# while requiring the exact ordered allowlist and the target function.
-if ! grep -Fq '"app_private"."current_tenant_id"()' "$dump_tmp" ||
-   ! grep -Eq "search_path TO ('pg_catalog', 'app_private', 'iam'|'pg_catalog, app_private, iam'|pg_catalog, app_private, iam)(;|$)" "$dump_tmp"; then
-  echo "ERRO: pg_dump não incluiu o search_path hardened de app_private.current_tenant_id(); export descartado." >&2
+# pg_dump versions may quote the function name and serialize search_path
+# either as three quoted identifiers or as one comma-separated GUC string.
+# The source catalog check above binds this exact setting to this function;
+# here verify that both the function and the exact ordered setting survived.
+if ! grep -Eq 'current_tenant_id[[:space:]]*\\(\\)' "$dump_tmp"; then
+  echo "ERRO: pg_dump não incluiu app_private.current_tenant_id(); export descartado." >&2
+  exit 8
+fi
+if ! grep -Eq "search_path[[:space:]]+TO[[:space:]]+('pg_catalog',[[:space:]]*'app_private',[[:space:]]*'iam'|'pg_catalog,[[:space:]]*app_private,[[:space:]]*iam'|pg_catalog,[[:space:]]*app_private,[[:space:]]*iam)(;|[[:space:]]|$)" "$dump_tmp"; then
+  echo "ERRO: pg_dump não serializou o search_path hardened esperado; export descartado." >&2
   exit 8
 fi
 
