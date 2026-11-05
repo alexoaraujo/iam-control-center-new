@@ -10,7 +10,7 @@ umask 077
 : "${PGDATABASE:=iam_database}"
 : "${PGUSER:?Defina PGUSER para uma role autorizada a ler o catálogo}"
 : "${PGSSLMODE:=require}"
-: "${PGPASSFILE:?Defina PGPASSFILE para um passfile protegido (chmod 600)}"
+: "${PGPASSWORD:?Defina PGPASSWORD a partir da credencial protegida}"
 
 for cmd in pg_dump psql sha256sum; do
   command -v "$cmd" >/dev/null 2>&1 || {
@@ -34,7 +34,7 @@ if [[ -e "$out" || -e "$tmp" || -e "$dump_tmp" ]]; then
 fi
 trap 'rm -f "$tmp" "$dump_tmp"' EXIT
 
-export PGHOST PGPORT PGDATABASE PGUSER PGSSLMODE PGPASSFILE
+export PGHOST PGPORT PGDATABASE PGUSER PGSSLMODE PGPASSWORD
 
 # Diagnóstico não sensível: identifica a role efetiva e separa cada etapa
 # para localizar falhas de autorização sem ampliar privilégios.
