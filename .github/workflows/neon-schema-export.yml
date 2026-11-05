@@ -30,7 +30,7 @@ jobs:
       - name: Checkout exact workflow commit
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
 
-      - name: Validate protected source connection and prepare passfile
+      - name: Validate protected source connection and mask derived credentials
         shell: bash
         run: |
           set -euo pipefail
@@ -58,6 +58,7 @@ jobs:
               raise SystemExit("Connection URI must contain valid credentials without line breaks")
           port = u.port or 5432
           delimiter = "PGPASSWORD_" + uuid.uuid4().hex
+          print(f"::add-mask::{password}")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
               f.write(f"PGPASSWORD<<{delimiter}\n{password}\n{delimiter}\n")
               for key, value in {
