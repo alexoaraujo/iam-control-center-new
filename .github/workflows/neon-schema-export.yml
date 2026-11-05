@@ -13,12 +13,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: neon-schema-export-source
+  group: neon-schema-export-validation-branch
   cancel-in-progress: false
 
 jobs:
   export-schema:
-    name: Read-only schema export from approved Neon source
+    name: Read-only schema export from isolated Neon validation branch
     if: github.repository == 'alexoaraujo83/iam-control-center'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -45,7 +45,7 @@ jobs:
 
           raw = os.environ["NEON_SCHEMA_EXPORT_URL"]
           u = urlparse(raw)
-          allowed_host = "ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech"
+          allowed_host = "ep-lucky-frost-b631bopg.c-2.sa-east-1.aws.neon.tech"
           if u.scheme not in ("postgres", "postgresql"):
               raise SystemExit("Connection must use PostgreSQL URI scheme")
           if u.hostname != allowed_host or (u.hostname or "").endswith("-pooler.c-2.sa-east-1.aws.neon.tech"):
@@ -71,7 +71,7 @@ jobs:
                   f.write(f"{key}={value}\n")
           PY
           unset NEON_SCHEMA_EXPORT_URL
-          echo "Connection target validated; credentials were not logged."
+          echo "Isolated validation-branch target validated; credentials were not logged."
 
       - name: Export schema using PostgreSQL 18 client
         shell: bash
@@ -97,8 +97,8 @@ jobs:
             echo "branch=${GITHUB_REF_NAME}"
             echo "commit=${GITHUB_SHA}"
             echo "database=iam_database"
-            echo "source_branch=main"
-            echo "source_host=ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech"
+            echo "source_branch=schema-export-validation-20261105"
+            echo "source_host=ep-lucky-frost-b631bopg.c-2.sa-east-1.aws.neon.tech"
             echo "format=plain SQL, schema-only"
             echo "schemas=iam,audit,app_private"
             echo "extension_dependency=pgcrypto in public"
