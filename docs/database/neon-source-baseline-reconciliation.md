@@ -207,6 +207,45 @@ Consulta read-only adicional da definição completa confirmou:
 
 **Refinamento da classificação:** o `public` no search_path de `iam.set_tenant_context` é desnecessário para o corpo atualmente observado e viola o padrão mínimo de hardening, mas não foi identificada, nesta revisão estática, uma referência não qualificada explorável. Manter como hardening pendente; a correção proposta é restringir o search_path após validar a assinatura/definição e testar comportamento e grants em branch descartável. Nenhuma alteração na fonte.
 
+## Matriz de privilégios efetivos — rodada 4 (2026-11-05)
+
+Consulta read-only via `has_schema_privilege`, `has_table_privilege` e `has_function_privilege`, sem consultar dados de aplicação.
+
+### Roles
+
+| Role | LOGIN | SUPERUSER | BYPASSRLS | INHERIT | CREATEDB/CREATEROLE |
+|---|---:|---:|---:|---:|---:|
+| `iam_app_runtime` | não | não | não | sim | não/não |
+| `iam_worker` | não | não | não | sim | não/não |
+| `iam_migrator` | não | não | não | não | não/não |
+| `iam_migrator_login` | sim | não | não | não | não/não |
+| `iam_owner` | não | não | não | não | não/não |
+
+### Privilégios por schema
+
+- `iam_app_runtime` e `iam_worker`: USAGE em `iam`, `audit` e `app_private`; sem CREATE.
+- `iam_migrator`: USAGE apenas em `iam`; sem CREATE.
+- As três schemas pertencem a `iam_owner`.
+
+### Matriz de tabelas — resumo efetivo
+
+- `iam_app_runtime`: SELECT nas tabelas IAM tenant-scoped; INSERT/UPDATE/DELETE somente nos objetos operacionais explicitamente concedidos (incluindo `access_policies`, `idempotency_keys`, `identity_providers`, `invitations`, `organizations`, `security_events`, `service_accounts`, `sessions`, `tenants`); INSERT/SELECT em `audit.events`; INSERT em `audit.outbox`; SELECT em `iam.permissions`.
+- `iam_worker`: SELECT/INSERT/UPDATE em `audit.outbox`; SELECT em `iam.permissions`; nenhum acesso às tabelas de tenant fora desses objetos.
+- `iam_migrator`: SELECT em `iam.schema_migrations`; sem DML direto nas tabelas de aplicação.
+- Nenhuma dessas três roles tem acesso direto a `app_private.context_keys`.
+- As 20 tabelas tenant-scoped mantêm RLS + FORCE RLS; privilégios SQL não substituem o filtro das policies.
+
+### ACLs de funções — pontos de atenção
+
+- `iam.acquire_migration_lock()` e `iam.record_migration(...)`: EXECUTE concedido a `iam_migrator`, não a runtime/worker/PUBLIC.
+- `app_private.current_tenant_id()` e `iam.set_tenant_context(...)`: EXECUTE para runtime/worker; sem EXECUTE para PUBLIC.
+- `iam.provision_membership(...)`: ACL observada apenas para `iam_owner`; runtime/worker não têm EXECUTE. Confirmar se o provisionamento é realizado por caminho privilegiado deliberado ou se há lacuna entre contrato de aplicação e grants.
+- `iam.clear_tenant_context()` é SECURITY DEFINER e seu ACL contém `=X` (EXECUTE para PUBLIC). O corpo apenas limpa GUCs locais à transação; risco observado limitado, mas grant amplo é desnecessário e deve ser revisto.
+- `iam.effective_permissions(uuid)` também possui EXECUTE para PUBLIC. O corpo exige membership ativa vinculada ao tenant do contexto validado; ainda assim, recomenda-se restringir PUBLIC e conceder apenas às roles consumidoras esperadas.
+- Funções trigger `audit.reject_event_mutation()` e `iam.touch_updated_at()` têm ACL padrão (EXECUTE para PUBLIC), padrão PostgreSQL comum para trigger functions; não são endpoints SQL normais e devem permanecer vinculadas aos triggers previstos.
+
+**Classificação:** inventário de privilégios efetivos concluído; duas concessões PUBLIC relevantes para revisão de least privilege (`clear_tenant_context`, `effective_permissions`) e uma possível lacuna de integração (`provision_membership`). Nenhuma alteração de ACL foi aplicada na fonte. Antes de corrigir, confirmar consumidores reais e testar grants/RLS em fixture descartável.
+
 ## Próximas etapas obrigatórias
 
 1. Extrair DDL estrutural fiel e sem dados da fonte: schemas, tipos, sequências, tabelas, constraints, índices, view, funções, triggers, policies, grants, owners e configurações RLS.
