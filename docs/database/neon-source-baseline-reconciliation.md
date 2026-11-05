@@ -165,6 +165,36 @@ As 3 sequências pertencem a `audit.events`, `audit.outbox` e `iam.security_even
 
 Esta rodada fornece inventário detalhado de colunas, defaults, constraints, índices e demais metadados. Ainda não é um artefato DDL canônico reproduzível: faltam consolidar todas as definições SQL em arquivo versionado, verificar owners/ACLs de todos os tipos/rotinas/objetos e validar a ordem de dependências em PostgreSQL descartável.
 
+## Comparação nominal com `0001_initial_iam_schema.sql` — rodada 3
+
+A migration em `main` foi inspecionada por leitura do blob SHA `18ff99eade3a216df2396b564fe11de6482dc8d8` (258 linhas). O parser estrutural do arquivo identificou:
+
+- 3 schemas criados: `iam`, `audit`, `app_private`.
+- 10 tabelas declaradas.
+- 0 tipos ENUM, 0 funções, 0 triggers, 0 views e 0 policies declaradas.
+
+As 10 tabelas da proposta têm nomes que também existem na fonte, mas isso não implica equivalência de estrutura: a definição de colunas, constraints, índices, tipos e defaults diverge em objetos como `iam.tenants`, `iam.identities`, `iam.memberships`, `iam.roles`, `iam.permissions`, `iam.invitations`, `audit.events` e `iam.schema_migrations`.
+
+### Objetos da fonte ausentes na migration 0001
+
+1. `app_private.context_keys`
+2. `audit.outbox`
+3. `iam.access_policies`
+4. `iam.api_keys`
+5. `iam.group_memberships`
+6. `iam.group_roles`
+7. `iam.groups`
+8. `iam.idempotency_keys`
+9. `iam.identity_providers`
+10. `iam.organizations`
+11. `iam.security_events`
+12. `iam.service_accounts`
+13. `iam.sessions`
+
+Além das tabelas ausentes, faltam na proposta os 7 ENUMs, a view `iam.v_effective_membership_permissions`, as 9 funções/procedures, os 12 triggers, as 41 policies e os grants operacionais observados na fonte. Assim, a migration atual é uma proposta inicial reduzida, não um baseline operacional.
+
+**Classificação da divergência:** estrutural e semântica, não apenas diferença de nomenclatura. Não é seguro “completar” a migration 0001 em lugar, pois ela pode ter sido aplicada em ambientes ou registrada em ledgers. A estratégia precisa preservar histórico e separar bootstrap de banco novo da reconciliação de instalações existentes.
+
 ## Próximas etapas obrigatórias
 
 1. Extrair DDL estrutural fiel e sem dados da fonte: schemas, tipos, sequências, tabelas, constraints, índices, view, funções, triggers, policies, grants, owners e configurações RLS.
