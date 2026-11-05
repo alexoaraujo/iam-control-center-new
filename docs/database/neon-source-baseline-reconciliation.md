@@ -341,3 +341,21 @@ Consulta read-only independente em `pg_attribute` / `pg_class` confirmou novamen
 
 O script está versionado, mas **a execução de pg_dump ainda não ocorreu**. Nenhum arquivo SQL, checksum de dump, restauração ou comparação objeto-a-objeto foi produzido. Portanto, o gate de export DDL integral continua PENDING.
 
+
+## Atualização do export — rodada 7 (2026-11-05)
+
+A consulta read-only à fonte oficial confirmou o estado pós-migration:
+
+- `pgcrypto` instalada no schema `public`, versão `1.4`;
+- ledger contém exatamente um registro de `0001_context_key_hardening`;
+- índice `app_private.context_keys_one_active_idx` presente;
+- `app_private.current_tenant_id()` mantém `search_path=pg_catalog, app_private, iam`;
+- nenhuma relação de aplicação no schema `public`.
+
+O script `database/scripts/export-neon-schema.sh` foi atualizado no commit `133842cbc9e53ac61bfeaa27b9665225d189d002` para validar a presença de `pgcrypto` e declarar `CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public` antes do DDL dos três schemas IAM. A extração de objetos de aplicação continua limitada a `iam`, `audit` e `app_private`; nenhum dado de tabela é exportado.
+
+A declaração explícita da extensão é necessária porque a opção `pg_dump --extension` seleciona a extensão, mas não garante a inclusão de todas as dependências transitivas. O script não usa essa opção como substituto da declaração explícita.
+
+**Status desta rodada:** correção do script versionada; execução local do script, geração de novo dump, checksum e restore integral pós-hardening ainda PENDING. O artefato `iam_database_schema.sql` existente continua sendo o dump anterior e não deve ser tratado como atualizado por este commit.
+
+**Gate de merge:** permanece BLOCKED até gerar o artefato pós-hardening, restaurá-lo em banco descartável vazio e validar dependências, estrutura, ACLs, RLS e testes dinâmicos de isolamento.
