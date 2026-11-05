@@ -1,10 +1,14 @@
 -- IAM Control Center — context-key hardening
 -- Baseline: existing iam-database schema (not a clean-database bootstrap).
--- PostgreSQL 18. Apply through the migration runner as iam_owner.
--- The runner acquires iam.acquire_migration_lock() and records the checksum
--- with iam.record_migration(); this file intentionally does not self-record.
+-- PostgreSQL 18. Execute with psql variables:
+--   -v migration_checksum=<SHA-256 of this exact file>
+--   -v source_sha=<40-character Git commit SHA containing this file>
+-- The transaction acquires the advisory migration lock and records its ledger
+-- entry atomically with the DDL. session_user must be iam_migrator_login.
 
 BEGIN;
+SET LOCAL ROLE iam_owner;
+SELECT iam.acquire_migration_lock();
 
 DO $preflight$
 DECLARE
@@ -123,5 +127,11 @@ BEGIN
   END IF;
 END
 $verify$;
+
+SELECT iam.record_migration(
+  '0001_context_key_hardening',
+  :'migration_checksum',
+  NULLIF(:'source_sha', '')
+);
 
 COMMIT;
