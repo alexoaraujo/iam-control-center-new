@@ -2,8 +2,9 @@
 set -Eeuo pipefail
 umask 077
 
-# Exporta somente DDL dos schemas IAM. Não exporta linhas de tabelas.
-# Requer pg_dump 18+ para compatibilidade com o PostgreSQL 18 da origem.
+# Exporta DDL dos schemas IAM e declara a dependência pgcrypto.
+# Não exporta linhas de tabelas nem objetos de aplicação do schema public.
+# Requer pg_dump/psql 18+ para compatibilidade com PostgreSQL 18 da origem.
 : "${PGHOST:?Defina PGHOST para o endpoint Neon aprovado}"
 : "${PGPORT:=5432}"
 : "${PGDATABASE:=iam_database}"
@@ -11,14 +12,12 @@ umask 077
 : "${PGSSLMODE:=require}"
 : "${PGPASSFILE:?Defina PGPASSFILE para um passfile protegido (chmod 600)}"
 
-command -v pg_dump >/dev/null 2>&1 || {
-  echo "ERRO: pg_dump não encontrado." >&2
-  exit 127
-}
-command -v sha256sum >/dev/null 2>&1 || {
-  echo "ERRO: sha256sum não encontrado." >&2
-  exit 127
-}
+for cmd in pg_dump psql sha256sum; do
+  command -v "$cmd" >/dev/null 2>&1 || {
+    echo "ERRO: $cmd não encontrado." >&2
+    exit 127
+  }
+done
 
 client_major="$(pg_dump --version | sed -E 's/.* ([0-9]+)\..*/\1/')"
 if [[ ! "$client_major" =~ ^[0-9]+$ ]] || (( client_major < 18 )); then
@@ -28,13 +27,28 @@ fi
 
 out="${1:-iam_database_schema.sql}"
 tmp="${out}.tmp"
-if [[ -e "$out" || -e "$tmp" ]]; then
-  echo "ERRO: arquivo de saída já existe; não será sobrescrito: $out" >&2
+dump_tmp="${out}.pg_dump.tmp"
+if [[ -e "$out" || -e "$tmp" || -e "$dump_tmp" ]]; then
+  echo "ERRO: arquivo de saída/temporário já existe; nada será sobrescrito: $out" >&2
   exit 3
 fi
-trap 'rm -f "$tmp"' EXIT
+trap 'rm -f "$tmp" "$dump_tmp"' EXIT
 
 export PGHOST PGPORT PGDATABASE PGUSER PGSSLMODE PGPASSFILE
+
+# --extension isolado não garante dependências transitivas no pg_dump.
+# Portanto, validar pgcrypto na origem e emitir seu CREATE EXTENSION
+# explicitamente antes do DDL que referencia public.hmac(...).
+extension_meta="$(psql -X --no-password -v ON_ERROR_STOP=1 -Atq \
+  -c "SELECT e.extversion || '|' || n.nspname
+      FROM pg_extension e
+      JOIN pg_namespace n ON n.oid = e.extnamespace
+      WHERE e.extname = 'pgcrypto';")"
+if [[ -z "$extension_meta" || "$extension_meta" != *"|public" ]]; then
+  echo "ERRO: pgcrypto não está instalada no schema public da origem; export cancelado." >&2
+  exit 4
+fi
+printf 'Dependência confirmada: pgcrypto %s\n' "${extension_meta%%|*}"
 
 pg_dump \
   --no-password \
@@ -45,12 +59,21 @@ pg_dump \
   --schema=iam \
   --schema=audit \
   --schema=app_private \
-  --file="$tmp"
+  --file="$dump_tmp"
+
+test -s "$dump_tmp"
+{
+  printf '%s\n' '-- Required extension dependency (not application objects from public).' \
+    'CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;' ''
+  cat "$dump_tmp"
+} > "$tmp"
 
 test -s "$tmp"
 mv "$tmp" "$out"
+rm -f "$dump_tmp"
 trap - EXIT
 
 sha256sum "$out"
 printf 'Export DDL concluído: %s\n' "$out"
-printf 'Revisar dependências externas, roles, ownership, ACLs e extensões antes de restaurar.\n'
+printf 'Escopo: schemas iam/audit/app_private + dependência pgcrypto em public; sem dados de tabelas.\n'
+printf 'Revisar compatibilidade da extensão, roles, ownership, ACLs e ordem de restore antes de aplicar.\n'
