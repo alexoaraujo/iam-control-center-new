@@ -246,6 +246,19 @@ Consulta read-only via `has_schema_privilege`, `has_table_privilege` e `has_func
 
 **Classificação:** inventário de privilégios efetivos concluído; duas concessões PUBLIC relevantes para revisão de least privilege (`clear_tenant_context`, `effective_permissions`) e uma possível lacuna de integração (`provision_membership`). Nenhuma alteração de ACL foi aplicada na fonte. Antes de corrigir, confirmar consumidores reais e testar grants/RLS em fixture descartável.
 
+## Revisão das 41 policies RLS — rodada 5 (2026-11-05)
+
+As 41 policies foram extraídas com `polpermissive`, comando, roles, `USING` e `WITH CHECK`.
+
+- Todas as 41 policies estão em modo **PERMISSIVE**; não há policy RESTRICTIVE.
+- As 20 tabelas RLS têm policy `iam_owner_access` para `iam_owner`, com `USING (true)` e `WITH CHECK (true)`.
+- As policies de runtime/worker nas tabelas tenant-scoped usam `app_private.current_tenant_id()` em `USING` e `WITH CHECK`, com a exceção estrutural de `iam.identities`: `USING` verifica existência de membership no tenant atual e `WITH CHECK (true)`. A role runtime não possui INSERT/UPDATE nessa tabela na matriz efetiva consultada; worker tampouco possui DML nela.
+- `audit.outbox` separa runtime (INSERT com tenant check) de worker (ALL com tenant check).
+- `iam.tenants` compara `id` ao tenant atual; demais policies tenant-scoped comparam `tenant_id`.
+- Não foi encontrada policy em `app_private.context_keys`, `iam.permissions` ou `iam.schema_migrations`, coerente com RLS desabilitado nessas tabelas.
+
+**Limite de validação:** as expressões foram inspecionadas estaticamente; ainda não foram executados testes de leitura/escrita cross-tenant com `SET ROLE` e sessões separadas na fixture integral. Todas as policies serem permissive não é, por si só, falha: é necessário avaliar a união das policies por role/operação e os grants efetivos. RLS permanece PENDING até testes dinâmicos.
+
 ## Próximas etapas obrigatórias
 
 1. Extrair DDL estrutural fiel e sem dados da fonte: schemas, tipos, sequências, tabelas, constraints, índices, view, funções, triggers, policies, grants, owners e configurações RLS.
