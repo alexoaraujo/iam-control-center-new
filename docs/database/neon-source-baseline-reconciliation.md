@@ -259,6 +259,27 @@ As 41 policies foram extraídas com `polpermissive`, comando, roles, `USING` e `
 
 **Limite de validação:** as expressões foram inspecionadas estaticamente; ainda não foram executados testes de leitura/escrita cross-tenant com `SET ROLE` e sessões separadas na fixture integral. Todas as policies serem permissive não é, por si só, falha: é necessário avaliar a união das policies por role/operação e os grants efetivos. RLS permanece PENDING até testes dinâmicos.
 
+## Extração de definições do catálogo — rodada 6 (2026-11-05)
+
+Consultas read-only ao catálogo da fonte oficial. Nenhuma linha de aplicação foi lida.
+
+### Artefatos estruturais extraídos nesta rodada
+
+- **Colunas:** definições por coluna consultadas em pg_attribute / pg_attrdef, incluindo nome, tipo resolvido, NOT NULL, default, identity e generated. Foram consultados os schemas iam, audit e app_private; total consolidado permanece 182 colunas.
+- **Índices:** 63 definições CREATE INDEX extraídas via pg_indexes, incluindo índices parciais e únicos. Exemplos relevantes: app_private.context_keys_one_active_idx, audit.outbox_pending_idx, iam.invitations_pending_idx e iam.sessions_expiry_idx.
+- **ENUMs:** 7 tipos e seus rótulos/ordem extraídos integralmente: api_key_status, audit_outcome, identity_status, invitation_status, membership_status, session_status, tenant_status.
+- **View:** definição de iam.v_effective_membership_permissions extraída; owner iam_owner; opção security_invoker=true.
+- **Triggers:** 12 definições extraídas via pg_get_triggerdef; todos habilitados (tgenabled='O'), incluindo os dois triggers append-only de audit.events e os dez triggers *_touch.
+- **Sequences:** três objetos associados a audit.events, audit.outbox e iam.security_events; owner iam_owner.
+- **Funções:** definições integrais de 9 funções extraídas em rodada anterior, incluindo corpo, SECURITY DEFINER, owner, proconfig e ACL.
+
+### Limites da extração
+
+- A tentativa agregada de retornar todas as 244 constraints foi truncada pela saída da ferramenta. Portanto, não classificar constraints como exportadas integralmente nesta rodada.
+- A extração de colunas foi retornada por schema; a saída agregada da resposta foi parcialmente truncada no canal de ferramenta. O inventário agregado de 182 colunas permanece válido, mas é necessário persistir os resultados por lotes menores antes de montar o DDL final.
+- pg_indexes fornece definições dos índices, mas não substitui pg_dump para preservar toda a semântica de constraints, ownership, ACLs, comments, dependências, extensões e estados de sequences.
+- Não há, até aqui, um artefato de export DDL canônico completo, reproduzível e validado. O status do gate permanece PENDING.
+
 ## Próximas etapas obrigatórias
 
 1. Extrair DDL estrutural fiel e sem dados da fonte: schemas, tipos, sequências, tabelas, constraints, índices, view, funções, triggers, policies, grants, owners e configurações RLS.
