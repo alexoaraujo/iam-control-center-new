@@ -320,3 +320,24 @@ Uma consulta filtrada por `contype <> 'n'` retornou as 101 constraints de integr
 | Aplicação em qualquer ambiente persistente | NOT AUTHORIZED |
 
 **Regra:** não declarar PASS para RLS, isolamento multi-tenant ou baseline integral até haver execução reproduzível em PostgreSQL descartável, vinculada ao SHA atual.
+
+
+## Preparação do export reproduzível — rodada 7 (2026-11-05)
+
+Foi adicionado `database/scripts/export-neon-schema.sh` na branch desta PR.
+
+- Commit: `c7b0ac2dd523db25f6f441e4cd91e5909ee08c68`.
+- O script exige cliente `pg_dump` 18+, TLS (`PGSSLMODE=require`) e `PGPASSFILE` protegido.
+- Executa `pg_dump --schema-only` para `iam`, `audit` e `app_private`; não inclui linhas de tabelas.
+- Mantém ownership e ACLs no arquivo para revisão; não provisiona roles.
+- Recusa sobrescrever arquivo de saída existente e calcula SHA-256 após exportação.
+- O conteúdo foi relido da branch após o commit.
+
+### Verificação adicional de colunas
+
+Consulta read-only independente em `pg_attribute` / `pg_class` confirmou novamente 182 colunas em 23 tabelas nos três schemas. A consulta retornou somente metadados de catálogo; para `app_private.context_keys.secret`, foi confirmada apenas a existência da coluna e seu tipo, sem ler qualquer valor.
+
+### Estado do artefato
+
+O script está versionado, mas **a execução de pg_dump ainda não ocorreu**. Nenhum arquivo SQL, checksum de dump, restauração ou comparação objeto-a-objeto foi produzido. Portanto, o gate de export DDL integral continua PENDING.
+
