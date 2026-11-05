@@ -49,18 +49,25 @@ rollback_probe="$(PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -At 
   "SELECT count(*) FROM pg_roles WHERE rolname = 'iam_bootstrap_rollback_probe';")"
 test "$rollback_probe" = "0"
 
+echo "Provisioning the source-derived baseline fixture on the disposable database..."
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f database/tests/fixtures/iam_database_context_key_baseline.sql
+
 echo "Setting a disposable password only for the authenticated CI migration test..."
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v migrator_password="$MIGRATOR_TEST_PASSWORD" <<'SQL'
 ALTER ROLE iam_migrator_login PASSWORD :'migrator_password';
 SQL
 
 echo "Running migration over an authenticated non-privileged LOGIN session..."
-{
-  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
-  cat database/migrations/0001_context_key_hardening.sql
-} | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
+migration_checksum="$(sha256sum database/migrations/0001_context_key_hardening.sql | awk '{print $1}')"
+source_sha="$(git rev-parse HEAD)"
+PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -v migration_checksum="$migration_checksum" -v source_sha="$source_sha" \
+  -f database/migrations/0001_context_key_hardening.sql
 
-# Schema contract checks intentionally run as the disposable test administrator
-# because they inspect ownership and exercise test-only grants/RLS behavior.
-PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/0001_schema_contract.sql
-echo "PASS: role bootstrap, role-assumption contract, rollback, migration chain, schema contract, and RLS default-deny tests"
+# Contract checks inspect the disposable database as its administrator.
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -v migration_checksum="$migration_checksum" -v source_sha="$source_sha" \
+  -f database/tests/0001_schema_contract.sql
+
+echo "PASS: role bootstrap, role-assumption contract, rollback, source baseline, authenticated migration, index, function hardening, ledger, and context-key uniqueness"
