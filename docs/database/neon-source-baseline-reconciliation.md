@@ -359,3 +359,35 @@ A declaração explícita da extensão é necessária porque a opção `pg_dump 
 **Status desta rodada:** correção do script versionada; execução local do script, geração de novo dump, checksum e restore integral pós-hardening ainda PENDING. O artefato `iam_database_schema.sql` existente continua sendo o dump anterior e não deve ser tratado como atualizado por este commit.
 
 **Gate de merge:** permanece BLOCKED até gerar o artefato pós-hardening, restaurá-lo em banco descartável vazio e validar dependências, estrutura, ACLs, RLS e testes dinâmicos de isolamento.
+
+
+## Diagnóstico do artefato local e endurecimento do export — rodada 8 (2026-11-05)
+
+O conteúdo do arquivo local `iam_database_schema.sql` foi inspecionado pelo operador via `grep`. O resultado não encontrou nenhuma ocorrência de `CREATE EXTENSION`, `pgcrypto` ou `context_keys_one_active_idx`; a tabela `app_private.context_keys` está presente. O checksum informado para esse arquivo foi `958ef2755b90db2efea18949b7a5127e40894a573fb3730923c044692e5a19fb`.
+
+A fonte oficial já havia confirmado `pgcrypto 1.4` no schema `public`, o índice parcial único `app_private.context_keys_one_active_idx` e o ledger da migration de hardening. Portanto, o arquivo local não demonstra a estrutura pós-hardening e não pode ser usado para restore de referência.
+
+### Verificação em PostgreSQL temporário
+
+Na branch Neon `schema-restore-validation-20261105` (ID `br-icy-smoke-b6yrud11`), database `iam_schema_restore_test`, executou-se somente consulta de catálogo como `iam_database_owner`:
+
+- `pgcrypto`: versão `1.4`, schema `public`;
+- índice: `CREATE UNIQUE INDEX context_keys_one_active_idx ON app_private.context_keys USING btree (active) WHERE (active IS TRUE)`;
+- configuração da função: `search_path=pg_catalog, app_private, iam`.
+
+Essa database temporária já continha o restore anterior; não é uma database vazia e esta consulta não valida o novo dump. Nenhum valor da tabela `app_private.context_keys` foi consultado.
+
+### Correção do script versionado
+
+O script `database/scripts/export-neon-schema.sh` foi atualizado para falhar de forma fechada:
+- valida no catálogo da origem a presença e a definição do índice parcial único;
+- valida o `search_path` de `app_private.current_tenant_id()`;
+- rejeita o resultado de `pg_dump` se não contiver o índice e a configuração da função;
+- valida no artefato final a declaração explícita de `pgcrypto` e a presença do índice antes de publicar o arquivo.
+
+Commits desta rodada:
+- `a34759356a005259b9919720d116746e1bf99a8e`: validação dos objetos no dump e no artefato final;
+- `9ca334f7bc71040dd3532092938ef17ef5a67edf`: validação prévia dos objetos no catálogo da origem.
+
+**Limite:** o script atualizado foi versionado, mas ainda não foi executado pelo operador com conexão à fonte e cliente `pg_dump` 18+. Não afirmar que o arquivo local foi regenerado nem que o novo dump foi restaurado. O próximo passo é executar o script atualizado, inspecionar o novo SHA e restaurar o artefato em database descartável vazia.
+
