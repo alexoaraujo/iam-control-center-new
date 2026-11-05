@@ -83,6 +83,7 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
             --volume "$GITHUB_WORKSPACE:/workspace" \
             --workdir /workspace \
             --env PGHOST --env PGPORT --env PGDATABASE --env PGUSER --env PGSSLMODE --env PGPASSFILE \
