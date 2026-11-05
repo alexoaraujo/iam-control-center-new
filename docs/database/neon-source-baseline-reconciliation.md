@@ -391,3 +391,8 @@ Commits desta rodada:
 
 **Limite:** o script atualizado foi versionado, mas ainda não foi executado pelo operador com conexão à fonte e cliente `pg_dump` 18+. Não afirmar que o arquivo local foi regenerado nem que o novo dump foi restaurado. O próximo passo é executar o script atualizado, inspecionar o novo SHA e restaurar o artefato em database descartável vazia.
 
+
+
+### Database descartável vazia preparada para o próximo restore
+
+Foi criada na mesma branch temporária a database `iam_schema_restore_post_hardening` (ID `257484`), owner `iam_database_owner`. Consulta de catálogo imediatamente após a criação confirmou: zero relações nos schemas `iam`, `audit` e `app_private`; extensão `pgcrypto` ausente; índice de hardening ausente. Esta database está pronta para receber o novo dump, mas nenhum restore foi executado ainda.
