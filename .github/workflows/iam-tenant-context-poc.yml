@@ -1,0 +1,48 @@
+name: IAM tenant-context POC
+
+on:
+  pull_request:
+    paths:
+      - "database/poc/tenant-context/**"
+      - ".github/workflows/iam-tenant-context-poc.yml"
+  push:
+    branches:
+      - "poc/iam-tenant-context-01"
+    paths:
+      - "database/poc/tenant-context/**"
+      - ".github/workflows/iam-tenant-context-poc.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-harness:
+    name: postgres-harness
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: iam_ctx_poc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d iam_ctx_poc"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Run disposable tenant-context harness
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql "postgresql://postgres@localhost:5432/iam_ctx_poc" \
+            --set ON_ERROR_STOP=1 \
+            --file database/poc/tenant-context/01_hmac_context.sql

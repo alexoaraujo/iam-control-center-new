@@ -1,6 +1,6 @@
 # IAM role bootstrap — revisão independente
 
-**Status: PR DRAFT / TOPOLOGIA EM REVISÃO / BOOTSTRAP EXECUTADO SOMENTE EM DEVELOPMENT SOB AUTORIZAÇÃO ESPECÍFICA**
+**Status: PROPOSTA INTEGRADA NA CADEIA (PR #57 MERGED) / BOOTSTRAP EXECUTADO SOMENTE EM DEVELOPMENT SOB AUTORIZAÇÃO ESPECÍFICA / CREDENCIAIS LOGIN BLOCKED**
 
 Este bootstrap é pré-requisito separado da migration `0001_initial_iam_schema.sql`. A migration 0001 não cria roles: exige sessão autenticada como `iam_migrator_login`, a cadeia de `SET ROLE` para `iam_migrator` e `iam_owner`, e privilégio `CREATE` no database.
 
