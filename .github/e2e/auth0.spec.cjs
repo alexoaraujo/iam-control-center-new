@@ -5,12 +5,18 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   const username = process.env.AUTH0_E2E_USERNAME;
   const password = process.env.AUTH0_E2E_PASSWORD;
   const trustedOidcToken = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
+  const callbackHost = process.env.E2E_CALLBACK_HOST;
 
-  if (!baseURL || !username || !password || !trustedOidcToken) {
+  if (!baseURL || !username || !password || !trustedOidcToken || !callbackHost) {
     throw new Error("Required Auth0 E2E configuration is missing.");
+  }
+  if (callbackHost !== "iam-control-center-preview.vercel.app") {
+    throw new Error("Unexpected Auth0 callback Preview host.");
   }
 
   const previewHost = new URL(baseURL).hostname;
+  const trustedHosts = new Set([previewHost, callbackHost]);
+  let callbackRequestSeen = false;
   const context = page.context();
   const cdp = await context.newCDPSession(page);
   const trustedHeader = "x-vercel-trusted-oidc-idp-token";
@@ -29,18 +35,25 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
         .filter(([name]) => name.toLowerCase() !== trustedHeader)
         .map(([name, value]) => ({ name, value: String(value) }));
 
-      // Attach the token only to the exact Preview hostname. Auth0 and every
-      // other origin explicitly receive no Trusted Sources header.
-      if (requestUrl.hostname === previewHost) {
+      // The exact-SHA deployment URL starts the flow; the configured branch
+      // alias receives the Auth0 callback. Trust only these two Preview hosts.
+      const trustedHost = trustedHosts.has(requestUrl.hostname);
+      if (trustedHost) {
         headers.push({ name: trustedHeader, value: trustedOidcToken });
+      }
+      if (
+        requestUrl.hostname === callbackHost &&
+        requestUrl.pathname.startsWith("/auth/callback")
+      ) {
+        callbackRequestSeen = true;
       }
 
       if (
-        requestUrl.hostname === previewHost ||
+        trustedHost ||
         requestUrl.hostname === "iam-control-center.us.auth0.com"
       ) {
         console.log(
-          `CDP request: ${request.method} ${requestUrl.hostname}${requestUrl.pathname}; trusted header: ${requestUrl.hostname === previewHost ? "attached" : "stripped"}`
+          `CDP request: ${request.method} ${requestUrl.hostname}${requestUrl.pathname}; trusted header: ${trustedHost ? "attached" : "stripped"}`
         );
       }
 
