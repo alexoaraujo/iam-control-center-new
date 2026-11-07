@@ -153,3 +153,44 @@ Cada conclusão deve apontar SHA, run ID, job, ambiente e artefato. CI PostgreSQ
 Auth0 permanece como IdP. Neon permanece como PostgreSQL. O bootstrap de roles existe somente em Development, mas os LOGINs não possuem credenciais e a migration 0001 não foi executada. O cliente Neon está implementado como scaffold server-only, mas não executa query real. Preview está bloqueado por limite gratuito de deployment; Production não foi alterada.
 
 Próximas ações permitidas: continuar revisão de código e testes em branches Draft, preparar teste PostgreSQL descartável e atualizar a cadeia de PRs. Provisionamento de credenciais, execução da migration em Neon, alteração de roles, mudança de pooler e deploy Production exigem autorização específica separada.
+
+
+## 9. Adendo de reconciliação de identidade Neon — 03/11/2026
+
+A consulta mais recente identificou dois projetos Neon ativos. A variável Vercel `NEON_PROJECT_ID` aponta para `floral-surf-85783683` em Development e Preview, enquanto este documento e a operação SQL de roles referem-se a `wandering-wildflower-90908845`. Não assumir que os endpoints `DATABASE_URL` apontam para o mesmo projeto sem validar a identidade da conexão. A decisão de projeto canônico está BLOCKED até reconciliação explícita.
+
+A inspeção read-only de `wandering-wildflower-90908845` / Development confirmou os atributos catalogais e memberships da topologia IAM proposta, ACLs de database restritas e ausência dos schemas/tabelas IAM. Entretanto, tentativas de conexão como `iam_migrator_login` e `iam_app_runtime_login` retornaram `missing authentication credentials: required password`. Portanto, a topologia de roles está confirmada, mas a autenticação real permanece BLOCKED.
+
+Importante: o campo `authentication_method` da API administrativa Neon não deve ser usado como substituto dos atributos SQL `pg_roles.rolcanlogin` e `rolinherit`. Use consultas catalogais read-only para essas afirmações.
+
+Detalhes, IDs de branches e evidências: [neon-project-identity-reconciliation.md](./neon-project-identity-reconciliation.md).
+
+
+## 10. Decisão canônica e reconciliação pós-seleção — 03/11/2026
+
+O usuário confirmou `wandering-wildflower-90908845` como projeto Neon canônico. Essa decisão substitui o status “decisão de identidade BLOCKED” descrito no adendo da seção 9. A arquitetura de identidade está decidida; a configuração operacional da aplicação ainda não está alinhada.
+
+### 10.1 Divergência Vercel ainda ativa
+
+Consulta de metadados Vercel com `decrypt=false` confirmou:
+- `NEON_PROJECT_ID=floral-surf-85783683` nos ambientes Development e Preview.
+- Nenhuma variável `NEON_PROJECT_ID` em Production.
+- `DATABASE_URL` existe em Development, Preview e Production; `DATABASE_MIGRATION_URL` existe em Development e Preview. Os valores secretos não foram descriptografados, portanto a identidade de projeto/branch desses endpoints não está confirmada por esta consulta.
+
+Resultado: **BLOCKED — roteamento ainda aponta para o projeto antigo em Development e Preview**. Não afirmar que o app está conectado ao projeto canônico até corrigir e testar as conexões.
+
+### 10.2 Estado de roles por branch
+
+Read-only SQL em `wandering-wildflower-90908845` confirmou em Development as cinco roles IAM, seus atributos `pg_roles` e memberships documentadas na seção 2.1. Em Preview, a API de roles retornou somente `Iam-control-center_owner`; consulta catalogal confirmou que as roles IAM e schemas `iam`, `audit` e `app_private` estão ausentes. Portanto, Preview ainda requer bootstrap próprio, que não foi executado.
+
+As consultas de autenticação como `iam_migrator_login` e `iam_app_runtime_login` anteriormente retornaram `missing authentication credentials: required password`. A autenticação real continua **BLOCKED**.
+
+### 10.3 Limite de execução
+
+Nenhuma alteração foi feita em Vercel, Neon ou Auth0. O próximo passo operacional é obter aprovação específica para atualizar `NEON_PROJECT_ID` em Development e Preview e alinhar os endpoints secretos com as branches Development e Preview do projeto canônico. Não alterar Production, não descriptografar/exibir secrets, não executar migrations e não habilitar Neon Auth. Auth0 continua sendo o único provedor de identidade.
+
+## 11. Read-back atual — 04/11/2026
+
+O read-back Vercel com `decrypt=false` confirmou `NEON_PROJECT_ID=wandering-wildflower-90908845` em Development e Preview; Production não possui essa variável. `DATABASE_URL` existe nos três ambientes, mas seus valores não foram descriptografados e a identidade dos endpoints permanece NOT VERIFIED. `DATABASE_MIGRATION_URL` não foi retornada na listagem atual e está classificada NOT CONFIGURED neste snapshot. A topologia do projeto Neon canônico (Production → Development, com Preview e recovery existentes) foi confirmada em leitura somente.
+
+A variável `NEON_PROJECT_ID` do GitHub Actions é independente da variável Vercel e continua NOT VERIFIED; confirmar seu valor canônico antes de ativar o workflow privilegiado da PR #56. Nenhuma migration, credencial, role, secret ou configuração Production foi alterada. Consulte [neon-project-identity-reconciliation.md](./neon-project-identity-reconciliation.md) para IDs e estado das branches.
