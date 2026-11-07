@@ -57,10 +57,10 @@ SQL
 echo "Running migration over an authenticated non-privileged LOGIN session..."
 {
   printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
-  cat database/migrations/0001_context_key_hardening.sql
+  cat database/migrations/0001_initial_iam_schema.sql
 } | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
 
 # Schema contract checks intentionally run as the disposable test administrator
 # because they inspect ownership and exercise test-only grants/RLS behavior.
-PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/0001_inicial_contract.sql
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/0001_schema_contract.sql
 echo "PASS: role bootstrap, role-assumption contract, rollback, migration chain, schema contract, and RLS default-deny tests"
