@@ -159,6 +159,8 @@ jobs:
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
+      # The Auth0 redirect_uri uses this branch-bound Preview alias.
+      E2E_CALLBACK_HOST: iam-control-center-preview.vercel.app
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
@@ -267,50 +269,63 @@ jobs:
           if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
           NODE
 
-      - name: Preflight Vercel Trusted Sources access to Preview
+      - name: Preflight Vercel Trusted Sources access to Preview hosts
         shell: bash
         run: |
           set -euo pipefail
           node <<'NODE'
-          const base = new URL(process.env.E2E_BASE_URL);
+          const deploymentOrigin = new URL(process.env.E2E_BASE_URL);
           const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
-          const previewHost = base.hostname;
+          const callbackHost = process.env.E2E_CALLBACK_HOST;
+          const previewHosts = new Set([deploymentOrigin.hostname, callbackHost]);
           const auth0Host = "iam-control-center.us.auth0.com";
           if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
-
-          let current = new URL("/protected", base);
-          for (let attempt = 0; attempt < 6; attempt += 1) {
-            const headers = current.hostname === previewHost
-              ? { "x-vercel-trusted-oidc-idp-token": token }
-              : {};
-            const response = await fetch(current, { redirect: "manual", headers });
-            const location = response.headers.get("location");
-
-            if (!location) {
-              throw new Error(
-                `Expected redirect to Auth0; received HTTP ${response.status} with no Location header.`
-              );
-            }
-
-            const next = new URL(location, current);
-            if (next.hostname === auth0Host) {
-              console.log("Vercel Trusted Sources preflight passed: protected route reached Auth0.");
-              process.exit(0);
-            }
-            if (next.hostname === "vercel.com") {
-              throw new Error(
-                "Vercel Deployment Protection still intercepts the request. Verify the GitHub Actions Trusted Source issuer, audience, immutable subject, and Preview environment."
-              );
-            }
-            if (next.hostname !== previewHost) {
-              throw new Error(
-                `Unexpected redirect host during Trusted Sources preflight: ${next.hostname}.`
-              );
-            }
-            current = next;
+          if (callbackHost !== "iam-control-center-preview.vercel.app") {
+            throw new Error("Unexpected Auth0 callback Preview host.");
           }
 
-          throw new Error("Trusted Sources preflight exceeded the redirect limit.");
+          for (const origin of [
+            deploymentOrigin,
+            new URL(`https://${callbackHost}`),
+          ]) {
+            let current = new URL("/protected", origin);
+            let reachedAuth0 = false;
+            for (let attempt = 0; attempt < 6; attempt += 1) {
+              const headers = previewHosts.has(current.hostname)
+                ? { "x-vercel-trusted-oidc-idp-token": token }
+                : {};
+              const response = await fetch(current, { redirect: "manual", headers });
+              const location = response.headers.get("location");
+
+              if (!location) {
+                throw new Error(
+                  `Expected redirect to Auth0 from ${origin.hostname}; received HTTP ${response.status} with no Location header.`
+                );
+              }
+
+              const next = new URL(location, current);
+              if (next.hostname === auth0Host) {
+                reachedAuth0 = true;
+                break;
+              }
+              if (next.hostname === "vercel.com") {
+                throw new Error(
+                  `Vercel Deployment Protection intercepted ${origin.hostname}. Verify the GitHub Actions Trusted Source and Preview environment.`
+                );
+              }
+              if (!previewHosts.has(next.hostname)) {
+                throw new Error(
+                  `Unexpected redirect host during preflight: ${next.hostname}.`
+                );
+              }
+              current = next;
+            }
+
+            if (!reachedAuth0) {
+              throw new Error(`Preflight did not reach Auth0 from ${origin.hostname}.`);
+            }
+            console.log(`Preview preflight passed: ${origin.hostname} reached Auth0.`);
+          }
           NODE
 
       - name: Run Auth0 end-to-end flow
