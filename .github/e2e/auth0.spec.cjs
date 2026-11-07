@@ -88,6 +88,10 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   // the callback completed and the application session was issued.
   await expect(page).toHaveURL((url) => url.pathname === "/protected", { timeout: 60000 });
   await expect(page.getByRole("status")).toHaveText("Acesso autenticado confirmado.");
+  expect(
+    callbackRequestSeen,
+    "Auth0 callback must reach the configured Preview alias with the Trusted Sources header"
+  ).toBe(true);
 
   // The authenticated session must survive a subsequent request.
   await page.reload();
