@@ -27,7 +27,7 @@ The v1 document records:
 - index definitions and validity/readiness;
 - view/materialized-view definitions;
 - sequence definitions (not current sequence values);
-- function/procedure definitions, identity arguments, owner, language, volatility, parallel mode, SECURITY DEFINER and per-routine configuration;
+- function/procedure identity arguments, owner, language, volatility, parallel mode, SECURITY DEFINER and per-routine configuration; routine bodies are deliberately excluded to prevent hard-coded credentials or tokens in function source from being emitted;
 - aggregate transition/final/combine/serialization metadata;
 - enum labels and domain base/default/nullability/check constraints;
 - non-internal triggers and their definitions/enabled state;
@@ -46,11 +46,11 @@ The ACL arrays are expanded with PostgreSQL defaults when the catalog ACL field 
 4. Do not silently normalize away owners, ACLs, default ACLs, function configuration, RLS flags, policy expressions, extension versions, or membership options. Any normalization must be explicit, documented, and reviewed.
 5. Classify provider-managed roles/memberships separately from application roles. Do not treat Neon internal role names or grantors as portable PostgreSQL baseline objects.
 6. Compare `iam.schema_migrations` provenance through a separately approved read-only channel. The schema-export role must not receive SELECT on the migration ledger as a side effect of this manifest.
-7. The manifest does not contain application rows, secret values, current sequence values, or ledger rows.
+7. The manifest does not contain application rows, routine source text, secret values, current sequence values, or ledger rows. Routine-body equivalence must be established separately through a protected dump/diff process that does not print or publish function source.
 
 ## Explicit v1 limitations
 
-The v1 manifest is not yet a complete PostgreSQL cluster/database equivalence proof. It does not inventory database/role GUC settings, tablespace placement, collations and their provider/version metadata, operators/casts, publication/subscription state, foreign-server/user-mapping options, event triggers, rewrite rules, row-security bypass behavior under each runtime principal, or effective privileges computed through all role memberships. Those require separate read-only evidence and runtime privilege tests.
+The v1 manifest is not yet a complete PostgreSQL cluster/database equivalence proof. It does not inventory routine bodies, database/role GUC settings, tablespace placement, collations and their provider/version metadata, operators/casts, publication/subscription state, foreign-server/user-mapping options, event triggers, rewrite rules, row-security bypass behavior under each runtime principal, or effective privileges computed through all role memberships. Those require separate read-only evidence and runtime privilege tests.
 
 A successful execution proves only that this query can inventory the catalogs visible to the selected principal. It does not prove that the source export was authenticated, that the GitHub Environment is protected, that a dump restores equivalently, or that RLS is secure at runtime.
 
