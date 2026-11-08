@@ -58,3 +58,14 @@ Executar em uma branch Neon descartável ou PostgreSQL descartável com dois cli
 - Dump versionado atual: a mesma função ainda declara search_path=pg_catalog, app_private, iam, public.
 - O restore contract agora exige a configuração endurecida exata e deve falhar até que o dump seja regenerado da fonte canônica aprovada.
 - Não editar o dump manualmente nem atribuir PASS ao restore anterior como prova de equivalência. O PASS anterior só validou a versão histórica do artefato e os objetos que aquele teste verificava.
+
+
+## Atualização de semântica do contexto — 2026-11-08
+
+O primeiro CI do contrato dinâmico no SHA anterior falhou no caso de assinatura adulterada porque o teste tentou validar a ausência de contexto depois de já ter estabelecido um contexto válido para tenant A. Em PostgreSQL, quando a chamada que altera GUCs transaction-local termina com exceção e a exceção é capturada pelo chamador, os efeitos da instrução com erro são revertidos; o contexto válido anterior pode permanecer ativo.
+
+O teste foi corrigido para chamar iam.clear_tenant_context() e confirmar estado vazio antes de testar assinatura adulterada, expiração e TTL acima de 300 segundos. O novo SHA precisa passar o restore + runtime RLS para que esses casos sejam PASS.
+
+**Implicação operacional:** o consumidor deve iniciar a operação de contexto em estado limpo. Se capturar uma exceção de iam.set_tenant_context() dentro da mesma transação, deve abortar a transação ou chamar iam.clear_tenant_context() antes de continuar; não deve presumir que a tentativa inválida removeu um contexto válido anterior. A tentativa inválida não deve ser usada como mecanismo de troca de tenant.
+
+Replay de nonce continua PENDING: o payload inclui nonce, mas o contrato atual não demonstra persistência/consumo único do nonce nem rejeição de replay. Não afirmar proteção anti-replay até existir implementação e teste concorrente apropriados.
