@@ -102,3 +102,21 @@ A fixture foi corrigida para refletir somente:
 O contrato incremental agora verifica esses privilégios efetivos e a propriedade SECURITY DEFINER, owner, search_path e ausência de PUBLIC EXECUTE das duas funções. O job anterior confirmou que o teste de role-assumption continuou PASS, mas não executou os novos testes de lock/ledger nem o bootstrap inicial independente porque falhou antes deles.
 
 O runner foi corrigido; os testes de contenção concorrente, ledger idempotente/checksum mismatch/rollback e bootstrap inicial em database separada aguardam novo CI no SHA posterior. Não reutilizar o PASS histórico de SHA anterior.
+
+
+## Evidência CI dos contratos adicionais — 2026-11-08
+
+**SHA exato:** 508aa6c80a8542ae90548a2558081cc242793792  
+**Workflow database-schema-tests:** run 42460653768, job 128669066414 — SUCCESS.  
+**Workflow CI:** run 42460653910, job quality 128669057005 — SUCCESS.  
+**Preview deployment:** SKIPPED. **Auth0 E2E:** SKIPPED.
+
+O log do job PostgreSQL 18 confirmou:
+- 12 cenários negativos do preflight rejeitados antes de DDL, com ausência de índice e ledger entry após cada falha;
+- lock A adquirido e lock B bloqueado por 3.934 ms até o COMMIT de A;
+- ledger idempotente: duas chamadas iguais resultaram em uma linha; checksum divergente foi rejeitado; ROLLBACK removeu a linha sintética;
+- bootstrap inicial 0001 executado em database limpa separada pela sessão autenticada iam_migrator_login e cadeia SET ROLE iam_migrator → iam_owner;
+- contrato independente de ownership, default-deny, integridade cross-tenant e auditoria passou;
+- migration incremental e contrato de context-key passaram na fixture source-derived.
+
+Este PASS é exclusivo do SHA indicado. Não prova equivalência do fixture reduzido com a baseline integral Neon, nem RLS cross-tenant na fonte, nem execução em branch Neon. A PR permanece Draft até resolver lineage da migration e reconciliação integral da baseline.
