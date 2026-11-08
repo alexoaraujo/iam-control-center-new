@@ -162,3 +162,15 @@ O log confirma, no mesmo job:
 - bootstrap inicial independente aplicado em database limpa pela sessão iam_migrator_login com SET ROLE iam_migrator → iam_owner; contrato de ownership, default-deny, tenant-integrity e audit passou.
 
 O resultado comprova somente a fixture e o PostgreSQL 18 descartável nesse SHA. Não autoriza executar a proposta 0002 em Neon; não prova export/baseline integral nem resolve a colisão de lineage/versionamento. O P1 de migration lineage permanece aberto.
+
+
+## Revalidação após atualização documental — HEAD 7254358e131274b9bf81e61ffd0bed5da6841f9a
+
+O commit documental foi validado novamente:
+- database-schema-tests run 42462002949, job 128673108502: SUCCESS;
+- CI run 42462003007, job quality 128673108977: SUCCESS;
+- mesmo-statement RLS A→B passou na proposta 0002;
+- lock A/B com PIDs distintos, marcador inserido antes do COMMIT por A e observado por B após adquirir o lock; espera de 3.949 ms;
+- ledger idempotência/checksum/rollback e bootstrap inicial independente PASS.
+
+Preview deployment e Auth0 E2E continuaram SKIPPED.
