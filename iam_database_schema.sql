@@ -1339,6 +1339,16 @@ ALTER TABLE ONLY "iam"."tenants"
 
 --
 -- TOC entry 3626 (class 1259 OID 17301)
+--
+-- TOC entry 3640 (class 1259 OID 17222)
+-- Name: context_keys_one_active_idx; Type: INDEX; Schema: app_private; Owner: iam_owner
+--
+
+CREATE UNIQUE INDEX context_keys_one_active_idx ON app_private.context_keys USING btree (active) WHERE (active IS TRUE);
+
+ALTER INDEX app_private.context_keys_one_active_idx OWNER TO iam_owner;
+
+
 -- Name: audit_events_actor_time_idx; Type: INDEX; Schema: audit; Owner: iam_owner
 --
 
