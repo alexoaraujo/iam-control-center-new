@@ -133,3 +133,8 @@ A auditoria de função encontrou dois pontos para uma migration incremental pos
 Foi criada database/proposals/0002_context_resolver_volatility_hardening.sql, fora da pasta de migrations ativas. A proposta altera current_tenant_id para VOLATILE e remove public do search_path de set_tenant_context. O teste database/tests/0002_context_resolver_volatility_contract.sql alterna tenant A → tenant B no mesmo bloco DO e valida visibilidade RLS atualizada.
 
 O runner CI aplica essa proposta somente no PostgreSQL 18 descartável, após o fixture derivado e a migration 0001 de teste. A proposta não está aprovada para execução em Neon persistente/Production e não deve ser movida para database/migrations até resolver a lineage entre o bootstrap 0001 e a migration operacional 0001.
+
+
+## Evidência de concorrência do advisory lock
+
+O teste database/tests/migration-lock-ledger-contract.sh usa dois processos psql independentes e exige PIDs de backend distintos. A sessão A adquire o advisory transaction lock, grava um marcador dentro da transação e registra o evento pre-commit; a sessão B inicia enquanto A mantém o lock, aguarda a aquisição e então deve enxergar o marcador já commitado. O teste valida a ordem A_acquired < B_attempt < A_precommit_marker < B_acquired, a visibilidade do marcador pela sessão B, PIDs diferentes e bloqueio superior a 2 segundos. O marcador é removido com a database descartável e não altera o ledger de migrations.
