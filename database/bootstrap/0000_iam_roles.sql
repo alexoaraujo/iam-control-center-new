@@ -25,6 +25,10 @@ BEGIN
     FROM pg_roles
    WHERE rolname = current_user;
 
+  IF current_user <> 'iam_bootstrap_admin' THEN
+    RAISE EXCEPTION 'bootstrap must use the dedicated iam_bootstrap_admin principal';
+  END IF;
+
   IF NOT FOUND OR session_user <> current_user
      OR NOT admin_role.rolcanlogin
      OR admin_role.rolsuper
@@ -82,17 +86,11 @@ CREATE ROLE iam_app_runtime_login
   LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
   NOREPLICATION NOBYPASSRLS;
 
--- PostgreSQL grants the role creator ADMIN OPTION on roles it creates.
--- Remove those bootstrap-only memberships before defining the approved chain;
--- the administrative bootstrap principal must not remain a grantee of IAM roles.
-DO $revoke_creator_memberships$
-BEGIN
-  EXECUTE format(
-    'REVOKE iam_owner, iam_migrator, iam_app_runtime FROM %I',
-    current_user
-  );
-END
-$revoke_creator_memberships$;
+-- PostgreSQL 18 automatically grants the CREATEROLE principal ADMIN OPTION
+-- on each role it creates. The grantor is the bootstrap superuser, so the
+-- creator cannot revoke or change that implicit membership. Keep this
+-- one-time principal unusable after provisioning: no LOGIN, no CREATEROLE,
+-- and no password. Do not reuse a human or application account for bootstrap.
 
 -- Exact, non-admin membership topology expected by migration 0001.
 GRANT iam_owner TO iam_migrator
@@ -128,5 +126,7 @@ BEGIN
   );
 END
 $database_grants$;
+
+ALTER ROLE CURRENT_USER WITH NOLOGIN NOCREATEROLE PASSWORD NULL;
 
 COMMIT;
