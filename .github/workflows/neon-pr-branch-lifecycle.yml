@@ -83,18 +83,18 @@ jobs:
           BRANCHES_JSON="$(api_get_branches)"
           jq -e '.branches | type == "array"' >/dev/null <<< "${BRANCHES_JSON}"
 
-          # Resolve and validate the permanent Development -> Production lineage.
-          PRODUCTION_JSON="$(jq -ce '[.branches[] | select(.default == true)] |
-            if length == 1 then .[0] else error("Expected exactly one default Production branch") end' <<< "${BRANCHES_JSON}")"
-          PRODUCTION_ID="$(jq -r '.id' <<< "${PRODUCTION_JSON}")"
-          PRODUCTION_STATE="$(jq -r '.current_state // empty' <<< "${PRODUCTION_JSON}")"
-          [[ "${PRODUCTION_STATE}" == "ready" ]] || {
-            echo "::error::Production branch is not ready."
+          # Resolve and validate the permanent main (default) -> Development lineage.
+          DEFAULT_BRANCH_JSON="$(jq -ce '[.branches[] | select(.default == true)] |
+            if length == 1 then .[0] else error("Expected exactly one default main branch") end' <<< "${BRANCHES_JSON}")"
+          DEFAULT_BRANCH_ID="$(jq -r '.id' <<< "${DEFAULT_BRANCH_JSON}")"
+          DEFAULT_BRANCH_STATE="$(jq -r '.current_state // empty' <<< "${DEFAULT_BRANCH_JSON}")"
+          [[ "${DEFAULT_BRANCH_STATE}" == "ready" ]] || {
+            echo "::error::Default main branch is not ready."
             exit 1
           }
-          DEVELOPMENT_JSON="$(jq -ce --arg parent "${PRODUCTION_ID}" '
+          DEVELOPMENT_JSON="$(jq -ce --arg parent "${DEFAULT_BRANCH_ID}" '
             [.branches[] | select(.name == "development" and .parent_id == $parent)] |
-            if length == 1 then .[0] else error("Expected exactly one Development branch whose parent is Production") end
+            if length == 1 then .[0] else error("Expected exactly one Development branch whose parent is the default main branch") end
           ' <<< "${BRANCHES_JSON}")"
           DEVELOPMENT_ID="$(jq -r '.id' <<< "${DEVELOPMENT_JSON}")"
           DEVELOPMENT_STATE="$(jq -r '.current_state // empty' <<< "${DEVELOPMENT_JSON}")"
