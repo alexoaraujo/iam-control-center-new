@@ -183,9 +183,15 @@ jobs:
           VERIFIED_NAME="$(jq -r '.branch.name // empty' <<< "${VERIFIED}")"
           VERIFIED_PARENT="$(jq -r '.branch.parent_id // empty' <<< "${VERIFIED}")"
           VERIFIED_EXPIRY="$(jq -r '.branch.expires_at // empty' <<< "${VERIFIED}")"
-          [[ "${VERIFIED_NAME}" == "${BRANCH_NAME}" && "${VERIFIED_PARENT}" == "${DEVELOPMENT_ID}" && -n "${VERIFIED_EXPIRY}" ]] || {
+          VERIFIED_EXPIRY_EPOCH="$(date -u -d "${VERIFIED_EXPIRY}" '+%s' 2>/dev/null || true)"
+          EXPECTED_EXPIRY_EPOCH="$(date -u -d "${EXPIRES_AT}" '+%s')"
+          [[ "${VERIFIED_NAME}" == "${BRANCH_NAME}" && "${VERIFIED_PARENT}" == "${DEVELOPMENT_ID}" && "${VERIFIED_EXPIRY_EPOCH}" =~ ^[0-9]+$ ]] || {
             echo "::error::Branch identity, parent, or expiration verification failed."
             exit 1
           }
-          echo "PR branch is ready, parent-verified, and has a 14-day expiration."
+          if (( VERIFIED_EXPIRY_EPOCH < EXPECTED_EXPIRY_EPOCH - 60 || VERIFIED_EXPIRY_EPOCH > EXPECTED_EXPIRY_EPOCH + 60 )); then
+            echo "::error::Neon expiration does not match the requested 14-day TTL."
+            exit 1
+          fi
+          echo "PR branch is ready, parent-verified, and its 14-day expiration matches the requested timestamp."
           echo "No database migration or compute endpoint was provisioned."
