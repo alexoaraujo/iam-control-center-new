@@ -115,6 +115,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p artifacts
           docker run --rm --network host \
             --volume "$GITHUB_WORKSPACE:/workspace" \
             --workdir /workspace \
@@ -126,10 +127,10 @@ jobs:
               bash database/tests/restore-source-schema.sh
               cd /workspace
               psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
-                -f database/scripts/schema-manifest.sql > /tmp/schema-manifest-restored-a.json
+                -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-restored-a.json
               psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
-                -f database/scripts/schema-manifest.sql > /tmp/schema-manifest-restored-b.json
-              cmp /tmp/schema-manifest-restored-a.json /tmp/schema-manifest-restored-b.json
-              python3 database/tests/validate-schema-manifest.py /tmp/schema-manifest-restored-a.json
-              sha256sum /tmp/schema-manifest-restored-a.json
+                -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-restored-b.json
             '
+          cmp artifacts/schema-manifest-restored-a.json artifacts/schema-manifest-restored-b.json
+          python3 database/tests/validate-schema-manifest.py artifacts/schema-manifest-restored-a.json
+          sha256sum artifacts/schema-manifest-restored-a.json
