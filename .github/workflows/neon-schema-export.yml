@@ -13,31 +13,33 @@ concurrency:
 jobs:
   export-schema:
     name: Read-only schema export from isolated Neon validation branch
-    if: github.repository == 'alexoaraujo83/iam-control-center'
+    # workflow_dispatch can select an arbitrary ref. Never expose the
+    # environment secret unless the workflow is running from protected main.
+    if: github.repository == 'alexoaraujo83/iam-control-center' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: neon-schema-export
-    env:
-      NEON_SCHEMA_EXPORT_URL: ${{ secrets.NEON_SCHEMA_EXPORT_URL }}
 
     steps:
       - name: Checkout exact workflow commit
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
 
-      - name: Validate protected source connection and mask derived credentials
+      - name: Validate source and export schema with verified TLS
         shell: bash
+        env:
+          NEON_SCHEMA_EXPORT_URL: ${{ secrets.NEON_SCHEMA_EXPORT_URL }}
         run: |
           set -euo pipefail
-          test -n "${NEON_SCHEMA_EXPORT_URL:-}" || {
-            echo "::error::Configure NEON_SCHEMA_EXPORT_URL in the neon-schema-export GitHub Environment."
-            exit 1
-          }
-          python3 - <<'PY'
+          umask 077
+          ENV_FILE="$(mktemp "${RUNNER_TEMP}/neon-pg-env.XXXXXX")"
+          trap 'rm -f "${ENV_FILE}"; unset NEON_SCHEMA_EXPORT_URL PGPASSWORD' EXIT
+
+          python3 - "${ENV_FILE}" <<'PY'
           import os
-          import uuid
+          import sys
           from urllib.parse import unquote, urlparse
 
-          raw = os.environ["NEON_SCHEMA_EXPORT_URL"]
+          raw = os.environ.get("NEON_SCHEMA_EXPORT_URL", "")
           u = urlparse(raw)
           allowed_host = "ep-lucky-frost-b631bopg.c-2.sa-east-1.aws.neon.tech"
           if u.scheme not in ("postgres", "postgresql"):
@@ -48,40 +50,41 @@ jobs:
               raise SystemExit("Connection database is not the allowlisted source database")
           user = unquote(u.username or "")
           password = unquote(u.password or "")
-          if not user or not password or "\n" in password or "\r" in password:
+          if not user or not password or any(c in user + password for c in "\\r\\n"):
               raise SystemExit("Connection URI must contain valid credentials without line breaks")
           port = u.port or 5432
-          delimiter = "PGPASSWORD_" + uuid.uuid4().hex
-          print(f"::add-mask::{password}")
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
-              f.write(f"PGPASSWORD<<{delimiter}\n{password}\n{delimiter}\n")
-              for key, value in {
-                  "PGHOST": allowed_host,
-                  "PGPORT": str(port),
-                  "PGDATABASE": "iam_database",
-                  "PGUSER": user,
-                  "PGSSLMODE": "require",
-              }.items():
-                  f.write(f"{key}={value}\n")
+          values = {
+              "PGHOST": allowed_host,
+              "PGPORT": str(port),
+              "PGDATABASE": "iam_database",
+              "PGUSER": user,
+              "PGPASSWORD": password,
+              "PGSSLMODE": "verify-full",
+              "PGSSLROOTCERT": "system",
+          }
+          for value in values.values():
+              if any(c in value for c in "\\r\\n"):
+                  raise SystemExit("Connection settings contain an invalid line break")
+          with open(sys.argv[1], "w", encoding="utf-8") as f:
+              for key, value in values.items():
+                  f.write(f"{key}={value}\\n")
+          os.chmod(sys.argv[1], 0o600)
+          print("Allowlisted source URI validated; TLS hostname verification is enabled.")
           PY
-          unset NEON_SCHEMA_EXPORT_URL
-          echo "Isolated validation-branch target validated; credentials were not logged."
 
-      - name: Export schema using PostgreSQL 18 client
-        shell: bash
-        run: |
-          set -euo pipefail
           mkdir -p artifacts
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            --volume "$GITHUB_WORKSPACE:/workspace" \
-            --workdir /workspace \
-            --env PGHOST --env PGPORT --env PGDATABASE --env PGUSER --env PGSSLMODE --env PGPASSWORD \
-            postgres:18-bookworm \
+          docker run --rm \\
+            --user "$(id -u):$(id -g)" \\
+            --env-file "${ENV_FILE}" \\
+            --volume "$GITHUB_WORKSPACE:/workspace" \\
+            --workdir /workspace \\
+            postgres:18-bookworm \\
             bash -c '
               set -euo pipefail
               test -n "${PGPASSWORD:-}"
-              echo "Password environment validated; value not logged."
+              test "${PGSSLMODE}" = "verify-full"
+              test "${PGSSLROOTCERT}" = "system"
+              echo "Password and verified TLS configuration validated; values not logged."
               bash database/scripts/export-neon-schema.sh artifacts/iam_database_schema.sql
             '
           test -s artifacts/iam_database_schema.sql
@@ -96,6 +99,7 @@ jobs:
             echo "format=plain SQL, schema-only"
             echo "schemas=iam,audit,app_private"
             echo "extension_dependency=pgcrypto in public"
+            echo "tls=verify-full; root CA store=system"
             echo "contains_application_rows=false"
           } > artifacts/manifest.txt
 
@@ -109,8 +113,3 @@ jobs:
             artifacts/manifest.txt
           if-no-files-found: error
           retention-days: 7
-
-      - name: Remove credential material
-        if: always()
-        shell: bash
-        run: unset PGPASSWORD NEON_SCHEMA_EXPORT_URL
