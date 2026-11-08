@@ -32,6 +32,9 @@ DECLARE
   v_function_owners integer;
   v_extension boolean;
   v_partial_index boolean;
+  v_context_function_secure boolean;
+  v_context_function_owner text;
+  v_context_function_config text[];
   r record;
   v_rows bigint;
 BEGIN
@@ -111,6 +114,13 @@ BEGIN
        AND pg_get_expr(i.indpred, i.indrelid) = '(active IS TRUE)'
   ) INTO v_partial_index;
 
+  SELECT p.prosecdef, pg_get_userbyid(p.proowner), p.proconfig
+    INTO v_context_function_secure, v_context_function_owner, v_context_function_config
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname = 'app_private' AND p.proname = 'current_tenant_id'
+     AND p.prokind = 'f' AND pg_get_function_identity_arguments(p.oid) = '';
+
   SELECT EXISTS (
     SELECT 1 FROM pg_extension e
     JOIN pg_namespace n ON n.oid = e.extnamespace
@@ -121,12 +131,18 @@ BEGIN
      OR v_triggers <> 12 OR v_policies <> 41 OR v_indexes < 18
      OR v_rls_tables <> 20 OR v_forced_rls_tables <> 20
      OR v_schema_owners <> 3 OR v_table_owners <> 23
-     OR v_function_owners <> 9 OR NOT v_extension OR NOT v_partial_index THEN
+     OR v_function_owners <> 9 OR NOT v_extension OR NOT v_partial_index
+     OR v_context_function_secure IS DISTINCT FROM TRUE
+     OR v_context_function_owner <> 'iam_owner'
+     OR NOT (v_context_function_config @> ARRAY['search_path=pg_catalog, app_private, iam']::text[])
+     OR v_context_function_config @> ARRAY['search_path=pg_catalog, app_private, iam, public']::text[] THEN
     RAISE EXCEPTION
       'restore catalog contract mismatch: tables=%, views=%, functions=%, enums=%, triggers=%, policies=%, indexes=%, rls=%, forced_rls=%, schema_owners=%, table_owners=%, function_owners=%, pgcrypto=%, partial_unique_index=%',
       v_tables, v_views, v_functions, v_enums, v_triggers, v_policies,
       v_indexes, v_rls_tables, v_forced_rls_tables, v_schema_owners,
       v_table_owners, v_function_owners, v_extension, v_partial_index;
+    RAISE NOTICE 'current_tenant_id secure=%, owner=%, config=%',
+      v_context_function_secure, v_context_function_owner, v_context_function_config;
   END IF;
 
   FOR r IN
