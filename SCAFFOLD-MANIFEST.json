@@ -135,7 +135,7 @@
     "Auth0 E2E and Vercel Preview deployment were SKIPPED on the current main SHA.",
     "The protected page checks Auth0 session existence only; tenant membership and permission evaluation are not implemented.",
     "The Neon client factory only constructs a client; no production runtime query or authenticated session is implemented.",
-    "No complete migration sequence reproduces the operational 23-table Neon schema.",
+    "No complete migration sequence reproduces the 23-table historical isolated validation snapshot documented in neon_schema_snapshot; this snapshot is not evidence of the current canonical Neon baseline.",
     "In the isolated post-hardening restore, sessions UPDATE fails because sessions_touch calls iam.touch_updated_at() against a table without updated_at; fix design remains pending.",
     "Parallel migration-lock contention has not been proven with independent PostgreSQL sessions/backend PIDs.",
     "Historical dependency versions in older evidence documents are superseded by the current package manifest."
