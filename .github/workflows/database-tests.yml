@@ -65,3 +65,15 @@ jobs:
         run: PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -Atc "SHOW server_version;"
       - name: Run role bootstrap and migration contract tests
         run: bash database/tests/run.sh
+      - name: Generate and validate deterministic PostgreSQL schema manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
+            -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-a.json
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
+            -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-b.json
+          cmp artifacts/schema-manifest-a.json artifacts/schema-manifest-b.json
+          python3 database/tests/validate-schema-manifest.py artifacts/schema-manifest-a.json
+          sha256sum artifacts/schema-manifest-a.json
