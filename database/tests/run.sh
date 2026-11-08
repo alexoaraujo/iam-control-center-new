@@ -167,6 +167,14 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -v migration_checksum="$migration_checksum" -v source_sha="$source_sha" \
   -f database/tests/0001_schema_contract.sql
 
+echo "Applying proposal-only resolver volatility hardening in the disposable CI database..."
+resolver_checksum="$(sha256sum database/proposals/0002_context_resolver_volatility_hardening.sql | awk '{print $1}')"
+PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -v migration_checksum="$resolver_checksum" -v source_sha="$source_sha" \
+  -f database/proposals/0002_context_resolver_volatility_hardening.sql
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f database/tests/0002_context_resolver_volatility_contract.sql
+
 echo "Running explicit advisory-lock concurrency and migration-ledger semantic tests..."
 bash database/tests/migration-lock-ledger-contract.sh
 
