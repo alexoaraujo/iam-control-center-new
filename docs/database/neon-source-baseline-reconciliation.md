@@ -457,3 +457,12 @@ O contrato runtime RLS foi adicionado e agora separa os casos de contexto válid
 - O contrato runtime HMAC/RLS não foi executado nesse run, pois o restore falhou antes da etapa de teste. O contrato dinâmico continua ADDED / NOT EXECUTED.
 - O teste anterior 42460479806 chegou ao contrato runtime, mas falhou no caso de assinatura adulterada; os cenários foram separados em DOs independentes no HEAD seguinte, sem evidência verde ainda.
 - Não alterar o dump manualmente. A correção deve vir de export autenticado da origem canônica, checksum e comparação integral objeto-a-objeto.
+
+
+## Semântica de volatilidade do tenant resolver — 2026-11-08
+
+O catálogo Neon read-only também confirma current_tenant_id() com provolatile=s (STABLE), embora leia GUCs de contexto alteráveis na transação e clock_timestamp(). Uma chamada posterior no mesmo statement pode observar resultado reaproveitado e não refletir a troca de tenant context. O teste de assinatura adulterada na PR #86 expôs esse comportamento quando executado depois de um contexto válido no mesmo bloco DO.
+
+A migration 0001_context_key_hardening já consta no ledger Neon e não deve ser reescrita. A PR #85 adicionou proposta separada database/proposals/0002_context_resolver_volatility_hardening.sql para alterar a função para VOLATILE e retirar public do search_path de iam.set_tenant_context. O contrato de regressão troca tenant A → B dentro de um único bloco DO e verifica RLS. A proposta é executada somente no PostgreSQL 18 descartável; não foi aplicada ao Neon persistente.
+
+A equivalência do dump, a correção da semântica da função, a lineage e a revisão permanecem gates independentes.
