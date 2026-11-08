@@ -97,6 +97,29 @@ for attribute in SUPERUSER BYPASSRLS CREATEROLE CREATEDB; do
     -c "ALTER ROLE iam_migrator_login $disable_attribute;"
 done
 
+# The owner group role is the final privilege boundary after SET ROLE. It must
+# remain non-login, non-admin, and must not be a member of any other role.
+for attribute in LOGIN SUPERUSER BYPASSRLS CREATEROLE CREATEDB; do
+  case "$attribute" in
+    LOGIN) disable_attribute="NOLOGIN" ;;
+    SUPERUSER) disable_attribute="NOSUPERUSER" ;;
+    BYPASSRLS) disable_attribute="NOBYPASSRLS" ;;
+    CREATEROLE) disable_attribute="NOCREATEROLE" ;;
+    CREATEDB) disable_attribute="NOCREATEDB" ;;
+  esac
+  PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+    -c "ALTER ROLE iam_owner $attribute;"
+  assert_migration_rejected "iam_owner $attribute"
+  PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+    -c "ALTER ROLE iam_owner $disable_attribute;"
+done
+
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "GRANT iam_app_runtime TO iam_owner WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;"
+assert_migration_rejected "unexpected membership granted to iam_owner"
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "REVOKE iam_app_runtime FROM iam_owner;"
+
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -c "GRANT iam_app_runtime TO iam_migrator_login WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;"
 assert_migration_rejected "unexpected iam_app_runtime membership"
