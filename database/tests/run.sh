@@ -212,3 +212,28 @@ SQL
 } | PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1
 
 echo "PASS: role bootstrap, role-assumption, initial schema, incremental migration, advisory-lock concurrency, ledger idempotency/checksum, rollback, RLS default-deny, tenant integrity, and context-key uniqueness"
+  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  cat database/migrations/0001_initial_iam_schema.sql
+} | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
+
+# Schema contract checks intentionally run as the disposable test administrator
+# because they inspect ownership and exercise test-only grants/RLS behavior.
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/effective-privileges-contract.sql
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/0001_schema_contract.sql
+echo "Preparing the Development-derived sessions fixture for corrective migration 0002..."
+{
+  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  cat database/tests/0002_sessions_touch_fixture.sql
+} | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
+
+echo "Applying corrective migration 0002 and executing its rollback-only contract test..."
+{
+  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  cat database/migrations/0002_sessions_touch_contract.sql
+} | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
+{
+  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  cat database/tests/0002_sessions_touch_contract.sql
+} | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
+
+echo "PASS: role bootstrap, role-assumption contract, rollback, migration 0001, schema contract, migration 0002, sessions touch behavior, and shared updated_at regression tests"
