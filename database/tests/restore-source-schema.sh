@@ -137,11 +137,10 @@ BEGIN
      OR NOT (v_context_function_config @> ARRAY['search_path=pg_catalog, app_private, iam']::text[])
      OR v_context_function_config @> ARRAY['search_path=pg_catalog, app_private, iam, public']::text[] THEN
     RAISE EXCEPTION
-      'restore catalog contract mismatch: tables=%, views=%, functions=%, enums=%, triggers=%, policies=%, indexes=%, rls=%, forced_rls=%, schema_owners=%, table_owners=%, function_owners=%, pgcrypto=%, partial_unique_index=%',
+      'restore catalog contract mismatch: tables=%, views=%, functions=%, enums=%, triggers=%, policies=%, indexes=%, rls=%, forced_rls=%, schema_owners=%, table_owners=%, function_owners=%, pgcrypto=%, partial_unique_index=%, current_tenant_id_secure=%, owner=%, config=%',
       v_tables, v_views, v_functions, v_enums, v_triggers, v_policies,
       v_indexes, v_rls_tables, v_forced_rls_tables, v_schema_owners,
-      v_table_owners, v_function_owners, v_extension, v_partial_index;
-    RAISE NOTICE 'current_tenant_id secure=%, owner=%, config=%',
+      v_table_owners, v_function_owners, v_extension, v_partial_index,
       v_context_function_secure, v_context_function_owner, v_context_function_config;
   END IF;
 
