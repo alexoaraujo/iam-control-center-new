@@ -117,40 +117,34 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
           persist-credentials: false
-      - name: Checkout pinned canonical source dump and restore contract
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
-        with:
-          ref: 79ae7dcf0f3523fab152f485fe699e90fb7ac6e9
-          path: source-baseline
-          persist-credentials: false
       - name: Restore the candidate PR source dump and generate restored manifest
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          docker run --rm --network host \\
-            --volume "$GITHUB_WORKSPACE:/workspace" \\
-            --workdir /workspace \\
-            --env DATABASE_URL="$DATABASE_URL" \\
-            --env PGPASSWORD="$PGPASSWORD" \\
-            postgres:18-bookworm \\
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            --env DATABASE_URL="$DATABASE_URL" \
+            --env PGPASSWORD="$PGPASSWORD" \
+            postgres:18-bookworm \
             bash -euo pipefail -c '
               cd /workspace
               bash database/tests/restore-source-schema.sh
-              psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \\
+              psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
                 -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-restored-a.json
-              psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \\
+              psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
                 -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-restored-b.json
             '
           cmp artifacts/schema-manifest-restored-a.json artifacts/schema-manifest-restored-b.json
           python3 database/tests/validate-schema-manifest.py artifacts/schema-manifest-restored-a.json
           sha256sum artifacts/schema-manifest-restored-a.json
-          python3 database/tests/render-schema-manifest-section-hashes.py database/scripts/schema-manifest.sql \\
-            | docker run --rm -i --network host \\
-                --env DATABASE_URL="$DATABASE_URL" \\
-                --env PGPASSWORD="$PGPASSWORD" \\
-                postgres:18-bookworm \\
-                psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \\
+          python3 database/tests/render-schema-manifest-section-hashes.py database/scripts/schema-manifest.sql \
+            | docker run --rm -i --network host \
+                --env DATABASE_URL="$DATABASE_URL" \
+                --env PGPASSWORD="$PGPASSWORD" \
+                postgres:18-bookworm \
+                psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
             > artifacts/schema-manifest-restored-sections.tsv
           echo "Candidate PR dump restored manifest section hashes (section, item_count, sha256):"
           cat artifacts/schema-manifest-restored-sections.tsv
