@@ -194,3 +194,21 @@ Nenhuma alteração foi feita em Vercel, Neon ou Auth0. O próximo passo operaci
 O read-back Vercel com `decrypt=false` confirmou `NEON_PROJECT_ID=wandering-wildflower-90908845` em Development e Preview; Production não possui essa variável. `DATABASE_URL` existe nos três ambientes, mas seus valores não foram descriptografados e a identidade dos endpoints permanece NOT VERIFIED. `DATABASE_MIGRATION_URL` não foi retornada na listagem atual e está classificada NOT CONFIGURED neste snapshot. A topologia do projeto Neon canônico (Production → Development, com Preview e recovery existentes) foi confirmada em leitura somente.
 
 A variável `NEON_PROJECT_ID` do GitHub Actions é independente da variável Vercel e continua NOT VERIFIED; confirmar seu valor canônico antes de ativar o workflow privilegiado da PR #56. Nenhuma migration, credencial, role, secret ou configuração Production foi alterada. Consulte [neon-project-identity-reconciliation.md](./neon-project-identity-reconciliation.md) para IDs e estado das branches.
+
+## 12. Atualização de identidade Neon — `iam-database-delivery` — 08/11/2026
+
+A decisão operacional vigente para a entrega do banco IAM é o projeto `iam-database-delivery` (`twilight-fire-88497009`, `aws-sa-east-1`, PostgreSQL 18, plano Free). A escolha foi confirmada pelo usuário e conferida por leitura da API Neon.
+
+- Branch default: `main` (`br-little-fire-b6adup9f`), READY.
+- Development: `br-proud-brook-b6woqo6z`, READY, filha direta de `main`.
+- Preview: `br-lingering-art-b6lzio6z`, READY, filha direta de `main`.
+- Endpoint da branch main: `ep-twilight-shadow-b618ef5h`.
+- Database: `iam_database`; owner: `iam_database_owner`.
+- Login de migration esperado: `iam_migrator_login`; sua existência na API não comprova autenticação real ou atributos SQL.
+- O endpoint principal reporta `pooler_enabled=false`; não utilizar hostname `-pooler` nem assumir PgBouncer.
+
+O projeto `wandering-wildflower-90908845` e as referências deste documento às decisões de 03–04/11/2026 são registros históricos de uma topologia anterior. Não são o alvo da automação de entrega do banco após a decisão de 08/11/2026.
+
+Inventário read-only do Neon em 2026-11-08: 5 branches no projeto de destino para um limite Free informado de 10. A capacidade deve ser reavaliada no momento da execução do lifecycle; o workflow deve falhar fechado se o limite estiver atingido, sem apagar branches existentes automaticamente.
+
+Esta atualização não executou migration, DDL, GRANT, alteração de dados, troca de senha, alteração de secret ou deploy. Auth0 continua sendo o único provedor OIDC.

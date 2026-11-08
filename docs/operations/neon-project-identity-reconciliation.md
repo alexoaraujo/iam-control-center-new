@@ -259,3 +259,35 @@ O workflow da PR #56 exige exatamente uma Production default READY e uma Develop
 - Não descriptografar nem substituir `DATABASE_URL` sem validar endpoint, branch e autenticação runtime dedicada.
 - `DATABASE_MIGRATION_URL` permanece não configurada neste snapshot; não criar nem usar URL administrativa como substituta.
 - Nenhuma migration, alteração de role/grant, credencial, secret ou deployment Production foi executada nesta leitura.
+
+## 12. Decisão operacional vigente — projeto Neon de entrega IAM — 08/11/2026
+
+Esta seção é a decisão vigente e substitui, para a automação de lifecycle de PR e para a entrega do banco IAM, as referências históricas das seções 8–11 que apontavam `wandering-wildflower-90908845`. A decisão foi confirmada pelo usuário em 08/11/2026 e validada por leitura da API Neon no mesmo dia.
+
+| Campo | Valor verificado |
+|---|---|
+| Projeto | `iam-database-delivery` |
+| Project ID | `twilight-fire-88497009` |
+| Região | `aws-sa-east-1` |
+| PostgreSQL | 18 |
+| Plano | `free_v3` |
+| Branch default | `main` (`br-little-fire-b6adup9f`), READY |
+| Branch Development | `development` (`br-proud-brook-b6woqo6z`), READY, filha direta de main |
+| Branch Preview | `preview` (`br-lingering-art-b6lzio6z`), READY, filha direta de main |
+| Endpoint de main | `ep-twilight-shadow-b618ef5h`, read-write, atualmente idle/suspenso |
+| Database | `iam_database` |
+| Database owner | `iam_database_owner` |
+| Login de migration | `iam_migrator_login` consta na API de roles da branch main |
+| TLS | `sslmode=require` conforme contrato de conexão informado pelo usuário |
+
+A API Neon também confirmou `pooler_enabled=false` para o endpoint `ep-twilight-shadow-b618ef5h`. Não usar hostname `-pooler` nem declarar PgBouncer ativo; qualquer ativação de pooler exige decisão e teste próprios.
+
+A branch main contém ainda as roles `iam_owner`, `iam_migrator`, `iam_app_runtime`, `iam_app_runtime_login`, `iam_worker` e `iam_worker_login`. A API administrativa identifica `iam_migrator_login` como password-authenticated, mas isso não substitui inspeção SQL de `pg_roles` nem prova uma conexão real. A existência da role não autoriza executar migration.
+
+### Consequências operacionais
+
+1. Para o workflow `.github/workflows/neon-pr-branch-lifecycle.yml`, `twilight-fire-88497009` é o project ID autorizado. O workflow deve validar a branch `main` default e `development` como filha direta de main; não deve chamar main de Production.
+2. O projeto `wandering-wildflower-90908845` continua existindo e contém evidências históricas de outra topologia. Ele não é o alvo desta automação de entrega do banco e não deve ser usado como fallback.
+3. O inventário read-only da API em 2026-11-08 lista 5 branches no projeto de destino; o limite informado do plano Free é 10. Há capacidade nominal disponível neste inventário, mas o workflow deve recalcular a contagem no momento da execução e falhar fechado se o limite for atingido. Não excluir branches existentes automaticamente nem reduzir evidências para liberar espaço.
+4. A contagem de 23 tabelas do snapshot `schema-export-validation-20261105` é um artefato histórico de uma branch isolada do projeto de destino. Ela não prova equivalência com o estado atual de `main`.
+5. Nenhuma migration, DDL, grant, alteração de dados, senha/secret ou branch persistente foi alterada nesta reconciliação.
