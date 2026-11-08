@@ -40,6 +40,10 @@ DECLARE
   v_current record;
   v_setter record;
 BEGIN
+  IF current_user <> 'iam_owner' OR session_user <> 'iam_migrator_login' THEN
+    RAISE EXCEPTION 'proposal must execute as iam_owner through authenticated iam_migrator_login';
+  END IF;
+
   SELECT p.provolatile, p.prosecdef, pg_get_userbyid(p.proowner) AS owner,
          p.proconfig
     INTO v_current
