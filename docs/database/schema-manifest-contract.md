@@ -91,4 +91,8 @@ Section differences requiring explicit classification:
 
 These results prove exact equality for the listed structural sections, not full equivalence. ACL, role, extension, and routine deltas remain explicit gates. No provider role or ACL is being copied into the portable restore.
 
+### Application login membership decision gate
+
+The source catalog shows the membership edge `iam_app_runtime` granted to `iam_app_runtime_login` with `inherit_option=true` and `set_option=true`. The versioned IAM role contract previously expected `SET FALSE`. This is an application-security discrepancy, not a Neon provider-role difference. Do not reproduce or alter this membership in the persistent Neon source until the contract owner approves the intended SET behavior. Any reconciliation test must use a disposable database and explicitly assert the approved value. The other login-role memberships and export-reader schema/database grants also remain separate provisioning inputs; they are not supplied by the schema-only dump.
+
 No DDL, GRANT, migration, seed, role change, or application-data query was performed on the Neon source for this validation. Independent review and the protected authenticated export workflow remain separate gates.
