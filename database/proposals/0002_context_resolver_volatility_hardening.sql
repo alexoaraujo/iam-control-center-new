@@ -11,6 +11,12 @@ BEGIN
   IF session_user <> 'iam_migrator_login' OR current_user <> 'iam_migrator_login' THEN
     RAISE EXCEPTION 'proposal must start as authenticated iam_migrator_login';
   END IF;
+END
+$authenticated_preflight$;
+
+SET LOCAL ROLE iam_migrator;
+DO $ledger_preflight$
+BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM iam.schema_migrations
      WHERE migration_id = '0001_context_key_hardening'
@@ -24,9 +30,8 @@ BEGIN
     RAISE EXCEPTION 'proposal 0002 is already recorded; inspect ledger before retry';
   END IF;
 END
-$authenticated_preflight$;
+$ledger_preflight$;
 
-SET LOCAL ROLE iam_migrator;
 SET LOCAL ROLE iam_owner;
 SELECT iam.acquire_migration_lock();
 
