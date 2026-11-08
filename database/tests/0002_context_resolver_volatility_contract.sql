@@ -49,14 +49,14 @@ $assert_function_hardening$;
 
 BEGIN;
 SET LOCAL ROLE iam_owner;
-INSERT INTO iam.tenants (id, display_name)
+INSERT INTO iam.tenants (id, status)
 VALUES
-  ('30000000-0000-4000-8000-000000000003', 'CI Volatility Tenant A'),
-  ('40000000-0000-4000-8000-000000000004', 'CI Volatility Tenant B');
-INSERT INTO iam.identities (id, issuer, subject)
+  ('30000000-0000-4000-8000-000000000003', 'active'),
+  ('40000000-0000-4000-8000-000000000004', 'active');
+INSERT INTO iam.identities (id, status)
 VALUES
-  ('30000000-0000-4000-8000-000000000033', 'https://ci.invalid/', 'volatility-a'),
-  ('40000000-0000-4000-8000-000000000044', 'https://ci.invalid/', 'volatility-b');
+  ('30000000-0000-4000-8000-000000000033', 'active'),
+  ('40000000-0000-4000-8000-000000000044', 'active');
 INSERT INTO iam.memberships (tenant_id, identity_id, status)
 VALUES
   ('30000000-0000-4000-8000-000000000003', '30000000-0000-4000-8000-000000000033', 'active'),
