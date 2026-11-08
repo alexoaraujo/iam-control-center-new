@@ -87,3 +87,18 @@ O ledger observado na fonte contém 0001_context_key_hardening, checksum 2447395
 - Os testes independentes de bootstrap inicial, contenção concorrente do lock e ledger idempotence/mismatch foram adicionados à PR #85 e aguardam execução CI no novo SHA.
 - Preview e Auth0 E2E foram SKIPPED nos workflows observados; não classificá-los como PASS.
 - A sequência de migration continua bloqueada até reconciliar a migration inicial de revisão com a baseline operacional completa da PR #86.
+
+## Atualização de CI e correção da fixture — 2026-11-08
+
+No primeiro CI após adicionar os contratos independentes, o job PostgreSQL 18 falhou ao iniciar a sessão A do teste concorrente: permission denied for schema iam. A causa foi uma fixture incompleta, não a ACL observada na fonte. A fixture criava as funções SECURITY DEFINER, mas não reproduzia os privilégios mínimos efetivamente observados para iam_migrator.
+
+A fixture foi corrigida para refletir somente:
+- USAGE no schema iam;
+- SELECT no ledger iam.schema_migrations;
+- EXECUTE em iam.acquire_migration_lock() e iam.record_migration(text,text,text);
+- sem INSERT/UPDATE/DELETE direto no ledger;
+- sem grants em audit ou app_private.
+
+O contrato incremental agora verifica esses privilégios efetivos e a propriedade SECURITY DEFINER, owner, search_path e ausência de PUBLIC EXECUTE das duas funções. O job anterior confirmou que o teste de role-assumption continuou PASS, mas não executou os novos testes de lock/ledger nem o bootstrap inicial independente porque falhou antes deles.
+
+O runner foi corrigido; os testes de contenção concorrente, ledger idempotente/checksum mismatch/rollback e bootstrap inicial em database separada aguardam novo CI no SHA posterior. Não reutilizar o PASS histórico de SHA anterior.
