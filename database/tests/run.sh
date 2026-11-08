@@ -173,6 +173,7 @@ PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_S
   -v migration_checksum="$resolver_checksum" -v source_sha="$source_sha" \
   -f database/proposals/0002_context_resolver_volatility_hardening.sql
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -v resolver_checksum="$resolver_checksum" -v source_sha="$source_sha" \
   -f database/tests/0002_context_resolver_volatility_contract.sql
 
 echo "Running explicit advisory-lock concurrency and migration-ledger semantic tests..."
