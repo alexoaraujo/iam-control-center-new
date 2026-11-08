@@ -86,58 +86,65 @@ SET LOCAL ROLE iam_app_runtime;
 -- One top-level SQL statement uses materialized, dependency-ordered CTEs to
 -- set tenant A, query under RLS, set tenant B, and query again. This is the
 -- planner boundary at which a STABLE resolver could reuse tenant A.
-WITH
-tenant_a AS MATERIALIZED (
-  SELECT
-    '30000000-0000-4000-8000-000000000003'::uuid AS tenant_id,
-    '30000000-0000-4000-8000-000000000033'::uuid AS identity_id,
-    floor(extract(epoch FROM clock_timestamp()))::bigint + 180 AS expires_at,
-    'ci-volatility-a'::text AS nonce
-),
-set_a AS MATERIALIZED (
-  SELECT iam.set_tenant_context(
-    tenant_id, identity_id, expires_at, nonce,
-    encode(public.hmac(
-      convert_to(tenant_id::text || '|' || identity_id::text || '|' || expires_at::text || '|' || nonce, 'UTF8'),
-      decode(repeat('42', 32), 'hex'), 'sha256'
-    ), 'hex')
-  ) AS applied
-  FROM tenant_a
-),
-read_a AS MATERIALIZED (
-  SELECT array_agg(t.id ORDER BY t.id) AS visible_tenants
-  FROM iam.tenants t CROSS JOIN set_a
-),
-tenant_b AS MATERIALIZED (
-  SELECT
-    '40000000-0000-4000-8000-000000000004'::uuid AS tenant_id,
-    '40000000-0000-4000-8000-000000000044'::uuid AS identity_id,
-    floor(extract(epoch FROM clock_timestamp()))::bigint + 180 AS expires_at,
-    'ci-volatility-b'::text AS nonce
-  FROM read_a
-),
-set_b AS MATERIALIZED (
-  SELECT iam.set_tenant_context(
-    tenant_id, identity_id, expires_at, nonce,
-    encode(public.hmac(
-      convert_to(tenant_id::text || '|' || identity_id::text || '|' || expires_at::text || '|' || nonce, 'UTF8'),
-      decode(repeat('42', 32), 'hex'), 'sha256'
-    ), 'hex')
-  ) AS applied
-  FROM tenant_b
-),
-read_b AS MATERIALIZED (
-  SELECT array_agg(t.id ORDER BY t.id) AS visible_tenants
-  FROM iam.tenants t CROSS JOIN set_b
-)
-SELECT CASE
-  WHEN read_a.visible_tenants = ARRAY['30000000-0000-4000-8000-000000000003'::uuid]
-   AND read_b.visible_tenants = ARRAY['40000000-0000-4000-8000-000000000004'::uuid]
-  THEN 'PASS: same-statement RLS context switch A -> B'
-  ELSE format('FAIL: stale or leaked tenant context; A=%s B=%s',
-              read_a.visible_tenants, read_b.visible_tenants)
-END AS result
-FROM read_a CROSS JOIN read_b;
+DO $same_statement_context_switch$
+DECLARE
+  v_a uuid[];
+  v_b uuid[];
+BEGIN
+  WITH
+  tenant_a AS MATERIALIZED (
+    SELECT
+      '30000000-0000-4000-8000-000000000003'::uuid AS tenant_id,
+      '30000000-0000-4000-8000-000000000033'::uuid AS identity_id,
+      floor(extract(epoch FROM clock_timestamp()))::bigint + 180 AS expires_at,
+      'ci-volatility-a'::text AS nonce
+  ),
+  set_a AS MATERIALIZED (
+    SELECT iam.set_tenant_context(
+      tenant_id, identity_id, expires_at, nonce,
+      encode(public.hmac(
+        convert_to(tenant_id::text || '|' || identity_id::text || '|' || expires_at::text || '|' || nonce, 'UTF8'),
+        decode(repeat('42', 32), 'hex'), 'sha256'
+      ), 'hex')
+    ) AS applied
+    FROM tenant_a
+  ),
+  read_a AS MATERIALIZED (
+    SELECT array_agg(t.id ORDER BY t.id) AS visible_tenants
+    FROM iam.tenants t CROSS JOIN set_a
+  ),
+  tenant_b AS MATERIALIZED (
+    SELECT
+      '40000000-0000-4000-8000-000000000004'::uuid AS tenant_id,
+      '40000000-0000-4000-8000-000000000044'::uuid AS identity_id,
+      floor(extract(epoch FROM clock_timestamp()))::bigint + 180 AS expires_at,
+      'ci-volatility-b'::text AS nonce
+    FROM read_a
+  ),
+  set_b AS MATERIALIZED (
+    SELECT iam.set_tenant_context(
+      tenant_id, identity_id, expires_at, nonce,
+      encode(public.hmac(
+        convert_to(tenant_id::text || '|' || identity_id::text || '|' || expires_at::text || '|' || nonce, 'UTF8'),
+        decode(repeat('42', 32), 'hex'), 'sha256'
+      ), 'hex')
+    ) AS applied
+    FROM tenant_b
+  ),
+  read_b AS MATERIALIZED (
+    SELECT array_agg(t.id ORDER BY t.id) AS visible_tenants
+    FROM iam.tenants t CROSS JOIN set_b
+  )
+  SELECT read_a.visible_tenants, read_b.visible_tenants
+    INTO v_a, v_b
+    FROM read_a CROSS JOIN read_b;
+
+  IF v_a IS DISTINCT FROM ARRAY['30000000-0000-4000-8000-000000000003'::uuid]
+     OR v_b IS DISTINCT FROM ARRAY['40000000-0000-4000-8000-000000000004'::uuid] THEN
+    RAISE EXCEPTION 'same-statement RLS context switch leaked or reused tenant context: A=%, B=%', v_a, v_b;
+  END IF;
+END
+$same_statement_context_switch$;
 
 SELECT iam.clear_tenant_context();
 
