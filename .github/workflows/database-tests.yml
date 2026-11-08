@@ -91,8 +91,8 @@ jobs:
           python3 database/tests/validate-schema-manifest.py artifacts/schema-manifest-a.json
           sha256sum artifacts/schema-manifest-a.json
 
-  postgres-18-source-baseline-restore-manifest:
-    name: postgres-18-source-baseline-restore-manifest
+  postgres-18-main-baseline-restore-manifest:
+    name: postgres-18-main-baseline-restore-manifest
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -117,11 +117,11 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
           persist-credentials: false
-      - name: Checkout pinned canonical source baseline
+      - name: Checkout current main baseline
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
-          ref: 79ae7dcf0f3523fab152f485fe699e90fb7ac6e9
-          path: source-baseline
+          ref: main
+          path: base-main
           persist-credentials: false
       - name: Restore pinned canonical source baseline in disposable PostgreSQL 18
         shell: bash
@@ -130,7 +130,7 @@ jobs:
           mkdir -p artifacts
           docker run --rm --network host \
             --volume "$GITHUB_WORKSPACE:/workspace" \
-            --workdir /workspace/source-baseline \
+            --workdir /workspace/base-main \
             --env DATABASE_URL="$DATABASE_URL" \
             --env PGPASSWORD="$PGPASSWORD" \
             postgres:18-bookworm \
@@ -138,7 +138,7 @@ jobs:
               psql -X --no-password "$DATABASE_URL" -Atc "SHOW server_version;"
               bash database/tests/restore-source-schema.sh
             '
-      - name: Generate and validate canonical source manifest
+      - name: Generate and validate main baseline manifest
         shell: bash
         run: |
           set -euo pipefail
@@ -151,22 +151,22 @@ jobs:
             postgres:18-bookworm \
             bash -euo pipefail -c '
               psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
-                -f database/scripts/schema-manifest.sql > artifacts/source-baseline-manifest-a.json
+                -f base-main/database/scripts/schema-manifest.sql > artifacts/main-baseline-manifest-a.json
               psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
-                -f database/scripts/schema-manifest.sql > artifacts/source-baseline-manifest-b.json
+                -f base-main/database/scripts/schema-manifest.sql > artifacts/main-baseline-manifest-b.json
             '
-          cmp artifacts/source-baseline-manifest-a.json artifacts/source-baseline-manifest-b.json
-          python3 database/tests/validate-schema-manifest.py artifacts/source-baseline-manifest-a.json
-          sha256sum artifacts/source-baseline-manifest-a.json
-          python3 database/tests/render-schema-manifest-section-hashes.py database/scripts/schema-manifest.sql \
+          cmp artifacts/main-baseline-manifest-a.json artifacts/main-baseline-manifest-b.json
+          python3 base-main/database/tests/validate-schema-manifest.py artifacts/main-baseline-manifest-a.json
+          sha256sum artifacts/main-baseline-manifest-a.json
+          python3 base-main/database/tests/render-schema-manifest-section-hashes.py base-main/database/scripts/schema-manifest.sql \
             | docker run --rm -i --network host \
                 --env DATABASE_URL="$DATABASE_URL" \
                 --env PGPASSWORD="$PGPASSWORD" \
                 postgres:18-bookworm \
                 psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
-            > artifacts/source-baseline-section-hashes.tsv
-          echo "Canonical source manifest section hashes (section, item_count, sha256):"
-          cat artifacts/source-baseline-section-hashes.tsv
+            > artifacts/main-baseline-section-hashes.tsv
+          echo "Main baseline manifest section hashes (section, item_count, sha256):"
+          cat artifacts/main-baseline-section-hashes.tsv
 
   restore-source-schema:
     name: postgres-18-candidate-source-schema-restore
