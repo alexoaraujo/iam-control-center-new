@@ -396,3 +396,20 @@ Commits desta rodada:
 ### Database descartável vazia preparada para o próximo restore
 
 Foi criada na mesma branch temporária a database `iam_schema_restore_post_hardening` (ID `257484`), owner `iam_database_owner`. Consulta de catálogo imediatamente após a criação confirmou: zero relações nos schemas `iam`, `audit` e `app_private`; extensão `pgcrypto` ausente; índice de hardening ausente. Esta database está pronta para receber o novo dump, mas nenhum restore foi executado ainda.
+
+## Contrato dinâmico de contexto e RLS — 2026-11-08
+
+Foi adicionado o teste database/tests/runtime-rls-contract.sql e o restore descartável agora o invoca ao final de database/tests/restore-source-schema.sh.
+
+O teste cria somente fixtures sintéticas dentro de uma transação PostgreSQL 18 descartável, assume iam_app_runtime e valida:
+- contexto ausente retorna zero linhas em tenants, memberships e identities;
+- assinatura HMAC-SHA256 válida resolve o tenant esperado;
+- tenant A e tenant B enxergam apenas seus próprios registros, inclusive identities via membership;
+- INSERT em organizations com tenant_id de outro tenant é rejeitado por RLS/WITH CHECK;
+- assinatura adulterada, contexto expirado e validade superior a 300 segundos são rejeitados, limpando o contexto.
+
+Todos os registros de teste terminam em ROLLBACK. Nenhum segredo persistente é usado; a chave é sintética e restrita ao teste. Nenhum comando é executado na origem Neon.
+
+**Estado:** ADICIONADO, ainda não PASS. A execução no CI do novo HEAD é necessária para validar sintaxe, grants efetivos e comportamento. O contrato ainda não cobre membership/identity/tenant inativos, ausência/rotação de chave ativa, replay de nonce, nem comportamento com memberships reais do provider Neon.
+
+A matriz completa e os gates separados estão em docs/database/iam-postgresql-test-matrix.md. Permanecem pendentes a comparação objeto-a-objeto com a fonte, a lineage da migration incremental e o teste concorrente com duas sessões independentes.
