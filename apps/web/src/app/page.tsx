@@ -72,7 +72,9 @@ export default async function HomePage() {
 
           <div className="notice notice--info"><span className="notice-icon">i</span><div><strong>Painel em fase de estruturação</strong><p>Os módulos e indicadores abaixo definem a estrutura de governança. Métricas operacionais só serão exibidas após integração e validação das fontes reais. Nenhum dado demonstrativo é apresentado como produção.</p></div><Status tone="warning">DADOS NÃO CONECTADOS</Status></div>
 
-          <div className="notice notice--warning"><span className="notice-icon">!</span><div><strong>Autenticação não equivale a autorização administrativa</strong><p>A sessão Auth0 protege a entrada. A validação de papel administrativo, membership e permissão ainda precisa ser implementada antes de habilitar operações ou expor dados de tenants.</p></div><Status tone="warning">RBAC PENDENTE</Status></div>\n\n          <div className="metric-grid">
+          <div className="notice notice--warning"><span className="notice-icon">!</span><div><strong>Autenticação não equivale a autorização administrativa</strong><p>A sessão Auth0 protege a entrada. A validação de papel administrativo, membership e permissão ainda precisa ser implementada antes de habilitar operações ou expor dados de tenants.</p></div><Status tone="warning">RBAC PENDENTE</Status></div>
+
+          <div className="metric-grid">
             {[
               ["Identidades", "—", "Diretório de usuários", "Aguardando fonte"],
               ["Organizações", "—", "Tenants cadastrados", "Aguardando fonte"],
