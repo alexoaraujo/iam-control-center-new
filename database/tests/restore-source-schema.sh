@@ -31,6 +31,7 @@ DECLARE
   v_table_owners integer;
   v_function_owners integer;
   v_extension boolean;
+  v_partial_index boolean;
   r record;
   v_rows bigint;
 BEGIN
@@ -95,6 +96,22 @@ BEGIN
      AND p.proowner = (SELECT oid FROM pg_roles WHERE rolname = 'iam_owner');
 
   SELECT EXISTS (
+    SELECT 1
+      FROM pg_index i
+      JOIN pg_class idx ON idx.oid = i.indexrelid
+      JOIN pg_namespace ns ON ns.oid = idx.relnamespace
+      JOIN pg_class tbl ON tbl.oid = i.indrelid
+      JOIN pg_namespace ts ON ts.oid = tbl.relnamespace
+     WHERE ns.nspname = 'app_private'
+       AND idx.relname = 'context_keys_one_active_idx'
+       AND ts.nspname = 'app_private'
+       AND tbl.relname = 'context_keys'
+       AND i.indisunique
+       AND i.indisvalid
+       AND pg_get_expr(i.indpred, i.indrelid) = '(active IS TRUE)'
+  ) INTO v_partial_index;
+
+  SELECT EXISTS (
     SELECT 1 FROM pg_extension e
     JOIN pg_namespace n ON n.oid = e.extnamespace
     WHERE e.extname = 'pgcrypto' AND n.nspname = 'public'
@@ -104,12 +121,12 @@ BEGIN
      OR v_triggers <> 12 OR v_policies <> 41 OR v_indexes < 18
      OR v_rls_tables <> 20 OR v_forced_rls_tables <> 20
      OR v_schema_owners <> 3 OR v_table_owners <> 23
-     OR v_function_owners <> 9 OR NOT v_extension THEN
+     OR v_function_owners <> 9 OR NOT v_extension OR NOT v_partial_index THEN
     RAISE EXCEPTION
-      'restore catalog contract mismatch: tables=%, views=%, functions=%, enums=%, triggers=%, policies=%, indexes=%, rls=%, forced_rls=%, schema_owners=%, table_owners=%, function_owners=%, pgcrypto=%',
+      'restore catalog contract mismatch: tables=%, views=%, functions=%, enums=%, triggers=%, policies=%, indexes=%, rls=%, forced_rls=%, schema_owners=%, table_owners=%, function_owners=%, pgcrypto=%, partial_unique_index=%',
       v_tables, v_views, v_functions, v_enums, v_triggers, v_policies,
       v_indexes, v_rls_tables, v_forced_rls_tables, v_schema_owners,
-      v_table_owners, v_function_owners, v_extension;
+      v_table_owners, v_function_owners, v_extension, v_partial_index;
   END IF;
 
   FOR r IN
