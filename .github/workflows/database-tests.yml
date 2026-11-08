@@ -5,14 +5,15 @@ on:
     paths:
       - "database/**"
       - "iam_database_schema.sql"
+      - "docs/operations/iam-migration-execution-contract.md"
+      - "docs/database/iam-postgresql-test-matrix.md"
+      - "docs/database/neon-source-baseline-reconciliation.md"
+      - "docs/database/schema-manifest-contract.md"
       - "role-security-harness/**"
       - "scripts/test-postgres18-role-security-harness.sh"
       - "docs/architecture/iam-decisions.md"
       - "docs/architecture/tenant-context-rfc.md"
       - "docs/operations/iam-role-bootstrap-review.md"
-      - "docs/operations/iam-migration-execution-contract.md"
-      - "docs/database/iam-postgresql-test-matrix.md"
-      - "docs/database/neon-source-baseline-reconciliation.md"
       - ".github/workflows/database-tests.yml"
   push:
     branches:
@@ -21,14 +22,15 @@ on:
     paths:
       - "database/**"
       - "iam_database_schema.sql"
+      - "docs/operations/iam-migration-execution-contract.md"
+      - "docs/database/iam-postgresql-test-matrix.md"
+      - "docs/database/neon-source-baseline-reconciliation.md"
+      - "docs/database/schema-manifest-contract.md"
       - "role-security-harness/**"
       - "scripts/test-postgres18-role-security-harness.sh"
       - "docs/architecture/iam-decisions.md"
       - "docs/architecture/tenant-context-rfc.md"
       - "docs/operations/iam-role-bootstrap-review.md"
-      - "docs/operations/iam-migration-execution-contract.md"
-      - "docs/database/iam-postgresql-test-matrix.md"
-      - "docs/database/neon-source-baseline-reconciliation.md"
       - ".github/workflows/database-tests.yml"
 
 permissions:
@@ -73,3 +75,81 @@ jobs:
         run: PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -Atc "SHOW server_version;"
       - name: Run role bootstrap and migration contract tests
         run: bash database/tests/run.sh
+      - name: Generate and validate deterministic PostgreSQL schema manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PGPASSWORD="$POSTGRES_TEST_PASSWORD"
+          mkdir -p artifacts
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
+            -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-a.json
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
+            -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-b.json
+          cmp artifacts/schema-manifest-a.json artifacts/schema-manifest-b.json
+          python3 database/tests/validate-schema-manifest.py artifacts/schema-manifest-a.json
+          sha256sum artifacts/schema-manifest-a.json
+
+  postgres-18-source-schema-restore-manifest:
+    name: postgres-18-source-schema-restore-manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: iam_source_restore_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d iam_source_restore_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres@localhost:5432/iam_source_restore_test
+      PGPASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout manifest contract
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Checkout pinned canonical source dump and restore contract
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          ref: 79ae7dcf0f3523fab152f485fe699e90fb7ac6e9
+          path: source-baseline
+          persist-credentials: false
+      - name: Restore canonical source dump and generate restored manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            --env DATABASE_URL="$DATABASE_URL" \
+            --env PGPASSWORD="$PGPASSWORD" \
+            postgres:18-bookworm \
+            bash -euo pipefail -c '
+              cd /workspace/source-baseline
+              bash database/tests/restore-source-schema.sh
+              cd /workspace
+              psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
+                -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-restored-a.json
+              psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
+                -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-restored-b.json
+            '
+          cmp artifacts/schema-manifest-restored-a.json artifacts/schema-manifest-restored-b.json
+          python3 database/tests/validate-schema-manifest.py artifacts/schema-manifest-restored-a.json
+          sha256sum artifacts/schema-manifest-restored-a.json
+          python3 database/tests/render-schema-manifest-section-hashes.py database/scripts/schema-manifest.sql \
+            | docker run --rm -i --network host \
+                --env DATABASE_URL="$DATABASE_URL" \
+                --env PGPASSWORD="$PGPASSWORD" \
+                postgres:18-bookworm \
+                psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
+            > artifacts/schema-manifest-restored-sections.tsv
+          echo "Restored manifest section hashes (section, item_count, sha256):"
+          cat artifacts/schema-manifest-restored-sections.tsv

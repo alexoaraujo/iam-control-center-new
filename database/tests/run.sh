@@ -182,4 +182,33 @@ bash database/tests/migration-lock-ledger-contract.sh
 echo "Running the independent clean-database initial-schema contract..."
 bash database/tests/initial-schema-contract.sh
 
+echo "Running the isolated sessions-touch corrective migration contract..."
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+SET ROLE iam_owner;
+CREATE TABLE iam.sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE FUNCTION iam.touch_updated_at()
+RETURNS trigger LANGUAGE plpgsql SET search_path TO 'pg_catalog'
+AS $function$
+BEGIN
+  NEW.updated_at := clock_timestamp();
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION iam.touch_updated_at() OWNER TO iam_owner;
+CREATE TRIGGER sessions_touch BEFORE UPDATE ON iam.sessions
+FOR EACH ROW EXECUTE FUNCTION iam.touch_updated_at();
+RESET ROLE;
+SQL
+{
+  printf '%s\\n' 'SET ROLE iam_owner;'
+  cat database/migrations/0002_sessions_touch_contract.sql
+} | PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1
+{
+  printf '%s\\n' 'SET ROLE iam_owner;'
+  cat database/tests/0002_sessions_touch_contract.sql
+} | PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1
+
 echo "PASS: role bootstrap, role-assumption, initial schema, incremental migration, advisory-lock concurrency, ledger idempotency/checksum, rollback, RLS default-deny, tenant integrity, and context-key uniqueness"
