@@ -100,6 +100,18 @@ jobs:
             exit 1
           }
 
+          # Preserve the canonical permanent lineage: main -> development.
+          DEVELOPMENT_JSON="$(jq -ce --arg parent "${MAIN_ID}" '
+            [.branches[] | select(.name == "development" and .parent_id == $parent)] |
+            if length == 1 then .[0] else error("Expected exactly one development branch whose parent is canonical main") end
+          ' <<< "${BRANCHES_JSON}")"
+          DEVELOPMENT_ID="$(jq -r '.id' <<< "${DEVELOPMENT_JSON}")"
+          DEVELOPMENT_STATE="$(jq -r '.current_state // empty' <<< "${DEVELOPMENT_JSON}")"
+          [[ "${DEVELOPMENT_STATE}" == "ready" ]] || {
+            echo "::error::Canonical development branch is not ready."
+            exit 1
+          }
+
           EXISTING="$(jq -c --arg name "${BRANCH_NAME}" '[.branches[] | select(.name == $name)]' <<< "${BRANCHES_JSON}")"
           EXISTING_COUNT="$(jq -r 'length' <<< "${EXISTING}")"
 
@@ -126,7 +138,7 @@ jobs:
             EXPIRES_AT="$(date -u -d '+14 days' '+%Y-%m-%dT%H:%M:%SZ')"
             CREATE_BODY="$(jq -cn \
               --arg name "${BRANCH_NAME}" \
-              --arg parent "${MAIN_ID}" \
+              --arg parent "${DEVELOPMENT_ID}" \
               --arg expiry "${EXPIRES_AT}" \
               --arg owner_key "${OWNERSHIP_KEY}" \
               --arg owner_value "${OWNERSHIP_VALUE}" \
@@ -152,7 +164,7 @@ jobs:
             }
             CREATED_ID="$(jq -r '.[0].id' <<< "${EXISTING}")"
             EXISTING_PARENT="$(jq -r '.[0].parent_id // empty' <<< "${EXISTING}")"
-            [[ "${EXISTING_PARENT}" == "${MAIN_ID}" ]] || {
+            [[ "${EXISTING_PARENT}" == "${DEVELOPMENT_ID}" ]] || {
               echo "::error::Existing branch has an unexpected parent; refusing to reuse or replace it."
               exit 1
             }
@@ -172,7 +184,7 @@ jobs:
             CURRENT="$(api_get_branch "${CREATED_ID}")"
             CURRENT_STATE="$(jq -r '.branch.current_state // empty' <<< "${CURRENT}")"
             CURRENT_PARENT="$(jq -r '.branch.parent_id // empty' <<< "${CURRENT}")"
-            [[ "${CURRENT_PARENT}" == "${MAIN_ID}" ]] || {
+            [[ "${CURRENT_PARENT}" == "${DEVELOPMENT_ID}" ]] || {
               echo "::error::Branch parent changed during provisioning."
               exit 1
             }
@@ -203,7 +215,7 @@ jobs:
           VERIFIED_EXPIRY="$(jq -r '.branch.expires_at // empty' <<< "${VERIFIED}")"
           VERIFIED_EXPIRY_EPOCH="$(date -u -d "${VERIFIED_EXPIRY}" '+%s' 2>/dev/null || true)"
           EXPECTED_EXPIRY_EPOCH="$(date -u -d "${EXPIRES_AT}" '+%s')"
-          [[ "${VERIFIED_NAME}" == "${BRANCH_NAME}" && "${VERIFIED_PARENT}" == "${MAIN_ID}" && "${VERIFIED_EXPIRY_EPOCH}" =~ ^[0-9]+$ ]] || {
+          [[ "${VERIFIED_NAME}" == "${BRANCH_NAME}" && "${VERIFIED_PARENT}" == "${DEVELOPMENT_ID}" && "${VERIFIED_EXPIRY_EPOCH}" =~ ^[0-9]+$ ]] || {
             echo "::error::Branch identity, parent, or expiration verification failed."
             exit 1
           }
