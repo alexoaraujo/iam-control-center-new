@@ -14,12 +14,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: neon-schema-export-validation-branch
+  group: neon-schema-export-canonical-main
   cancel-in-progress: false
 
 jobs:
   export-schema:
-    name: Read-only schema export from isolated Neon validation branch
+    name: Read-only schema export from canonical Neon main
     # workflow_dispatch can select an arbitrary ref. Never expose the
     # environment secret unless the workflow is running from protected main.
     if: github.repository == 'alexoaraujo83/iam-control-center' && github.ref == 'refs/heads/main'
@@ -110,6 +110,8 @@ jobs:
             echo "extension_dependency=pgcrypto in public"
             echo "tls=verify-full; root CA store=system"
             echo "contains_application_rows=false"
+            echo "migration_ledger_rows=not_exported; schema-only dump excludes ledger data"
+            echo "ledger_provenance=separate_approved_read_only_channel_required"
           } > artifacts/manifest.txt
 
       - name: Publish immutable run artifact
