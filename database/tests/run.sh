@@ -29,10 +29,9 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f database/tests/role-assumption-contract.sql
 
-echo "Verifying bootstrap is non-idempotent and fails without partial role creation..."
-if PGPASSWORD="$BOOTSTRAP_TEST_PASSWORD" psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f database/bootstrap/0000_iam_roles.sql; then
-  echo "ERROR: second bootstrap unexpectedly succeeded" >&2
+echo "Verifying the one-time bootstrap principal can no longer authenticate..."
+if PGPASSWORD="$BOOTSTRAP_TEST_PASSWORD" psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1;" >/dev/null 2>&1; then
+  echo "ERROR: locked bootstrap principal unexpectedly authenticated" >&2
   exit 1
 fi
 role_count="$(PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 -c \
