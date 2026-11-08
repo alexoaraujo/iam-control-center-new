@@ -100,18 +100,24 @@ BEGIN
       'ci-volatility-a'::text AS nonce
   ),
   set_a AS MATERIALIZED (
-    SELECT iam.set_tenant_context(
-      tenant_id, identity_id, expires_at, nonce,
-      encode(public.hmac(
-        convert_to(tenant_id::text || '|' || identity_id::text || '|' || expires_at::text || '|' || nonce, 'UTF8'),
-        decode(repeat('42', 32), 'hex'), 'sha256'
-      ), 'hex')
-    ) AS applied
+    SELECT tenant_id,
+      iam.set_tenant_context(
+        tenant_id, identity_id, expires_at, nonce,
+        encode(public.hmac(
+          convert_to(tenant_id::text || '|' || identity_id::text || '|' || expires_at::text || '|' || nonce, 'UTF8'),
+          decode(repeat('42', 32), 'hex'), 'sha256'
+        ), 'hex')
+      ) AS applied
     FROM tenant_a
   ),
   read_a AS MATERIALIZED (
-    SELECT array_agg(t.id ORDER BY t.id) AS visible_tenants
-    FROM iam.tenants t CROSS JOIN set_a
+    SELECT set_a.tenant_id, q.visible_tenants
+    FROM set_a
+    CROSS JOIN LATERAL (
+      SELECT array_agg(t.id ORDER BY t.id) AS visible_tenants
+      FROM iam.tenants t
+      WHERE set_a.tenant_id IS NOT NULL
+    ) q
   ),
   tenant_b AS MATERIALIZED (
     SELECT
@@ -122,18 +128,24 @@ BEGIN
     FROM read_a
   ),
   set_b AS MATERIALIZED (
-    SELECT iam.set_tenant_context(
-      tenant_id, identity_id, expires_at, nonce,
-      encode(public.hmac(
-        convert_to(tenant_id::text || '|' || identity_id::text || '|' || expires_at::text || '|' || nonce, 'UTF8'),
-        decode(repeat('42', 32), 'hex'), 'sha256'
-      ), 'hex')
-    ) AS applied
+    SELECT tenant_id,
+      iam.set_tenant_context(
+        tenant_id, identity_id, expires_at, nonce,
+        encode(public.hmac(
+          convert_to(tenant_id::text || '|' || identity_id::text || '|' || expires_at::text || '|' || nonce, 'UTF8'),
+          decode(repeat('42', 32), 'hex'), 'sha256'
+        ), 'hex')
+      ) AS applied
     FROM tenant_b
   ),
   read_b AS MATERIALIZED (
-    SELECT array_agg(t.id ORDER BY t.id) AS visible_tenants
-    FROM iam.tenants t CROSS JOIN set_b
+    SELECT set_b.tenant_id, q.visible_tenants
+    FROM set_b
+    CROSS JOIN LATERAL (
+      SELECT array_agg(t.id ORDER BY t.id) AS visible_tenants
+      FROM iam.tenants t
+      WHERE set_b.tenant_id IS NOT NULL
+    ) q
   )
   SELECT read_a.visible_tenants, read_b.visible_tenants
     INTO v_a, v_b
