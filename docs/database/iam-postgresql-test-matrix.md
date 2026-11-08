@@ -50,3 +50,11 @@ Executar em uma branch Neon descartável ou PostgreSQL descartável com dois cli
 - A migration incremental 0001_context_key_hardening.sql e a migration proposta 0001_initial_iam_schema.sql compartilham o identificador 0001 e pressupõem estados diferentes. A sequência canônica deve ser decidida antes de integração.
 - Não ler nem versionar secrets, chaves HMAC, hashes, JWTs, payloads ou linhas reais de negócio.
 - Não aplicar migration, DDL, GRANT, seed ou alteração de dados em Neon persistente/Production como parte destes testes.
+
+
+### Drift detectado na comparação fonte × dump
+
+- Neon canônico (consulta de catálogo read-only em 2026-11-08): app_private.current_tenant_id() é SECURITY DEFINER, owner iam_owner, search_path=pg_catalog, app_private, iam.
+- Dump versionado atual: a mesma função ainda declara search_path=pg_catalog, app_private, iam, public.
+- O restore contract agora exige a configuração endurecida exata e deve falhar até que o dump seja regenerado da fonte canônica aprovada.
+- Não editar o dump manualmente nem atribuir PASS ao restore anterior como prova de equivalência. O PASS anterior só validou a versão histórica do artefato e os objetos que aquele teste verificava.
