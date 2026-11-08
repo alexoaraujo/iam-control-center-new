@@ -1,6 +1,6 @@
 # Matriz de testes da arquitetura IAM PostgreSQL
 
-**Status:** EM VALIDAÇÃO — contrato dinâmico adicionado ao job de restore PostgreSQL 18; ainda depende de CI no HEAD atualizado.
+**Status:** BLOCKED — o contrato de roles/migration passou no SHA 51f9098a5a8b8506fae05909c9e289b799fea97a, mas o restore integral falhou porque o dump versionado mantém search_path antigo em current_tenant_id().
 **Fonte estrutural:** Neon iam-database-delivery / iam_database, projeto twilight-fire-88497009, branch main (br-little-fire-b6adup9f).
 **Regra de evidência:** PASS só é atribuído ao SHA exato em que o job correspondente terminou com sucesso. Restore descartável não prova equivalência com a origem Neon; RLS/FORCE RLS no catálogo não prova isolamento funcional.
 
@@ -18,7 +18,7 @@
 
 | Área | Teste / artefato | Cobertura comprovada ou pretendida | Estado |
 |---|---|---|---|
-| Restore estrutural | database/tests/restore-source-schema.sh | PostgreSQL 18 descartável; 23 tabelas, 1 view, 9 funções, 7 enums, 12 triggers, 41 policies, 20 tabelas RLS+FORCE, owners, pgcrypto e zero linhas de aplicação | PASS histórico no SHA 69834cc95df9b5b072d350798ad07f0288ce7c78; reexecutar após alterações |
+| Restore estrutural | database/tests/restore-source-schema.sh | PostgreSQL 18 descartável; 23 tabelas, 1 view, 9 funções, 7 enums, 12 triggers, 41 policies, 20 tabelas RLS+FORCE, owners, pgcrypto, índice parcial e search_path hardened | FAIL no SHA 51f9098a5a8b8506fae05909c9e289b799fea97a: dump restaurado tem current_tenant_id search_path incluindo public; PASS histórico anterior não cobre este contrato atualizado |
 | Contexto válido | database/tests/runtime-rls-contract.sql | HMAC válido e contexto resolvido para tenant A/B | ADICIONADO; CI pendente |
 | Ausência de contexto | mesmo arquivo | SELECT de tenants, memberships e identities retorna zero linhas como runtime | ADICIONADO; CI pendente |
 | Isolamento cross-tenant | mesmo arquivo | Tenant A vê apenas A; tenant B vê apenas B; identities filtradas pela membership | ADICIONADO; CI pendente |
@@ -69,3 +69,17 @@ O teste foi corrigido para chamar iam.clear_tenant_context() e confirmar estado 
 **Implicação operacional:** o consumidor deve iniciar a operação de contexto em estado limpo. Se capturar uma exceção de iam.set_tenant_context() dentro da mesma transação, deve abortar a transação ou chamar iam.clear_tenant_context() antes de continuar; não deve presumir que a tentativa inválida removeu um contexto válido anterior. A tentativa inválida não deve ser usada como mecanismo de troca de tenant.
 
 Replay de nonce continua PENDING: o payload inclui nonce, mas o contrato atual não demonstra persistência/consumo único do nonce nem rejeição de replay. Não afirmar proteção anti-replay até existir implementação e teste concorrente apropriados.
+
+
+## Resultado de restore e comparação com a origem — 2026-11-08
+
+No SHA 51f9098a5a8b8506fae05909c9e289b799fea97a:
+- CI quality: SUCCESS.
+- postgres-18-schema-contract: SUCCESS.
+- postgres-18-source-schema-restore: FAILURE no contrato catalog.
+
+O erro foi reproduzido no restore descartável: o dump contém app_private.current_tenant_id() como SECURITY DEFINER, owner iam_owner, porém com search_path pg_catalog, app_private, iam, public. O contrato exige a configuração pós-hardening sem public.
+
+Consulta read-only atual à fonte Neon canônica confirmou app_private.current_tenant_id() SECURITY DEFINER, owner iam_owner e search_path=pg_catalog, app_private, iam. Portanto, a origem está hardened e o arquivo iam_database_schema.sql versionado está desatualizado; não corrigir o dump por edição manual nem declarar equivalência. É necessário regenerar o dump com pg_dump 18 autenticado contra a fonte allowlisted, preservar checksum/manifesto, restaurar novamente e comparar objeto-a-objeto.
+
+O workflow neon-schema-export está configurado apenas para push em main e o Environment neon-schema-export/deployment branch policy não foi verificado por ferramenta disponível nesta sessão. Não foi executado export autenticado nesta rodada. O gate de baseline permanece BLOCKED até existir artefato exportado da fonte, com provenance e checksum verificáveis.
