@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "database/**"
+      - "iam_database_schema.sql"
       - "role-security-harness/**"
       - "scripts/test-postgres18-role-security-harness.sh"
       - "docs/architecture/iam-decisions.md"
@@ -65,3 +66,36 @@ jobs:
         run: PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -Atc "SHOW server_version;"
       - name: Run role bootstrap and migration contract tests
         run: bash database/tests/run.sh
+
+  restore-source-schema:
+    name: postgres-18-source-schema-restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: iam_source_restore_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d iam_source_restore_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres@localhost:5432/iam_source_restore_test
+      PGPASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Verify PostgreSQL version
+        run: psql -X --no-password "$DATABASE_URL" -Atc "SHOW server_version;"
+      - name: Restore complete source schema in disposable PostgreSQL
+        run: bash database/tests/restore-source-schema.sh
