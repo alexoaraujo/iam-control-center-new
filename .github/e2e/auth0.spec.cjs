@@ -100,11 +100,25 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   await page.reload();
   await expect(page.getByRole("status")).toHaveText("Acesso autenticado confirmado.");
 
-  // Logout must clear the session; a subsequent protected request returns to Auth0.
+  // Auth0 logout returns to the app root, whose proxy immediately starts a new
+  // login transaction. Assert the Auth0 login screen instead of expecting the
+  // transient app-origin URL to remain visible.
   await page.goto("/auth/logout");
-  await expect(page).toHaveURL((url) => url.origin === new URL(baseURL).origin, { timeout: 60000 });
+  await expect(page).toHaveURL(/iam-control-center\.us\.auth0\.com\/u\/login/, {
+    timeout: 60000,
+  });
+  await expect(
+    page.locator('input[name="username"], input[name="email"]').first()
+  ).toBeVisible();
+
+  // A fresh protected request must still require credentials after logout.
   await page.goto("/protected");
-  await expect(page).toHaveURL(/auth0\.com/, { timeout: 30000 });
+  await expect(page).toHaveURL(/iam-control-center\.us\.auth0\.com\/u\/login/, {
+    timeout: 30000,
+  });
+  await expect(
+    page.locator('input[name="username"], input[name="email"]').first()
+  ).toBeVisible();
 
   await cdp.send("Fetch.disable");
   await cdp.detach();
