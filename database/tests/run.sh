@@ -56,7 +56,7 @@ SQL
 
 echo "Running migration over an authenticated non-privileged LOGIN session..."
 {
-  printf '%s\\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
   cat database/migrations/0001_initial_iam_schema.sql
 } | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
 
@@ -66,17 +66,17 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f 
 
 echo "Preparing the Development-derived sessions fixture for corrective migration 0002..."
 {
-  printf '%s\\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
   cat database/tests/0002_sessions_touch_fixture.sql
 } | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
 
 echo "Applying corrective migration 0002 and executing its rollback-only contract test..."
 {
-  printf '%s\\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
   cat database/migrations/0002_sessions_touch_contract.sql
 } | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
 {
-  printf '%s\\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
   cat database/tests/0002_sessions_touch_contract.sql
 } | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
 
