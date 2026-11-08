@@ -4,10 +4,10 @@ on:
   pull_request:
     paths:
       - "database/**"
-      - "docs/database/neon-source-baseline-reconciliation.md"
-      - "docs/database/iam-postgresql-test-matrix.md"
-      - "docs/operations/iam-migration-execution-contract.md"
       - "iam_database_schema.sql"
+      - "docs/operations/iam-migration-execution-contract.md"
+      - "docs/database/iam-postgresql-test-matrix.md"
+      - "docs/database/neon-source-baseline-reconciliation.md"
       - "docs/database/schema-manifest-contract.md"
       - "role-security-harness/**"
       - "scripts/test-postgres18-role-security-harness.sh"
@@ -21,10 +21,10 @@ on:
       - "feat/iam-role-bootstrap-review"
     paths:
       - "database/**"
-      - "docs/database/neon-source-baseline-reconciliation.md"
-      - "docs/database/iam-postgresql-test-matrix.md"
-      - "docs/operations/iam-migration-execution-contract.md"
       - "iam_database_schema.sql"
+      - "docs/operations/iam-migration-execution-contract.md"
+      - "docs/database/iam-postgresql-test-matrix.md"
+      - "docs/database/neon-source-baseline-reconciliation.md"
       - "docs/database/schema-manifest-contract.md"
       - "role-security-harness/**"
       - "scripts/test-postgres18-role-security-harness.sh"
@@ -91,8 +91,8 @@ jobs:
           python3 database/tests/validate-schema-manifest.py artifacts/schema-manifest-a.json
           sha256sum artifacts/schema-manifest-a.json
 
-  postgres-18-source-schema-restore-manifest:
-    name: postgres-18-source-schema-restore-manifest
+  postgres-18-main-baseline-restore-manifest:
+    name: postgres-18-main-baseline-restore-manifest
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -113,11 +113,32 @@ jobs:
       DATABASE_URL: postgresql://postgres@localhost:5432/iam_source_restore_test
       PGPASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
-      - name: Checkout manifest contract
+      - name: Checkout candidate manifest tooling
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
           persist-credentials: false
-      - name: Restore the candidate PR source dump and generate restored manifest
+      - name: Checkout current main baseline
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          ref: main
+          path: base-main
+          persist-credentials: false
+      - name: Restore current main baseline in disposable PostgreSQL 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace/base-main \
+            --env DATABASE_URL="$DATABASE_URL" \
+            --env PGPASSWORD="$PGPASSWORD" \
+            postgres:18-bookworm \
+            bash -euo pipefail -c '
+              psql -X --no-password "$DATABASE_URL" -Atc "SHOW server_version;"
+              bash database/tests/restore-source-schema.sh
+            '
+      - name: Generate and validate main baseline manifest
         shell: bash
         run: |
           set -euo pipefail
@@ -129,61 +150,61 @@ jobs:
             --env PGPASSWORD="$PGPASSWORD" \
             postgres:18-bookworm \
             bash -euo pipefail -c '
-              cd /workspace
-              bash database/tests/restore-source-schema.sh
               psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
-                -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-restored-a.json
+                -f base-main/database/scripts/schema-manifest.sql > artifacts/main-baseline-manifest-a.json
               psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
-                -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-restored-b.json
+                -f base-main/database/scripts/schema-manifest.sql > artifacts/main-baseline-manifest-b.json
             '
-          cmp artifacts/schema-manifest-restored-a.json artifacts/schema-manifest-restored-b.json
-          python3 database/tests/validate-schema-manifest.py artifacts/schema-manifest-restored-a.json
-          sha256sum artifacts/schema-manifest-restored-a.json
-          python3 database/tests/render-schema-manifest-section-hashes.py database/scripts/schema-manifest.sql \
+          cmp artifacts/main-baseline-manifest-a.json artifacts/main-baseline-manifest-b.json
+          python3 base-main/database/tests/validate-schema-manifest.py artifacts/main-baseline-manifest-a.json
+          sha256sum artifacts/main-baseline-manifest-a.json
+          python3 base-main/database/tests/render-schema-manifest-section-hashes.py base-main/database/scripts/schema-manifest.sql \
             | docker run --rm -i --network host \
                 --env DATABASE_URL="$DATABASE_URL" \
                 --env PGPASSWORD="$PGPASSWORD" \
                 postgres:18-bookworm \
                 psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
-            > artifacts/schema-manifest-restored-sections.tsv
-          echo "Candidate PR dump restored manifest section hashes (section, item_count, sha256):"
-          cat artifacts/schema-manifest-restored-sections.tsv
-  restore-source-schema:
-      name: postgres-18-source-schema-restore
-      runs-on: ubuntu-latest
-      timeout-minutes: 10
-      services:
-        postgres:
-          image: postgres:18
-          env:
-            POSTGRES_USER: postgres
-            POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
-            POSTGRES_DB: iam_source_restore_test
-          ports:
-            - 5432:5432
-          options: >-
-            --health-cmd "pg_isready -U postgres -d iam_source_restore_test"
-            --health-interval 5s
-            --health-timeout 5s
-            --health-retries 20
-      env:
-        DATABASE_URL: postgresql://postgres@localhost:5432/iam_source_restore_test
-        PGPASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
-      steps:
-        - name: Checkout
-          uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
-          with:
-            persist-credentials: false
-        - name: Restore complete source schema with PostgreSQL 18 client
-          run: |
-            docker run --rm --network host \
-              --volume "$GITHUB_WORKSPACE:/workspace" \
-              --workdir /workspace \
-              --env DATABASE_URL="$DATABASE_URL" \
-              --env PGPASSWORD="$PGPASSWORD" \
-              postgres:18-bookworm \
-              bash -euo pipefail -c '
-                psql -X --no-password "$DATABASE_URL" -Atc "SHOW server_version;"
-                bash database/tests/restore-source-schema.sh
-              '
+            > artifacts/main-baseline-section-hashes.tsv
+          echo "Main baseline manifest section hashes (section, item_count, sha256):"
+          cat artifacts/main-baseline-section-hashes.tsv
 
+  restore-source-schema:
+    name: postgres-18-candidate-source-schema-restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: iam_candidate_restore_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d iam_candidate_restore_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres@localhost:5432/iam_candidate_restore_test
+      PGPASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout candidate PR source dump
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Restore candidate source schema with PostgreSQL 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            --env DATABASE_URL="$DATABASE_URL" \
+            --env PGPASSWORD="$PGPASSWORD" \
+            postgres:18-bookworm \
+            bash -euo pipefail -c '
+              psql -X --no-password "$DATABASE_URL" -Atc "SHOW server_version;"
+              bash database/tests/restore-source-schema.sh
+            '
