@@ -133,3 +133,18 @@ A role iam_schema_export_reader existe na fonte canônica:
 - a única aresta relacionada é iam_database_owner → iam_schema_export_reader, concedida por cloud_admin com ADMIN=true, INHERIT=false e SET=false (provider-managed; não é capacidade do reader).
 
 O perfil catalogado é compatível com export schema-only least-privilege. Ainda falta provar autenticação efetiva e executar pg_dump 18 pelo Environment neon-schema-export; não presumir que o secret NEON_SCHEMA_EXPORT_URL esteja configurado com essa role, pois seu valor não foi lido.
+
+
+## Proveniência do ledger — dado de controle fora do schema-only dump
+
+O dump schema-only cria a estrutura iam.schema_migrations, mas não exporta suas linhas. A fonte Neon contém o registro 0001_context_key_hardening (checksum/source SHA documentados neste arquivo); um restore apenas de DDL fica com ledger vazio e não representa sozinho o estado de migrations já aplicado.
+
+O catálogo confirmou que iam_schema_export_reader tem USAGE em iam, mas não tem SELECT em iam.schema_migrations (nem INSERT/UPDATE/DELETE). Portanto, o workflow atual não consegue obter o ledger histórico com a role de export least-privilege. Não ampliar grants automaticamente.
+
+Antes de declarar uma baseline reprodutível:
+1. definir um canal read-only separado e aprovado para capturar apenas os campos de controle do ledger (migration_id, checksum_sha256, source_sha, execution_role, applied_at), sem dados de aplicação;
+2. preservar o resultado como artefato/manifesto com checksum e provenance;
+3. restaurar o DDL em database descartável e verificar explicitamente que o ledger está vazio antes de aplicar o manifesto sintético de baseline;
+4. testar que o ledger restaurado corresponde à origem e que a migration seguinte parte do predecessor correto.
+
+Estado: BLOCKED / MIGRATION LINEAGE. O ledger não pode ser inventado, copiado manualmente para o dump nem tratado como dado de aplicação.
