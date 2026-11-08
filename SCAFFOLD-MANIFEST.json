@@ -135,7 +135,7 @@
     "Auth0 E2E and Vercel Preview deployment were SKIPPED on the current main SHA.",
     "The protected page checks Auth0 session existence only; tenant membership and permission evaluation are not implemented.",
     "The Neon client factory only constructs a client; no production runtime query or authenticated session is implemented.",
-    "No complete migration sequence reproduces the 23-table historical isolated validation snapshot documented in neon_schema_snapshot; this snapshot is not evidence of the current canonical Neon baseline.",
+    "No complete migration sequence reproduces the 23-table historical schema-only snapshot from an isolated branch of the current Neon delivery project; this snapshot does not prove equivalence with the live main branch.",
     "In the isolated post-hardening restore, sessions UPDATE fails because sessions_touch calls iam.touch_updated_at() against a table without updated_at; fix design remains pending.",
     "Parallel migration-lock contention has not been proven with independent PostgreSQL sessions/backend PIDs.",
     "Historical dependency versions in older evidence documents are superseded by the current package manifest."
@@ -147,9 +147,9 @@
     "host": "ep-lucky-frost-b631bopg.c-2.sa-east-1.aws.neon.tech",
     "dump_started_at_utc": "2026-11-05T03:46:00Z",
     "table_count": 23,
-    "source_classification": "historical isolated validation-branch schema snapshot; not the current canonical Neon project's live state",
-    "canonical_project_id": "wandering-wildflower-90908845",
-    "limitations": "Schema-only dump with no application rows. Re-export from the canonical current project/branch is required before treating it as current operational baseline."
+    "source_classification": "historical schema-only dump from an isolated validation branch of the current delivery project; not the live main branch state",
+    "canonical_project_id": "twilight-fire-88497009",
+    "limitations": "Schema-only dump with no application rows. This historical isolated-branch snapshot belongs to the current delivery project but is not evidence of the current main branch schema; re-export from main is required before treating it as the operational baseline."
   },
   "production_ready": false,
   "dependency_security": {
@@ -170,5 +170,39 @@
     "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/42430949038",
     "audit_sha": "64f96d84b33aff57d9c09bbe7ff54396e651552c",
     "note": "The permanent quality workflow, including pnpm audit, passed on the main audit commit 64f96d84b33aff57d9c09bbe7ff54396e651552c (run 42430949038). This run validates that exact main commit; it does not describe or validate the historical security-branch merge. Every subsequent commit must pass CI before it is considered validated."
+  },
+  "neon_current_project": {
+    "project_id": "twilight-fire-88497009",
+    "name": "iam-database-delivery",
+    "region": "aws-sa-east-1",
+    "postgres_version": 18,
+    "plan": "free_v3",
+    "default_branch": {
+      "name": "main",
+      "id": "br-little-fire-b6adup9f",
+      "state": "ready"
+    },
+    "development_branch": {
+      "name": "development",
+      "id": "br-proud-brook-b6woqo6z",
+      "parent_id": "br-little-fire-b6adup9f",
+      "state": "ready"
+    },
+    "preview_branch": {
+      "name": "preview",
+      "id": "br-lingering-art-b6lzio6z",
+      "parent_id": "br-little-fire-b6adup9f",
+      "state": "ready"
+    },
+    "main_endpoint": {
+      "id": "ep-twilight-shadow-b618ef5h",
+      "pooler_enabled": false
+    },
+    "database": "iam_database",
+    "database_owner": "iam_database_owner",
+    "migration_login": "iam_migrator_login",
+    "branch_count": 10,
+    "branch_limit": 10,
+    "evidence": "Neon API read-only inventory 2026-11-08; provider role metadata does not prove SQL role attributes or successful authentication."
   }
 }
