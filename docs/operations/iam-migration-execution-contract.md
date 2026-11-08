@@ -1,6 +1,6 @@
 # Contrato operacional de migrations PostgreSQL
 
-**Status:** contrato documentado; validação CI adicionada e aguardando execução no novo HEAD.
+**Status:** trilhas separadas: bootstrap limpo, histórico já aplicado na fonte e migrations incrementais futuras. Validação CI obrigatória no HEAD atual.
 **Fonte canônica:** Neon twilight-fire-88497009 / branch br-little-fire-b6adup9f / database iam_database.
 **Engine de teste:** PostgreSQL 18 descartável.
 **Limite:** nenhuma instrução deste documento autoriza DDL, GRANT ou migration em Neon persistente ou Production.
@@ -70,7 +70,7 @@ O ledger observado na fonte contém 0001_context_key_hardening, checksum 2447395
 
 ## Camadas de teste obrigatórias
 
-1. **Bootstrap inicial limpo:** aplicar 0001_initial_iam_schema.sql em database vazia separada; validar ownership, roles, RLS/FORCE RLS, default-deny, integridade cross-tenant e integridade de ator/audit.
+1. **Bootstrap inicial limpo:** aplicar `database/bootstrap/0001_initial_iam_schema.sql` em database vazia separada; este artefato não pertence à sequência incremental e não é predecessor da migration histórica `0001_context_key_hardening`. Validar ownership, roles, RLS/FORCE RLS, default-deny, integridade cross-tenant e integridade de ator/audit.
 2. **Histórico já aplicado na fonte:** `database/archive/source-applied-migrations/0001_context_key_hardening.sql` é o artefato histórico cujo ID `0001_context_key_hardening` consta no ledger Neon. Ele é executado somente em PostgreSQL descartável para testes de regressão; não integra a sequência de migrations pendentes e não deve ser reaplicado sobre a baseline exportada, que já contém seus efeitos.
 3. **Preflight negativo:** rejeitar atributos administrativos e memberships adicionais antes de DDL; após cada rejeição, confirmar ausência do índice e do ledger entry.
 4. **Concorrência:** duas sessões reais concorrendo pelo advisory transaction lock; a segunda deve bloquear até o COMMIT da primeira.
@@ -86,7 +86,7 @@ O ledger observado na fonte contém 0001_context_key_hardening, checksum 2447395
 - O restore integral do dump passou em PostgreSQL 18 descartável no SHA 50c0e71fa166158a80172dc9b27175982e439b22; não comprova igualdade objeto-a-objeto com a fonte Neon.
 - Os testes independentes de bootstrap inicial, contenção concorrente do lock e ledger idempotence/mismatch foram adicionados à PR #85 e aguardam execução CI no novo SHA.
 - Preview e Auth0 E2E foram SKIPPED nos workflows observados; não classificá-los como PASS.
-- A sequência de migration continua bloqueada até reconciliar a migration inicial de revisão com a baseline operacional completa da PR #86.
+- A sequência operacional é explícita: bootstrap limpo em database vazia; baseline operacional #86 restaurada como estado já existente; `0001_context_key_hardening` preservada apenas como artefato histórico em `database/archive/source-applied-migrations/`; proposals permanecem fora de `database/migrations/`. O dump DDL-only não contém o ledger, cuja proveniência continua sendo validada por canal read-only separado.
 
 ## Atualização de CI e correção da fixture — 2026-11-08
 
