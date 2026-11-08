@@ -134,6 +134,6 @@ O alvo vigente deste workflow é o projeto Neon `iam-database-delivery` (`twilig
 
 A branch `preview` (`br-lingering-art-b6lzio6z`) também existe como filha direta de `main`, mas o lifecycle cria branches `preview/pr-<número>` como filhas de `development`.
 
-**Limite operacional:** o projeto lista 10 branches e o plano Free informa limite de 10. A criação de uma nova branch de PR ficará BLOCKED até haver capacidade. O workflow deve falhar fechado e não excluir branches existentes automaticamente.
+**Limite operacional (inventário read-only de 2026-11-08):** o projeto lista 5 branches e o plano Free informa limite de 10. Há capacidade nominal disponível neste inventário; o workflow deve reavaliar a contagem ao executar e falhar fechado se o limite estiver atingido. Não excluir branches existentes automaticamente.
 
 O endpoint da branch `main` é `ep-twilight-shadow-b618ef5h`; a API informa `pooler_enabled=false`. Isso não altera o lifecycle, mas impede declarar pooler ativo ou utilizar o hostname `-pooler` como se estivesse habilitado.
