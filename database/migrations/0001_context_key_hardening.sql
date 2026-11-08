@@ -17,6 +17,7 @@ DECLARE
   v_login_edges integer;
   v_migrator_edges integer;
   v_owner_edges integer;
+  v_owner_grantees integer;
 BEGIN
   IF session_user <> 'iam_migrator_login' OR current_user <> session_user THEN
     RAISE EXCEPTION
@@ -114,6 +115,27 @@ BEGIN
    WHERE member_role.rolname = 'iam_owner';
   IF v_owner_edges <> 0 THEN
     RAISE EXCEPTION 'iam_owner must not be a member of any additional role';
+  END IF;
+
+  -- Only the reviewed iam_migrator group may be granted iam_owner.
+  -- Reject any additional principal (including a runtime login) that could
+  -- SET ROLE iam_owner and cross the migration privilege boundary.
+  SELECT count(*) INTO v_owner_grantees
+    FROM pg_auth_members m
+    JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+   WHERE granted_role.rolname = 'iam_owner';
+  IF v_owner_grantees <> 1 OR NOT EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = 'iam_migrator'
+       AND granted_role.rolname = 'iam_owner'
+       AND m.inherit_option IS FALSE
+       AND m.set_option IS TRUE
+       AND m.admin_option IS FALSE
+  ) THEN
+    RAISE EXCEPTION 'iam_owner may be granted only to iam_migrator with SET-only, non-admin membership';
   END IF;
 
   IF NOT pg_has_role(session_user, 'iam_owner', 'MEMBER')
