@@ -144,6 +144,10 @@ assert_migration_rejected "unapproved login membership granted to iam_migrator"
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -c "REVOKE iam_migrator FROM iam_app_runtime_login;"
 
+echo "Inspecting the exact membership graph after all negative tests..."
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+  "SELECT member_role.rolname AS grantee, granted_role.rolname AS granted_role, m.inherit_option, m.set_option, m.admin_option FROM pg_auth_members m JOIN pg_roles member_role ON member_role.oid = m.member JOIN pg_roles granted_role ON granted_role.oid = m.roleid WHERE granted_role.rolname IN ('iam_migrator','iam_owner') ORDER BY granted_role.rolname, member_role.rolname;"
+
 echo "Running migration over the authenticated, least-privilege LOGIN session..."
 PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1 \
   -v migration_checksum="$migration_checksum" -v source_sha="$source_sha" \
