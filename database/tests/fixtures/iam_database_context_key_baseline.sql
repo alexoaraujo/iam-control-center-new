@@ -156,6 +156,52 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $function$;
 
+
+
+CREATE OR REPLACE FUNCTION iam.set_tenant_context(
+  p_tenant_id uuid,
+  p_identity_id uuid,
+  p_expires_at bigint,
+  p_nonce text,
+  p_signature text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO pg_catalog, app_private, iam, public
+AS $function$
+BEGIN
+  PERFORM set_config('iam.tenant_id', p_tenant_id::text, true);
+  PERFORM set_config('iam.identity_id', p_identity_id::text, true);
+  PERFORM set_config('iam.expires_at', p_expires_at::text, true);
+  PERFORM set_config('iam.nonce', p_nonce, true);
+  PERFORM set_config('iam.signature', p_signature, true);
+  IF app_private.current_tenant_id() IS DISTINCT FROM p_tenant_id THEN
+    PERFORM set_config('iam.tenant_id', '', true);
+    PERFORM set_config('iam.identity_id', '', true);
+    PERFORM set_config('iam.expires_at', '', true);
+    PERFORM set_config('iam.nonce', '', true);
+    PERFORM set_config('iam.signature', '', true);
+    RAISE EXCEPTION 'invalid or expired tenant context' USING ERRCODE = '42501';
+  END IF;
+END;
+$function$;
+ALTER FUNCTION iam.set_tenant_context(uuid, uuid, bigint, text, text) OWNER TO iam_owner;
+
+CREATE OR REPLACE FUNCTION iam.clear_tenant_context()
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO pg_catalog
+AS $function$
+  SELECT set_config('iam.tenant_id', '', true),
+         set_config('iam.identity_id', '', true),
+         set_config('iam.expires_at', '', true),
+         set_config('iam.nonce', '', true),
+         set_config('iam.signature', '', true)
+$function$;
+ALTER FUNCTION iam.clear_tenant_context() OWNER TO iam_owner;
+
 REVOKE ALL ON SCHEMA iam, audit, app_private FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA iam, app_private FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA iam, app_private FROM PUBLIC;
@@ -167,3 +213,6 @@ GRANT SELECT ON TABLE iam.schema_migrations TO iam_migrator;
 GRANT EXECUTE ON FUNCTION iam.acquire_migration_lock() TO iam_migrator;
 GRANT EXECUTE ON FUNCTION iam.record_migration(text, text, text) TO iam_migrator;
 RESET ROLE;
+
+GRANT EXECUTE ON FUNCTION iam.set_tenant_context(uuid, uuid, bigint, text, text) TO iam_app_runtime;
+GRANT EXECUTE ON FUNCTION iam.clear_tenant_context() TO iam_app_runtime;
