@@ -48,6 +48,22 @@ END
 $assert_function_hardening$;
 
 BEGIN;
+-- Add a minimal test-only RLS policy so the resolver is exercised by the
+-- same row-security predicate used by the full operational schema.
+ALTER TABLE iam.tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE iam.tenants FORCE ROW LEVEL SECURITY;
+CREATE POLICY resolver_test_owner ON iam.tenants
+  TO iam_owner USING (true) WITH CHECK (true);
+CREATE POLICY resolver_test_runtime ON iam.tenants
+  TO iam_app_runtime
+  USING (id = app_private.current_tenant_id())
+  WITH CHECK (id = app_private.current_tenant_id());
+GRANT USAGE ON SCHEMA iam, app_private TO iam_app_runtime;
+GRANT SELECT ON TABLE iam.tenants TO iam_app_runtime;
+GRANT EXECUTE ON FUNCTION app_private.current_tenant_id() TO iam_app_runtime;
+GRANT EXECUTE ON FUNCTION iam.set_tenant_context(uuid, uuid, bigint, text, text) TO iam_app_runtime;
+GRANT EXECUTE ON FUNCTION iam.clear_tenant_context() TO iam_app_runtime;
+
 SET LOCAL ROLE iam_owner;
 INSERT INTO iam.tenants (id, status)
 VALUES
@@ -65,46 +81,65 @@ INSERT INTO app_private.context_keys (key_id, secret, active)
 VALUES ('ci-volatility-key', decode(repeat('42', 32), 'hex'), true);
 
 RESET ROLE;
-SET LOCAL ROLE iam_owner;
+SET LOCAL ROLE iam_app_runtime;
 
--- This single DO statement deliberately switches tenant context twice as the
--- non-login object owner. The resolver must observe tenant B immediately;
--- cross-tenant row visibility is covered separately by the full-source RLS test.
-DO $same_statement_context_switch$
-DECLARE
-  v_tenant uuid;
-  v_identity uuid;
-  v_expires bigint;
-  v_nonce text;
-  v_signature text;
-BEGIN
-  v_tenant := '30000000-0000-4000-8000-000000000003';
-  v_identity := '30000000-0000-4000-8000-000000000033';
-  v_expires := floor(extract(epoch FROM clock_timestamp()))::bigint + 180;
-  v_nonce := 'ci-volatility-a';
-  v_signature := encode(public.hmac(
-    convert_to(v_tenant::text || '|' || v_identity::text || '|' || v_expires::text || '|' || v_nonce, 'UTF8'),
-    decode(repeat('42', 32), 'hex'), 'sha256'), 'hex');
-  PERFORM iam.set_tenant_context(v_tenant, v_identity, v_expires, v_nonce, v_signature);
+-- One top-level SQL statement uses materialized, dependency-ordered CTEs to
+-- set tenant A, query under RLS, set tenant B, and query again. This is the
+-- planner boundary at which a STABLE resolver could reuse tenant A.
+WITH
+tenant_a AS MATERIALIZED (
+  SELECT
+    '30000000-0000-4000-8000-000000000003'::uuid AS tenant_id,
+    '30000000-0000-4000-8000-000000000033'::uuid AS identity_id,
+    floor(extract(epoch FROM clock_timestamp()))::bigint + 180 AS expires_at,
+    'ci-volatility-a'::text AS nonce
+),
+set_a AS MATERIALIZED (
+  SELECT iam.set_tenant_context(
+    tenant_id, identity_id, expires_at, nonce,
+    encode(public.hmac(
+      convert_to(tenant_id::text || '|' || identity_id::text || '|' || expires_at::text || '|' || nonce, 'UTF8'),
+      decode(repeat('42', 32), 'hex'), 'sha256'
+    ), 'hex')
+  ) AS applied
+  FROM tenant_a
+),
+read_a AS MATERIALIZED (
+  SELECT array_agg(t.id ORDER BY t.id) AS visible_tenants
+  FROM iam.tenants t CROSS JOIN set_a
+),
+tenant_b AS MATERIALIZED (
+  SELECT
+    '40000000-0000-4000-8000-000000000004'::uuid AS tenant_id,
+    '40000000-0000-4000-8000-000000000044'::uuid AS identity_id,
+    floor(extract(epoch FROM clock_timestamp()))::bigint + 180 AS expires_at,
+    'ci-volatility-b'::text AS nonce
+  FROM read_a
+),
+set_b AS MATERIALIZED (
+  SELECT iam.set_tenant_context(
+    tenant_id, identity_id, expires_at, nonce,
+    encode(public.hmac(
+      convert_to(tenant_id::text || '|' || identity_id::text || '|' || expires_at::text || '|' || nonce, 'UTF8'),
+      decode(repeat('42', 32), 'hex'), 'sha256'
+    ), 'hex')
+  ) AS applied
+  FROM tenant_b
+),
+read_b AS MATERIALIZED (
+  SELECT array_agg(t.id ORDER BY t.id) AS visible_tenants
+  FROM iam.tenants t CROSS JOIN set_b
+)
+SELECT CASE
+  WHEN read_a.visible_tenants = ARRAY['30000000-0000-4000-8000-000000000003'::uuid]
+   AND read_b.visible_tenants = ARRAY['40000000-0000-4000-8000-000000000004'::uuid]
+  THEN 'PASS: same-statement RLS context switch A -> B'
+  ELSE format('FAIL: stale or leaked tenant context; A=%s B=%s',
+              read_a.visible_tenants, read_b.visible_tenants)
+END AS result
+FROM read_a CROSS JOIN read_b;
 
-  IF app_private.current_tenant_id() IS DISTINCT FROM v_tenant THEN
-    RAISE EXCEPTION 'first context A was not resolved';
-  END IF;
-  v_tenant := '40000000-0000-4000-8000-000000000004';
-  v_identity := '40000000-0000-4000-8000-000000000044';
-  v_expires := floor(extract(epoch FROM clock_timestamp()))::bigint + 180;
-  v_nonce := 'ci-volatility-b';
-  v_signature := encode(public.hmac(
-    convert_to(v_tenant::text || '|' || v_identity::text || '|' || v_expires::text || '|' || v_nonce, 'UTF8'),
-    decode(repeat('42', 32), 'hex'), 'sha256'), 'hex');
-  PERFORM iam.set_tenant_context(v_tenant, v_identity, v_expires, v_nonce, v_signature);
-
-  IF app_private.current_tenant_id() IS DISTINCT FROM v_tenant THEN
-    RAISE EXCEPTION 'context switch A -> B returned a stale tenant id';
-  END IF;
-  PERFORM iam.clear_tenant_context();
-END
-$same_statement_context_switch$;
+SELECT iam.clear_tenant_context();
 
 -- Invalid context attempts are checked from an empty context in independent
 -- statements; the application must abort the request transaction on failure.
