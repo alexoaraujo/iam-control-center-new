@@ -90,3 +90,15 @@ No PostgreSQL 18 descartável, o runner reproduz essas arestas do owner e valida
 O bootstrap SQL não pode desabilitar a própria sessão administrativa. O runner bloqueia a conta temporária por uma conexão administrativa separada. Em qualquer bootstrap real, o operador deve executar e verificar esse bloqueio por um principal autorizado independente após o commit; a conta temporária nunca pode permanecer como credencial da aplicação.
 
 **Limites:** toda a evidência acima é de catálogo read-only no Neon e de testes PostgreSQL descartáveis no CI. Nenhuma migration, DDL, GRANT ou seed foi executada no Neon persistente ou em Production. A lineage da migration incremental ainda depende da reconciliação com a baseline da PR #86.
+
+
+## Divergência observada no runtime LOGIN — 2026-11-08
+
+Consulta read-only ao catálogo da fonte Neon canônica encontrou:
+- iam_app_runtime_login: LOGIN=true, INHERIT=false, SUPERUSER=false, BYPASSRLS=false;
+- membership iam_app_runtime_login → iam_app_runtime: INHERIT=true, SET=true, ADMIN=false, grantor iam_database_owner;
+- pg_has_role(..., 'USAGE')=true e pg_has_role(..., 'SET')=true.
+
+Isso diverge do bootstrap versionado, que declara iam_app_runtime_login como LOGIN INHERIT e concede iam_app_runtime com INHERIT TRUE / SET FALSE / ADMIN FALSE. O login runtime consegue executar SET ROLE iam_app_runtime; não há evidência de que possa assumir iam_owner ou iam_migrator, portanto esta aresta isolada não equivale a escalada para owner, mas viola a regra documentada de não permitir SET ROLE no runtime.
+
+Não alterar a origem automaticamente. Manter como DRIFT / DECISION REQUIRED: decidir se o contrato canônico deve ser o bootstrap versionado (NO SET para runtime) ou se a aresta SET-only atual é intencional. Antes de qualquer correção, verificar dependências de aplicação e executar um teste de regressão em branch descartável. A consulta não prova nem autoriza DDL/GRANT na Neon persistente.
