@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "IAM Control Center",
-  description: "Security-first identity and access management control plane",
+  title: "IAM Control Center | Identity & Access Governance",
+  description: "Console administrativo para governança de identidade, acesso, segurança e auditoria multi-tenant.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
-      <body style={{ margin: 0, fontFamily: "system-ui, sans-serif", background: "#f6f7f9", color: "#17202a" }}>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
