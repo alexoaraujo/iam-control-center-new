@@ -123,7 +123,7 @@ jobs:
           ref: main
           path: base-main
           persist-credentials: false
-      - name: Restore pinned canonical source baseline in disposable PostgreSQL 18
+      - name: Restore current main baseline in disposable PostgreSQL 18
         shell: bash
         run: |
           set -euo pipefail
