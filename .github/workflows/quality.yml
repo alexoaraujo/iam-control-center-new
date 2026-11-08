@@ -271,6 +271,7 @@ jobs:
           const callbackHost = process.env.E2E_CALLBACK_HOST;
           const trustedHeader = "x-vercel-trusted-oidc-idp-token";
           const auth0Host = "iam-control-center.us.auth0.com";
+          const trustedHosts = new Set([deploymentOrigin.hostname, callbackHost]);
 
           if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
           if (callbackHost !== "iam-control-center-preview.vercel.app") {
@@ -290,29 +291,40 @@ jobs:
           }
           console.log(`Negative control passed: ${deploymentOrigin.hostname} blocks access without OIDC.`);
 
-          // Positive control: same deployment hostname must accept the GitHub OIDC token.
-          const positive = await fetch(new URL("/protected", deploymentOrigin), {
-            redirect: "manual",
-            headers: { [trustedHeader]: token },
-          });
-          const positiveLocation = positive.headers.get("location");
-          if (!positiveLocation || new URL(positiveLocation, deploymentOrigin).hostname !== auth0Host) {
-            throw new Error(`Positive control failed: expected Auth0 redirect, got HTTP ${positive.status} and Location ${positiveLocation ?? "none"}.`);
+          // Follow only same-Preview-host redirects until Auth0. Attach the
+          // trusted token only to the two explicit Preview hosts, never Auth0.
+          async function reachAuth0(start, label) {
+            let current = new URL(start);
+            for (let attempt = 0; attempt < 6; attempt += 1) {
+              if (!trustedHosts.has(current.hostname)) {
+                throw new Error(`Refusing to send OIDC token to untrusted host ${current.hostname}.`);
+              }
+              const response = await fetch(current, {
+                redirect: "manual",
+                headers: { [trustedHeader]: token },
+              });
+              const location = response.headers.get("location");
+              if (!location) {
+                throw new Error(`${label}: expected redirect from ${current.pathname}; HTTP ${response.status}, no Location.`);
+              }
+              const next = new URL(location, current);
+              if (next.hostname === auth0Host) {
+                console.log(`${label} passed: reached Auth0 after ${attempt + 1} Preview redirect(s).`);
+                return;
+              }
+              if (next.hostname === "vercel.com") {
+                throw new Error(`${label}: Vercel Deployment Protection intercepted a request carrying the OIDC token.`);
+              }
+              if (!trustedHosts.has(next.hostname)) {
+                throw new Error(`${label}: unexpected redirect host ${next.hostname}.`);
+              }
+              current = next;
+            }
+            throw new Error(`${label}: did not reach Auth0 within six redirects.`);
           }
-          console.log(`Positive control passed: ${deploymentOrigin.hostname} accepted OIDC and reached Auth0.`);
 
-          // Verify the registered callback alias separately; token is scoped to
-          // these two allowlisted Preview hosts and is never sent to Auth0.
-          const callbackOrigin = new URL(`https://${callbackHost}`);
-          const callback = await fetch(new URL("/protected", callbackOrigin), {
-            redirect: "manual",
-            headers: { [trustedHeader]: token },
-          });
-          const callbackLocation = callback.headers.get("location");
-          if (!callbackLocation || new URL(callbackLocation, callbackOrigin).hostname !== auth0Host) {
-            throw new Error(`Callback alias ${callbackHost} did not reach Auth0.`);
-          }
-          console.log(`Callback alias passed: ${callbackHost} reached Auth0.`);
+          await reachAuth0(new URL("/protected", deploymentOrigin), "Positive control");
+          await reachAuth0(new URL("/protected", `https://${callbackHost}`), "Callback alias");
           NODE
 
       - name: Run Auth0 end-to-end flow
