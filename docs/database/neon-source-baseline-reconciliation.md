@@ -1,6 +1,6 @@
 # Reconciliação da baseline PostgreSQL com Neon
 
-**Status:** IN PROGRESS — dump schema-only source-derived versionado e restore integral PostgreSQL 18 descartável; teste RLS dinâmico adicionado e aguardando CI no HEAD atualizado; export autenticado reproduzível e comparação objeto-a-objeto com a fonte Neon continuam pendentes.  
+**Status:** BLOCKED — restore CI detectou dump versionado desatualizado: current_tenant_id() ainda inclui public no search_path, divergindo da fonte Neon hardened. Export autenticado e comparação objeto-a-objeto pendentes.  
 **Repositório:** `alexoaraujo83/iam-control-center`  
 **Branch desta documentação:** `chore/reconcile-neon-source-schema-baseline`  
 **Base GitHub:** `main` em `ff71607948c9d02d90fc0b1b26931c573ab660f8`  
@@ -435,3 +435,14 @@ A aplicação deve começar a operação de contexto em estado limpo. Se captura
 A fonte Neon canônica foi consultada por SELECT read-only em 2026-11-08: iam_migrator tem USAGE em iam, SELECT (não INSERT) em iam.schema_migrations e EXECUTE nas duas funções de migration; ambas são SECURITY DEFINER, owner iam_owner, com search_path restrito e sem PUBLIC EXECUTE. O ledger observado contém uma entrada de hardening cujo source SHA/checksum são históricos e não devem ser confundidos com o HEAD da PR.
 
 **Pendências:** CI dinâmico no SHA atual; environment neon-schema-export e deployment branch policy não verificados por API disponível; export autenticado reproduzível; comparação objeto-a-objeto; ACL/ownership integral; replay/inativos/rotação de chave; branch Neon isolada com memberships reais; sequência canônica da migration inicial vs incremental; concorrência de lock com duas sessões independentes.
+
+
+## Divergência confirmada entre dump versionado e origem — 2026-11-08
+
+No SHA 51f9098a5a8b8506fae05909c9e289b799fea97a, os jobs quality e postgres-18-schema-contract passaram. O job postgres-18-source-schema-restore falhou no contrato do catálogo porque o dump contém app_private.current_tenant_id() como SECURITY DEFINER, owner iam_owner, com search_path pg_catalog, app_private, iam, public.
+
+A consulta read-only executada na fonte Neon canônica confirmou que a função está hardened: SECURITY DEFINER=true, owner=iam_owner, search_path=pg_catalog, app_private, iam. Isso prova divergência do artefato versionado, não falha na fonte.
+
+Não editar o dump manualmente para remover public: isso apagaria a proveniência do export e mascararia a divergência. Regenerar via pg_dump 18 autenticado contra a origem allowlisted, guardar SHA-256 e manifesto, restaurar novamente em database vazia e comparar objeto-a-objeto. O workflow atual executa apenas em push para main e o Environment neon-schema-export não foi verificável pelas ferramentas desta sessão; portanto, export autenticado permanece BLOCKED.
+
+O contrato runtime RLS foi adicionado e agora separa os casos de contexto válido/inválido em statements distintos. Ainda não há PASS para ele porque o restore falhou antes de executar o teste dinâmico. O contrato de roles/migration passou neste SHA, mas não substitui o restore nem a equivalência com a fonte.
