@@ -209,6 +209,6 @@ A decisão operacional vigente para a entrega do banco IAM é o projeto `iam-dat
 
 O projeto `wandering-wildflower-90908845` e as referências deste documento às decisões de 03–04/11/2026 são registros históricos de uma topologia anterior. Não são o alvo da automação de entrega do banco após a decisão de 08/11/2026.
 
-O projeto de destino está no limite atual do plano Free: 10 branches para um limite de 10. O lifecycle deve falhar fechado quando precisar criar outra branch, sem apagar branches existentes automaticamente. A criação de branch de PR depende de liberar capacidade por processo operacional revisado.
+Inventário read-only do Neon em 2026-11-08: 5 branches no projeto de destino para um limite Free informado de 10. A capacidade deve ser reavaliada no momento da execução do lifecycle; o workflow deve falhar fechado se o limite estiver atingido, sem apagar branches existentes automaticamente.
 
 Esta atualização não executou migration, DDL, GRANT, alteração de dados, troca de senha, alteração de secret ou deploy. Auth0 continua sendo o único provedor OIDC.
