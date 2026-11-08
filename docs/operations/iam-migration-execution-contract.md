@@ -120,3 +120,16 @@ O log do job PostgreSQL 18 confirmou:
 - migration incremental e contrato de context-key passaram na fixture source-derived.
 
 Este PASS é exclusivo do SHA indicado. Não prova equivalência do fixture reduzido com a baseline integral Neon, nem RLS cross-tenant na fonte, nem execução em branch Neon. A PR permanece Draft até resolver lineage da migration e reconciliação integral da baseline.
+
+
+## Proposta de hardening do resolver de tenant — 0002 (2026-11-08)
+
+A consulta read-only da fonte Neon confirmou que a migration 0001_context_key_hardening já consta no ledger, aplicada por iam_migrator_login em 2026-11-05. Seu arquivo não deve ser reescrito.
+
+A auditoria de função encontrou dois pontos para uma migration incremental posterior:
+- app_private.current_tenant_id() é STABLE, apesar de ler GUCs de contexto que podem mudar durante a transação e consultar clock_timestamp(). Uma chamada posterior no mesmo statement pode reutilizar resultado anterior e devolver tenant obsoleto.
+- iam.set_tenant_context(...) é SECURITY DEFINER e usa search_path=pg_catalog, app_private, iam, public, embora as referências de aplicação sejam qualificadas e public não seja necessário.
+
+Foi criada database/proposals/0002_context_resolver_volatility_hardening.sql, fora da pasta de migrations ativas. A proposta altera current_tenant_id para VOLATILE e remove public do search_path de set_tenant_context. O teste database/tests/0002_context_resolver_volatility_contract.sql alterna tenant A → tenant B no mesmo bloco DO e valida visibilidade RLS atualizada.
+
+O runner CI aplica essa proposta somente no PostgreSQL 18 descartável, após o fixture derivado e a migration 0001 de teste. A proposta não está aprovada para execução em Neon persistente/Production e não deve ser movida para database/migrations até resolver a lineage entre o bootstrap 0001 e a migration operacional 0001.
