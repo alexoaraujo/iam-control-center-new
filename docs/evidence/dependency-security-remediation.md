@@ -29,3 +29,10 @@ The lockfile was committed by the workflow as `1e0ab603bb00d3ce2df7443c9e666948e
 This evidence covers dependency installation, lint, typecheck, tests, build, and the package audit. It does not establish working Auth0 login, managed PostgreSQL connectivity, tenant authorization/RLS, Vercel deployment protections, or production readiness. Keep the pull request in Draft until standard CI passes on the final SHA and the remaining integration/security reviews are complete.
 ## Follow-up: CI trigger coverage
 The base workflow now accepts `pull_request` events for all base branches (not only `main`). The workflow and README correction passed standard CI on base-branch commit `9a6aaaf3b98f086c8a67d1af4eb179765d0ce41e`: https://github.com/alexoaraujo83/iam-control-center/actions/runs/40055207478. This is evidence for that exact base-branch commit only; the dependency-update PR must still pass audit, lint, typecheck, tests, and build on its own updated head SHA.
+
+
+## Current repository baseline — 2026-11-07
+
+O histórico de versões e runs acima permanece como evidência histórica. O main atual declara Node `>=24 <25`, pnpm `10.34.9`, Next.js `16.4.3`, React/React DOM `19.3.1`, ESLint `10.14.0`, TypeScript `6.0.3` e Vitest `5.0.5`. Overrides: `postcss@8.5.23`, `sharp@0.35.5`, `minimatch@11.0.3`.
+
+Evidência atual: main SHA `64f96d84b33aff57d9c09bbe7ff54396e651552c`, run `42430949038`, `quality: SUCCESS`. `preview-deployment` e `auth0-e2e` foram SKIPPED; este run não prova Preview nem login real.
