@@ -55,10 +55,10 @@ a_pid="$(awk -F'|' '$1 == "A_LOCK_ATTEMPT" {print $2; exit}' "$holder_log")"
 b_pid="$(awk -F'|' '$1 == "B_LOCK_ATTEMPT" {print $2; exit}' "$contender_log")"
 a_acquired="$(awk -F'|' '$1 == "A_LOCK_ACQUIRED" {print $3; exit}' "$holder_log")"
 b_attempt="$(awk -F'|' '$1 == "B_LOCK_ATTEMPT" {print $3; exit}' "$contender_log")"
-a_committed="$(awk -F'|' '$1 == "A_TRANSACTION_COMMITTED" {print $3; exit}' "$holder_log")"
+a_release="$(awk -F'|' '$1 == "A_LOCK_RELEASE" {print $3; exit}' "$holder_log")"
 b_acquired="$(awk -F'|' '$1 == "B_LOCK_ACQUIRED" {print $3; exit}' "$contender_log")"
 
-if [[ -z "$a_pid" || -z "$b_pid" || -z "$a_acquired" || -z "$b_attempt" || -z "$a_committed" || -z "$b_acquired" ]]; then
+if [[ -z "$a_pid" || -z "$b_pid" || -z "$a_acquired" || -z "$b_attempt" || -z "$a_release" || -z "$b_acquired" ]]; then
   cat "$holder_log" "$contender_log" >&2
   echo "ERROR: missing lock concurrency evidence" >&2
   exit 1
@@ -67,17 +67,17 @@ if [[ "$a_pid" == "$b_pid" ]]; then
   echo "ERROR: lock contenders did not use distinct PostgreSQL backend PIDs ($a_pid)" >&2
   exit 1
 fi
-if ! awk -v aa="$a_acquired" -v ba="$b_attempt" -v ac="$a_committed" -v bc="$b_acquired" \
-  'BEGIN { exit !(aa < ba && ba < ac && ac < bc) }'; then
+if ! awk -v aa="$a_acquired" -v ba="$b_attempt" -v ar="$a_release" -v bc="$b_acquired" \
+  'BEGIN { exit !(aa < ba && ba < ar && ar < bc) }'; then
   cat "$holder_log" "$contender_log" >&2
-  echo "ERROR: lock event order must be A_acquired < B_attempt < A_commit < B_acquired" >&2
+  echo "ERROR: lock event order must be A_acquired < B_attempt < A_lock_release < B_acquired" >&2
   exit 1
 fi
 if (( elapsed_ms < 2000 )); then
   echo "ERROR: transaction B did not block long enough on the migration advisory lock (${elapsed_ms}ms)" >&2
   exit 1
 fi
-echo "PASS: distinct backend PIDs A=$a_pid B=$b_pid; event order A_acquired < B_attempt < A_commit < B_acquired; B waited ${elapsed_ms}ms"
+echo "PASS: distinct backend PIDs A=$a_pid B=$b_pid; event order A_acquired < B_attempt < A_lock_release < B_acquired; B waited ${elapsed_ms}ms"
 echo "[migration-ledger] validating idempotency, checksum mismatch rejection, and rollback"
 PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql -X --no-password "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
