@@ -77,6 +77,21 @@ BEGIN
 END
 $assert_role_attributes$;
 
+DO $assert_bootstrap_admin_has_no_iam_memberships$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = 'iam_bootstrap_admin'
+       AND granted_role.rolname IN ('iam_owner','iam_migrator','iam_app_runtime')
+  ) THEN
+    RAISE EXCEPTION 'bootstrap administrator must not retain IAM role memberships or ADMIN OPTION';
+  END IF;
+END
+$assert_bootstrap_admin_has_no_iam_memberships$;
+
 DO $assert_no_unexpected_iam_edges$
 DECLARE edge_count integer;
 BEGIN
