@@ -98,3 +98,12 @@ O workflow neon-schema-export está configurado apenas para push em main e o Env
 ### Precisão da instrumentação do lock
 
 O teste registra A_LOCK_RELEASE imediatamente antes do COMMIT de A e B_LOCK_ACQUIRED depois de a sessão B retornar de pg_advisory_xact_lock. Não comparar o timestamp de um SELECT executado depois do COMMIT de A com B_LOCK_ACQUIRED: a sessão B pode acordar e adquirir o lock antes que A execute esse SELECT pós-commit, embora o COMMIT tenha necessariamente liberado o lock. A semântica transacional de pg_advisory_xact_lock, o evento A_LOCK_RELEASE anterior ao COMMIT, o evento B_LOCK_ACQUIRED posterior e o tempo de bloqueio comprovam a contenção sem essa corrida de observabilidade.
+
+
+## Drift de membership do runtime na fonte — 2026-11-08
+
+A consulta read-only da fonte Neon encontrou iam_app_runtime_login com rolinherit=false e membership para iam_app_runtime com INHERIT=true, SET=true, ADMIN=false (grantor iam_database_owner). pg_has_role(..., 'USAGE') e pg_has_role(..., 'SET') retornam true.
+
+O bootstrap versionado define iam_app_runtime_login como LOGIN INHERIT e concede a membership runtime com INHERIT TRUE / SET FALSE / ADMIN FALSE. A origem, portanto, diverge do contrato do bootstrap. A membership observada não concede acesso a iam_owner/migrator, mas permite SET ROLE iam_app_runtime e contraria o requisito documentado de runtime sem SET ROLE.
+
+Estado: DRIFT / DECISION REQUIRED. Não normalizar com GRANT/REVOKE/ALTER ROLE automaticamente. Definir o contrato esperado, validar dependências e testar a alteração em branch descartável antes de qualquer execução persistente.
