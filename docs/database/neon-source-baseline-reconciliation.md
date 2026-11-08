@@ -413,3 +413,12 @@ Todos os registros de teste terminam em ROLLBACK. Nenhum segredo persistente é 
 **Estado:** ADICIONADO, ainda não PASS. A execução no CI do novo HEAD é necessária para validar sintaxe, grants efetivos e comportamento. O contrato ainda não cobre membership/identity/tenant inativos, ausência/rotação de chave ativa, replay de nonce, nem comportamento com memberships reais do provider Neon.
 
 A matriz completa e os gates separados estão em docs/database/iam-postgresql-test-matrix.md. Permanecem pendentes a comparação objeto-a-objeto com a fonte, a lineage da migration incremental e o teste concorrente com duas sessões independentes.
+
+
+## Divergência confirmada entre o catálogo Neon e o dump versionado — 2026-11-08
+
+Consulta read-only atual no Neon canônico confirmou para app_private.current_tenant_id(): SECURITY DEFINER=true, owner=iam_owner e search_path=pg_catalog, app_private, iam. O dump versionado em iam_database_schema.sql ainda declara search_path=pg_catalog, app_private, iam, public para essa função. Portanto, o dump não representa integralmente o estado pós-hardening observado na origem.
+
+Foi endurecido database/tests/restore-source-schema.sh para falhar fechado se o restore não preservar SECURITY DEFINER, owner iam_owner e o search_path exato sem public. A expectativa é que o job detecte a divergência atual até que um export autenticado da fonte canônica atualize o artefato. Não alterar manualmente o dump para imitar a origem: regenerar pelo processo de export autorizado, validar checksum e comparar objeto-a-objeto.
+
+O search_path de iam.set_tenant_context(...) ainda contém public na fonte e permanece um achado de hardening separado, documentado para correção/revisão futura; não foi alterado nesta etapa.
