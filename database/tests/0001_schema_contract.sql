@@ -88,3 +88,47 @@ END
 $assert_no_fixture_rows$;
 
 SELECT 'PASS context-key migration contract: partial unique index, SECURITY DEFINER search_path, authenticated ledger, fail-closed context, uniqueness and rollback' AS result;
+
+
+DO $assert_migration_principal_privileges$
+DECLARE
+  v_lock record;
+  v_record record;
+BEGIN
+  IF NOT has_schema_privilege('iam_migrator', 'iam', 'USAGE')
+     OR NOT has_table_privilege('iam_migrator', 'iam.schema_migrations', 'SELECT')
+     OR has_table_privilege('iam_migrator', 'iam.schema_migrations', 'INSERT')
+     OR has_table_privilege('iam_migrator', 'iam.schema_migrations', 'UPDATE')
+     OR has_table_privilege('iam_migrator', 'iam.schema_migrations', 'DELETE')
+     OR NOT has_function_privilege('iam_migrator', 'iam.acquire_migration_lock()', 'EXECUTE')
+     OR NOT has_function_privilege('iam_migrator', 'iam.record_migration(text,text,text)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'migration principal effective schema/ledger/function privileges diverge from source contract';
+  END IF;
+
+  SELECT p.prosecdef, pg_get_userbyid(p.proowner) AS owner, p.proconfig,
+         coalesce(bool_or(grantee = 0), false) AS public_execute
+    INTO v_lock
+    FROM pg_proc p
+    LEFT JOIN aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a ON true
+   WHERE p.oid = to_regprocedure('iam.acquire_migration_lock()')
+   GROUP BY p.prosecdef, p.proowner, p.proconfig;
+  IF NOT FOUND OR NOT v_lock.prosecdef OR v_lock.owner <> 'iam_owner'
+     OR v_lock.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog']::text[]
+     OR v_lock.public_execute THEN
+    RAISE EXCEPTION 'acquire_migration_lock SECURITY DEFINER/owner/search_path/ACL contract failed';
+  END IF;
+
+  SELECT p.prosecdef, pg_get_userbyid(p.proowner) AS owner, p.proconfig,
+         coalesce(bool_or(grantee = 0), false) AS public_execute
+    INTO v_record
+    FROM pg_proc p
+    LEFT JOIN aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a ON true
+   WHERE p.oid = to_regprocedure('iam.record_migration(text,text,text)')
+   GROUP BY p.prosecdef, p.proowner, p.proconfig;
+  IF NOT FOUND OR NOT v_record.prosecdef OR v_record.owner <> 'iam_owner'
+     OR v_record.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, iam']::text[]
+     OR v_record.public_execute THEN
+    RAISE EXCEPTION 'record_migration SECURITY DEFINER/owner/search_path/ACL contract failed';
+  END IF;
+END
+$assert_migration_principal_privileges$;
