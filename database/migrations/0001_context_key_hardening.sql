@@ -7,6 +7,96 @@
 -- entry atomically with the DDL. session_user must be iam_migrator_login.
 
 BEGIN;
+-- Validate the authenticated login and its complete migration-role path before
+-- SET ROLE, advisory locks, or any schema/data DDL.
+DO $authenticated_role_preflight$
+DECLARE
+  v_login record;
+  v_migrator record;
+  v_login_edges integer;
+  v_migrator_edges integer;
+BEGIN
+  IF session_user <> 'iam_migrator_login' OR current_user <> session_user THEN
+    RAISE EXCEPTION
+      'migration must start as a direct iam_migrator_login session; session_user=%, current_user=%',
+      session_user, current_user;
+  END IF;
+
+  SELECT rolcanlogin, rolinherit, rolsuper, rolbypassrls,
+         rolcreaterole, rolcreatedb, rolreplication
+    INTO v_login
+    FROM pg_roles
+   WHERE rolname = session_user;
+  IF NOT FOUND
+     OR v_login.rolcanlogin IS DISTINCT FROM TRUE
+     OR v_login.rolinherit IS DISTINCT FROM FALSE
+     OR v_login.rolsuper IS DISTINCT FROM FALSE
+     OR v_login.rolbypassrls IS DISTINCT FROM FALSE
+     OR v_login.rolcreaterole IS DISTINCT FROM FALSE
+     OR v_login.rolcreatedb IS DISTINCT FROM FALSE
+     OR v_login.rolreplication IS DISTINCT FROM FALSE THEN
+    RAISE EXCEPTION 'authenticated migrator login has unexpected or privileged role attributes';
+  END IF;
+
+  SELECT rolcanlogin, rolinherit, rolsuper, rolbypassrls,
+         rolcreaterole, rolcreatedb, rolreplication
+    INTO v_migrator
+    FROM pg_roles
+   WHERE rolname = 'iam_migrator';
+  IF NOT FOUND
+     OR v_migrator.rolcanlogin IS DISTINCT FROM FALSE
+     OR v_migrator.rolinherit IS DISTINCT FROM FALSE
+     OR v_migrator.rolsuper IS DISTINCT FROM FALSE
+     OR v_migrator.rolbypassrls IS DISTINCT FROM FALSE
+     OR v_migrator.rolcreaterole IS DISTINCT FROM FALSE
+     OR v_migrator.rolcreatedb IS DISTINCT FROM FALSE
+     OR v_migrator.rolreplication IS DISTINCT FROM FALSE THEN
+    RAISE EXCEPTION 'iam_migrator group role has unexpected or privileged attributes';
+  END IF;
+
+  SELECT count(*) INTO v_login_edges
+    FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid = m.member
+   WHERE member_role.rolname = session_user;
+  IF v_login_edges <> 1 OR NOT EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = session_user
+       AND granted_role.rolname = 'iam_migrator'
+       AND m.inherit_option IS FALSE
+       AND m.set_option IS TRUE
+       AND m.admin_option IS FALSE
+  ) THEN
+    RAISE EXCEPTION 'iam_migrator_login must have exactly one SET-only, non-admin membership: iam_migrator';
+  END IF;
+
+  SELECT count(*) INTO v_migrator_edges
+    FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid = m.member
+   WHERE member_role.rolname = 'iam_migrator';
+  IF v_migrator_edges <> 1 OR NOT EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = 'iam_migrator'
+       AND granted_role.rolname = 'iam_owner'
+       AND m.inherit_option IS FALSE
+       AND m.set_option IS TRUE
+       AND m.admin_option IS FALSE
+  ) THEN
+    RAISE EXCEPTION 'iam_migrator must have exactly one SET-only, non-admin membership: iam_owner';
+  END IF;
+
+  IF NOT pg_has_role(session_user, 'iam_owner', 'MEMBER')
+     OR pg_has_role(session_user, 'iam_owner', 'USAGE') THEN
+    RAISE EXCEPTION 'migrator login must have SET-only transitive membership, never inherited owner privileges';
+  END IF;
+END
+$authenticated_role_preflight$;
+
 -- The login is intentionally not a direct member of iam_owner. Follow the
 -- reviewed two-step role chain so the effective role is iam_owner while the
 -- authenticated session identity remains iam_migrator_login.
