@@ -167,4 +167,10 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -v migration_checksum="$migration_checksum" -v source_sha="$source_sha" \
   -f database/tests/0001_schema_contract.sql
 
-echo "PASS: role bootstrap, role-assumption contract, rollback, source baseline, authenticated migration, index, function hardening, ledger, and context-key uniqueness"
+echo "Running explicit advisory-lock concurrency and migration-ledger semantic tests..."
+bash database/tests/migration-lock-ledger-contract.sh
+
+echo "Running the independent clean-database initial-schema contract..."
+bash database/tests/initial-schema-contract.sh
+
+echo "PASS: role bootstrap, role-assumption, initial schema, incremental migration, advisory-lock concurrency, ledger idempotency/checksum, rollback, RLS default-deny, tenant integrity, and context-key uniqueness"
