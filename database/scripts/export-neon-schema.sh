@@ -125,6 +125,21 @@ BEGIN
      OR has_table_privilege(current_user, 'iam.schema_migrations', 'DELETE') THEN
     RAISE EXCEPTION 'schema export role must not access migration ledger data; capture ledger provenance through a separate approved channel';
   END IF;
+  IF EXISTS (
+    SELECT 1
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname IN ('iam', 'audit', 'app_private')
+       AND c.relkind IN ('r', 'p', 'v', 'm', 'S')
+       AND (
+         has_table_privilege(current_user, c.oid, 'SELECT')
+         OR has_table_privilege(current_user, c.oid, 'INSERT')
+         OR has_table_privilege(current_user, c.oid, 'UPDATE')
+         OR has_table_privilege(current_user, c.oid, 'DELETE')
+       )
+  ) THEN
+    RAISE EXCEPTION 'schema export role must not have table or sequence data privileges';
+  END IF;
 END
 $export_role_preflight$;
 SQL
