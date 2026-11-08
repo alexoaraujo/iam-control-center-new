@@ -138,3 +138,10 @@ O runner CI aplica essa proposta somente no PostgreSQL 18 descartável, após o 
 ## Evidência de concorrência do advisory lock
 
 O teste database/tests/migration-lock-ledger-contract.sh usa dois processos psql independentes e exige PIDs de backend distintos. A sessão A adquire o advisory transaction lock, grava um marcador dentro da transação e registra o evento pre-commit; a sessão B inicia enquanto A mantém o lock, aguarda a aquisição e então deve enxergar o marcador já commitado. O teste valida a ordem A_acquired < B_attempt < A_precommit_marker < B_acquired, a visibilidade do marcador pela sessão B, PIDs diferentes e bloqueio superior a 2 segundos. O marcador é removido com a database descartável e não altera o ledger de migrations.
+
+
+## Limite da baseline schema-only e ledger — 2026-11-08
+
+O dump iam_database_schema.sql é DDL-only. Ele restaura a tabela iam.schema_migrations, mas não transporta o registro 0001_context_key_hardening que existe na fonte Neon. O export reader iam_schema_export_reader não tem SELECT nesse ledger; o catálogo confirmou SELECT=false e DML=false. Logo, o dump não é, isoladamente, uma baseline de migration reproduzível.
+
+A linha de ledger observada na fonte deve ser capturada por um canal read-only separado, aprovado e com provenance; não copiar manualmente para o dump nem conceder SELECT ao export reader sem aprovação. Até isso existir, não declarar a predecessor/lineage da migration 0001 estabelecida. A migration 0002 permanece em database/proposals e é executada somente na fixture descartável.
