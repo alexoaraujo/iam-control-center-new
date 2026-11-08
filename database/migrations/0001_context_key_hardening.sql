@@ -16,6 +16,7 @@ DECLARE
   v_owner record;
   v_login_edges integer;
   v_migrator_edges integer;
+  v_migrator_grantees integer;
   v_owner_edges integer;
   v_owner_grantees integer;
 BEGIN
@@ -117,6 +118,27 @@ BEGIN
     RAISE EXCEPTION 'iam_owner must not be a member of any additional role';
   END IF;
 
+  -- Only the authenticated migrator login may be granted iam_migrator.
+  -- This closes the inverse-membership path: an unrelated login must not be
+  -- able to SET ROLE iam_migrator and then SET ROLE iam_owner.
+  SELECT count(*) INTO v_migrator_grantees
+    FROM pg_auth_members m
+    JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+   WHERE granted_role.rolname = 'iam_migrator';
+  IF v_migrator_grantees <> 1 OR NOT EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+      JOIN pg_roles granted_role ON granted_role.oid = m.roleid
+     WHERE member_role.rolname = 'iam_migrator_login'
+       AND granted_role.rolname = 'iam_migrator'
+       AND m.inherit_option IS FALSE
+       AND m.set_option IS TRUE
+       AND m.admin_option IS FALSE
+  ) THEN
+    RAISE EXCEPTION 'iam_migrator may be granted only to iam_migrator_login with SET-only, non-admin membership (found % grantees)', v_migrator_grantees;
+  END IF;
+
   -- Only the reviewed iam_migrator group may be granted iam_owner.
   -- Reject any additional principal (including a runtime login) that could
   -- SET ROLE iam_owner and cross the migration privilege boundary.
@@ -135,7 +157,7 @@ BEGIN
        AND m.set_option IS TRUE
        AND m.admin_option IS FALSE
   ) THEN
-    RAISE EXCEPTION 'iam_owner may be granted only to iam_migrator with SET-only, non-admin membership';
+    RAISE EXCEPTION 'iam_owner may be granted only to iam_migrator with SET-only, non-admin membership (found % grantees)', v_owner_grantees;
   END IF;
 
   IF NOT pg_has_role(session_user, 'iam_owner', 'MEMBER')
