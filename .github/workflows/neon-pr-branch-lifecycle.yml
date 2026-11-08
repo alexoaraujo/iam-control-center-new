@@ -28,7 +28,8 @@ jobs:
     timeout-minutes: 8
     env:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-      NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+      NEON_PROJECT_ID: twilight-fire-88497009
+      NEON_MAIN_BRANCH_ID: br-little-fire-b6adup9f
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_ACTION: ${{ github.event.action }}
       NEON_API_ROOT: https://console.neon.tech/api/v2
@@ -44,6 +45,10 @@ jobs:
           }
           [[ "${NEON_PROJECT_ID}" == "twilight-fire-88497009" ]] || {
             echo "::error::NEON_PROJECT_ID does not match the canonical IAM Control Center Neon project."
+            exit 1
+          }
+          [[ "${NEON_MAIN_BRANCH_ID}" == "br-little-fire-b6adup9f" ]] || {
+            echo "::error::NEON_MAIN_BRANCH_ID does not match the canonical main branch."
             exit 1
           }
           [[ -n "${NEON_API_KEY:-}" ]] || {
@@ -83,28 +88,27 @@ jobs:
           BRANCHES_JSON="$(api_get_branches)"
           jq -e '.branches | type == "array"' >/dev/null <<< "${BRANCHES_JSON}"
 
-          # Resolve and validate the permanent main (default) -> Development lineage.
-          DEFAULT_BRANCH_JSON="$(jq -ce '[.branches[] | select(.default == true)] |
-            if length == 1 then .[0] else error("Expected exactly one default main branch") end' <<< "${BRANCHES_JSON}")"
-          DEFAULT_BRANCH_NAME="$(jq -r '.name // empty' <<< "${DEFAULT_BRANCH_JSON}")"
-          DEFAULT_BRANCH_ID="$(jq -r '.id' <<< "${DEFAULT_BRANCH_JSON}")"
-          DEFAULT_BRANCH_STATE="$(jq -r '.current_state // empty' <<< "${DEFAULT_BRANCH_JSON}")"
-          [[ "${DEFAULT_BRANCH_NAME}" == "main" ]] || {
-            echo "::error::The default Neon branch must be named exactly main; refusing topology drift."
+          # Resolve and validate the canonical default main branch.
+          MAIN_JSON="$(jq -ce --arg expected_id "${NEON_MAIN_BRANCH_ID}" '
+            [.branches[] | select(.default == true and .name == "main" and .id == $expected_id)] |
+            if length == 1 then .[0] else error("Expected exactly one canonical default main branch") end
+          ' <<< "${BRANCHES_JSON}")"
+          MAIN_ID="$(jq -r '.id' <<< "${MAIN_JSON}")"
+          MAIN_STATE="$(jq -r '.current_state // empty' <<< "${MAIN_JSON}")"
+          [[ "${MAIN_STATE}" == "ready" ]] || {
+            echo "::error::Canonical main branch is not ready."
             exit 1
           }
-          [[ "${DEFAULT_BRANCH_STATE}" == "ready" ]] || {
-            echo "::error::Default main branch is not ready."
-            exit 1
-          }
-          DEVELOPMENT_JSON="$(jq -ce --arg parent "${DEFAULT_BRANCH_ID}" '
+
+          # Preserve the canonical permanent lineage: main -> development.
+          DEVELOPMENT_JSON="$(jq -ce --arg parent "${MAIN_ID}" '
             [.branches[] | select(.name == "development" and .parent_id == $parent)] |
-            if length == 1 then .[0] else error("Expected exactly one Development branch whose parent is the default main branch") end
+            if length == 1 then .[0] else error("Expected exactly one development branch whose parent is canonical main") end
           ' <<< "${BRANCHES_JSON}")"
           DEVELOPMENT_ID="$(jq -r '.id' <<< "${DEVELOPMENT_JSON}")"
           DEVELOPMENT_STATE="$(jq -r '.current_state // empty' <<< "${DEVELOPMENT_JSON}")"
           [[ "${DEVELOPMENT_STATE}" == "ready" ]] || {
-            echo "::error::Development branch is not ready."
+            echo "::error::Canonical development branch is not ready."
             exit 1
           }
 
