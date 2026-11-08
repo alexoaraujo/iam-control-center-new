@@ -107,3 +107,16 @@ A consulta read-only da fonte Neon encontrou iam_app_runtime_login com rolinheri
 O bootstrap versionado define iam_app_runtime_login como LOGIN INHERIT e concede a membership runtime com INHERIT TRUE / SET FALSE / ADMIN FALSE. A origem, portanto, diverge do contrato do bootstrap. A membership observada não concede acesso a iam_owner/migrator, mas permite SET ROLE iam_app_runtime e contraria o requisito documentado de runtime sem SET ROLE.
 
 Estado: DRIFT / DECISION REQUIRED. Não normalizar com GRANT/REVOKE/ALTER ROLE automaticamente. Definir o contrato esperado, validar dependências e testar a alteração em branch descartável antes de qualquer execução persistente.
+
+
+## Achado adicional de semântica do contexto — 2026-11-08
+
+Consulta read-only ao catálogo Neon canônico confirmou:
+- app_private.current_tenant_id(): provolatile = s (STABLE), SECURITY DEFINER, owner iam_owner, search_path endurecido pg_catalog, app_private, iam.
+- iam.set_tenant_context(...): provolatile = v (VOLATILE), SECURITY DEFINER, owner iam_owner, search_path ainda inclui public.
+
+Como current_tenant_id() lê GUCs de contexto mutáveis na transação e clock_timestamp(), STABLE pode permitir reutilização de resultado dentro de um statement quando a aplicação alterna tenant context. O CI anterior da PR #86 falhou no teste de assinatura adulterada após uma chamada válida no mesmo DO, o que expôs essa semântica; o teste original foi separado para continuar validando cada caso, mas isso não substitui a correção da função.
+
+A PR #85 adicionou a proposta fora da pasta de migrations ativas: database/proposals/0002_context_resolver_volatility_hardening.sql. Ela altera current_tenant_id para VOLATILE e remove public do search_path de set_tenant_context. O contrato database/tests/0002_context_resolver_volatility_contract.sql alterna tenant A → B no mesmo bloco DO e verifica RLS sem dados cruzados. O runner executa a proposta somente em PostgreSQL 18 descartável, nunca em Neon persistente.
+
+A migration 0001 já está registrada no ledger Neon; não reescrever seu arquivo/checksum. A proposta 0002 continua pendente de lineage, revisão, CI exato e gate próprio antes de qualquer execução persistente.
