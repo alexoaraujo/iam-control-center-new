@@ -91,8 +91,19 @@ Section differences requiring explicit classification:
 
 These results prove exact equality for the listed structural sections, not full equivalence. ACL, role, extension, and routine deltas remain explicit gates. No provider role or ACL is being copied into the portable restore.
 
-### Application login membership decision gate
+### Application login membership decision — approved contract
 
-The source catalog shows the membership edge `iam_app_runtime` granted to `iam_app_runtime_login` with `inherit_option=true` and `set_option=true`. The versioned IAM role contract previously expected `SET FALSE`. This is an application-security discrepancy, not a Neon provider-role difference. Do not reproduce or alter this membership in the persistent Neon source until the contract owner approves the intended SET behavior. Any reconciliation test must use a disposable database and explicitly assert the approved value. The other login-role memberships and export-reader schema/database grants also remain separate provisioning inputs; they are not supplied by the schema-only dump.
+The source catalog shows the membership edge `iam_app_runtime` granted to `iam_app_runtime_login` with `inherit_option=true` and `set_option=true`. This differs from the versioned IAM role bootstrap contract.
+
+**Approved security decision (2026-11-08): retain `INHERIT TRUE / SET FALSE / ADMIN FALSE`.** The login may inherit only the explicitly granted runtime privileges; it must not be able to assume the group role with `SET ROLE`. The observed source value `SET TRUE` is a configuration drift/security discrepancy and must not be copied into a portable baseline or treated as an accepted exception.
+
+The existing disposable PostgreSQL bootstrap contract already encodes this decision:
+- `database/bootstrap/0000_iam_roles.sql` grants `iam_app_runtime` to `iam_app_runtime_login` with `INHERIT TRUE, SET FALSE, ADMIN FALSE`.
+- `database/tests/0000_role_bootstrap_contract.sql` asserts those exact membership options.
+- `database/tests/role-assumption-contract.sql` asserts the runtime principal has no membership path to `iam_owner` or `iam_migrator`, and no unexpected IAM membership edges.
+
+These assertions must run in disposable PostgreSQL CI. Any future reconciliation of the persistent Neon membership requires a separately reviewed, environment-specific change and an explicit execution gate; this documentation decision does not itself authorize DDL or GRANT/REVOKE on Neon.
+
+The other login-role memberships and export-reader schema/database grants also remain separate provisioning inputs; they are not supplied by the schema-only dump.
 
 No DDL, GRANT, migration, seed, role change, or application-data query was performed on the Neon source for this validation. Independent review and the protected authenticated export workflow remain separate gates.
