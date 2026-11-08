@@ -159,4 +159,11 @@ $function$;
 REVOKE ALL ON SCHEMA iam, audit, app_private FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA iam, app_private FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA iam, app_private FROM PUBLIC;
+
+-- Reproduce the minimal source privileges required by the migration principal.
+-- The bootstrap intentionally grants no schema/table/function privileges.
+GRANT USAGE ON SCHEMA iam TO iam_migrator;
+GRANT SELECT ON TABLE iam.schema_migrations TO iam_migrator;
+GRANT EXECUTE ON FUNCTION iam.acquire_migration_lock() TO iam_migrator;
+GRANT EXECUTE ON FUNCTION iam.record_migration(text, text, text) TO iam_migrator;
 RESET ROLE;
