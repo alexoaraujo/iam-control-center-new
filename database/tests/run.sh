@@ -61,6 +61,55 @@ SQL
 echo "Running migration over an authenticated non-privileged LOGIN session..."
 migration_checksum="$(sha256sum database/migrations/0001_context_key_hardening.sql | awk '{print $1}')"
 source_sha="$(git rev-parse HEAD)"
+
+# Negative security tests: each privileged attribute and unexpected membership
+# must be rejected before SET ROLE/DDL. Confirm the failed transaction leaves
+# both the index and migration ledger untouched.
+assert_migration_rejected() {
+  local scenario="$1"
+  if PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1 \
+    -v migration_checksum="$migration_checksum" -v source_sha="$source_sha" \
+    -f database/migrations/0001_context_key_hardening.sql >/dev/null 2>&1; then
+    echo "ERROR: migration unexpectedly accepted unsafe role state: $scenario" >&2
+    exit 1
+  fi
+  local index_count ledger_count
+  index_count="$(PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 \
+    -c "SELECT count(*) FROM pg_class WHERE oid = to_regclass('app_private.context_keys_one_active_idx');")"
+  ledger_count="$(PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -At -v ON_ERROR_STOP=1 \
+    -c "SELECT count(*) FROM iam.schema_migrations WHERE migration_id = '0001_context_key_hardening';")"
+  test "$index_count" = "0"
+  test "$ledger_count" = "0"
+  echo "PASS: unsafe role state rejected before DDL ($scenario)"
+}
+
+for attribute in SUPERUSER BYPASSRLS CREATEROLE CREATEDB; do
+  case "$attribute" in
+    SUPERUSER) disable_attribute="NOSUPERUSER" ;;
+    BYPASSRLS) disable_attribute="NOBYPASSRLS" ;;
+    CREATEROLE) disable_attribute="NOCREATEROLE" ;;
+    CREATEDB) disable_attribute="NOCREATEDB" ;;
+  esac
+  PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+    -c "ALTER ROLE iam_migrator_login $attribute;"
+  assert_migration_rejected "$attribute"
+  PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+    -c "ALTER ROLE iam_migrator_login $disable_attribute;"
+done
+
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "GRANT iam_app_runtime TO iam_migrator_login WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;"
+assert_migration_rejected "unexpected iam_app_runtime membership"
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "REVOKE iam_app_runtime FROM iam_migrator_login;"
+
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "GRANT iam_owner TO iam_migrator_login WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;"
+assert_migration_rejected "direct iam_owner membership"
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "REVOKE iam_owner FROM iam_migrator_login;"
+
+echo "Running migration over the authenticated, least-privilege LOGIN session..."
 PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1 \
   -v migration_checksum="$migration_checksum" -v source_sha="$source_sha" \
   -f database/migrations/0001_context_key_hardening.sql
