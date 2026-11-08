@@ -105,8 +105,18 @@ BEGIN
     RAISE EXCEPTION 'cross-tenant INSERT unexpectedly succeeded';
   END IF;
 
+  -- Clear the previously valid tenant A context before testing invalid inputs.
+  -- PostgreSQL rolls back a function's transaction-local GUC changes when its
+  -- exception is caught by the caller; this test therefore asserts fail-closed
+  -- behavior from a clean context rather than assuming a failed call clears an
+  -- earlier valid context.
+  PERFORM iam.clear_tenant_context();
+  IF app_private.current_tenant_id() IS NOT NULL THEN
+    RAISE EXCEPTION 'clear_tenant_context did not clear the active tenant';
+  END IF;
+
   -- Invalid signatures, expired contexts, and lifetimes over 300 seconds
-  -- must be rejected and leave the transaction without tenant context.
+  -- must be rejected when no prior tenant context is active.
   v_rejected := false;
   BEGIN
     PERFORM iam.set_tenant_context(
