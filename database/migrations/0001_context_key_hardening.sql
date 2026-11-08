@@ -141,14 +141,15 @@ BEGIN
   END IF;
 
   -- iam_migrator may be granted only to the authenticated login and the
-  -- database owner. The owner edge must be ADMIN-only and issued by a
-  -- superuser/provider grantor (cloud_admin on Neon; postgres in disposable CI).
+  -- actual database owner. Neon/PostgreSQL 18 can expose both a provider-issued
+  -- ADMIN edge and one owner-issued SET-only edge for that owner. Accept exactly
+  -- those two option shapes; all other grantees and duplicate provider edges fail closed.
   SELECT count(*) INTO v_migrator_grantees
     FROM pg_auth_members m
     JOIN pg_roles granted_role ON granted_role.oid = m.roleid
    WHERE granted_role.rolname = 'iam_migrator';
 
-  IF v_migrator_grantees <> 2
+  IF v_migrator_grantees NOT IN (2, 3)
      OR NOT EXISTS (
        SELECT 1
          FROM pg_auth_members m
@@ -160,8 +161,8 @@ BEGIN
           AND m.set_option IS TRUE
           AND m.admin_option IS FALSE
      )
-     OR NOT EXISTS (
-       SELECT 1
+     OR (
+       SELECT count(*)
          FROM pg_auth_members m
          JOIN pg_roles grantor_role ON grantor_role.oid = m.grantor
         WHERE m.member = v_database_owner
@@ -170,6 +171,30 @@ BEGIN
           AND m.set_option IS FALSE
           AND m.admin_option IS TRUE
           AND grantor_role.rolsuper IS TRUE
+     ) <> 1
+     OR (
+       SELECT count(*)
+         FROM pg_auth_members m
+        WHERE m.member = v_database_owner
+          AND m.roleid = (SELECT oid FROM pg_roles WHERE rolname = 'iam_migrator')
+          AND m.inherit_option IS FALSE
+          AND m.set_option IS TRUE
+          AND m.admin_option IS FALSE
+          AND m.grantor = v_database_owner
+     ) > 1
+     OR EXISTS (
+       SELECT 1
+         FROM pg_auth_members m
+         JOIN pg_roles grantor_role ON grantor_role.oid = m.grantor
+        WHERE m.member = v_database_owner
+          AND m.roleid = (SELECT oid FROM pg_roles WHERE rolname = 'iam_migrator')
+          AND NOT (
+            (m.inherit_option IS FALSE AND m.set_option IS FALSE
+             AND m.admin_option IS TRUE AND grantor_role.rolsuper IS TRUE)
+            OR
+            (m.inherit_option IS FALSE AND m.set_option IS TRUE
+             AND m.admin_option IS FALSE AND m.grantor = v_database_owner)
+          )
      )
      OR EXISTS (
        SELECT 1
@@ -179,7 +204,7 @@ BEGIN
         WHERE granted_role.rolname = 'iam_migrator'
           AND member_role.rolname NOT IN ('iam_migrator_login', v_database_owner_name)
      ) THEN
-    RAISE EXCEPTION 'iam_migrator must be granted only to iam_migrator_login and the exact provider database-owner ADMIN edge (found % grantees)', v_migrator_grantees;
+    RAISE EXCEPTION 'iam_migrator may be granted only to iam_migrator_login and the exact provider database-owner edges (found % membership rows)', v_migrator_grantees;
   END IF;
 
   -- iam_owner may be granted to iam_migrator and to the actual database
