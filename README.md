@@ -15,7 +15,7 @@ Auth0 is the identity provider; application authorization and tenant membership 
 
 ## Prerequisites
 - Node.js 24.x
-- pnpm 10.12.1 (pinned through `packageManager`)
+- pnpm 10.34.9 (pinned through `packageManager`)
 - PostgreSQL for future integration tests
 - Auth0 development tenant created separately
 - Private GitHub repository and Vercel project created separately
