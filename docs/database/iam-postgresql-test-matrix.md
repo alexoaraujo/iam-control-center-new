@@ -120,3 +120,16 @@ Como current_tenant_id() lê GUCs de contexto mutáveis na transação e clock_t
 A PR #85 adicionou a proposta fora da pasta de migrations ativas: database/proposals/0002_context_resolver_volatility_hardening.sql. Ela altera current_tenant_id para VOLATILE e remove public do search_path de set_tenant_context. O contrato database/tests/0002_context_resolver_volatility_contract.sql alterna tenant A → B no mesmo bloco DO e verifica RLS sem dados cruzados. O runner executa a proposta somente em PostgreSQL 18 descartável, nunca em Neon persistente.
 
 A migration 0001 já está registrada no ledger Neon; não reescrever seu arquivo/checksum. A proposta 0002 continua pendente de lineage, revisão, CI exato e gate próprio antes de qualquer execução persistente.
+
+
+## Read-only preflight da role de export — 2026-11-08
+
+A role iam_schema_export_reader existe na fonte canônica:
+- LOGIN=true, INHERIT=false, SUPERUSER/BYPASSRLS/CREATEROLE/CREATEDB/REPLICATION=false;
+- CONNECT em iam_database=true;
+- USAGE em iam, audit, app_private e public=true;
+- CREATE nesses schemas=false;
+- nenhuma membership concedida ao reader;
+- a única aresta relacionada é iam_database_owner → iam_schema_export_reader, concedida por cloud_admin com ADMIN=true, INHERIT=false e SET=false (provider-managed; não é capacidade do reader).
+
+O perfil catalogado é compatível com export schema-only least-privilege. Ainda falta provar autenticação efetiva e executar pg_dump 18 pelo Environment neon-schema-export; não presumir que o secret NEON_SCHEMA_EXPORT_URL esteja configurado com essa role, pois seu valor não foi lido.
