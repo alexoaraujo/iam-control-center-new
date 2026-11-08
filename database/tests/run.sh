@@ -74,7 +74,7 @@ ALTER ROLE iam_migrator_login PASSWORD :'migrator_password';
 SQL
 
 echo "Running migration over an authenticated non-privileged LOGIN session..."
-migration_checksum="$(sha256sum database/migrations/0001_context_key_hardening.sql | awk '{print $1}')"
+migration_checksum="$(sha256sum database/archive/source-applied-migrations/0001_context_key_hardening.sql | awk '{print $1}')"
 source_sha="$(git rev-parse HEAD)"
 
 # Negative security tests: each privileged attribute and unexpected membership
@@ -84,7 +84,7 @@ assert_migration_rejected() {
   local scenario="$1"
   if PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1 \
     -v migration_checksum="$migration_checksum" -v source_sha="$source_sha" \
-    -f database/migrations/0001_context_key_hardening.sql >/dev/null 2>&1; then
+    -f database/archive/source-applied-migrations/0001_context_key_hardening.sql >/dev/null 2>&1; then
     echo "ERROR: migration unexpectedly accepted unsafe role state: $scenario" >&2
     exit 1
   fi
@@ -162,7 +162,7 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 echo "Running migration over the authenticated, least-privilege LOGIN session..."
 PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1 \
   -v migration_checksum="$migration_checksum" -v source_sha="$source_sha" \
-  -f database/migrations/0001_context_key_hardening.sql
+  -f database/archive/source-applied-migrations/0001_context_key_hardening.sql
 
 # Contract checks inspect the disposable database as its administrator.
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
