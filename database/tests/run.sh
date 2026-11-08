@@ -63,4 +63,5 @@ echo "Running migration over an authenticated non-privileged LOGIN session..."
 # Schema contract checks intentionally run as the disposable test administrator
 # because they inspect ownership and exercise test-only grants/RLS behavior.
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/0001_schema_contract.sql
-echo "PASS: role bootstrap, role-assumption contract, rollback, migration chain, schema contract, and RLS default-deny tests"
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/effective-privileges-contract.sql
+echo "PASS: role bootstrap, role-assumption contract, rollback, migration chain, schema contract, effective privilege audit, and RLS default-deny tests"
