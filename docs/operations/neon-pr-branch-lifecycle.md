@@ -36,18 +36,18 @@ Read-only Neon API inspection confirmed:
 - Login `iam_migrator_login` exists.
 - A read-only session using that login confirmed `current_user = iam_migrator_login`, database `iam_database`, CONNECT and public schema USAGE, and no CREATE on schema `public`.
 - The role has LOGIN, and does not have SUPERUSER, BYPASSRLS, CREATEDB, or CREATEROLE.
-- The Neon project currently has 8 branches against the Free-plan limit of 10. The workflow fails closed when the project already has 10 branches; it never deletes permanent or existing branches to make room.
+- The Neon project currently has 5 branches against the Free-plan limit of 10. The workflow fails closed when the project already has 10 branches; it never deletes permanent or existing branches to make room.
 
 The MCP SQL session is not proof of TLS on the application's network path. The actual CI migration connection must use `sslmode=require` and its TLS behavior must be verified from the runner before a migration is considered validated.
 
 ## Purpose and lifecycle
 
-Create one short-lived Neon branch for each same-repository pull request, using the canonical `main` branch as its parent. The workflow:
+Create one short-lived Neon branch for each same-repository pull request, validating the permanent `main` → `development` lineage and using `development` as the temporary branch parent. The workflow:
 
 - Runs on `opened`, `reopened`, `synchronize`, and `closed` events through `pull_request_target`.
 - Ignores fork PRs.
 - Uses the unique default branch only if its name and ID exactly match the canonical `main` branch above and its state is `ready`.
-- Creates or reuses `preview/pr-<number>` as a child of `main`.
+- Validates that `development` is a READY direct child of the canonical READY `main` branch.\n- Creates or reuses `preview/pr-<number>` as a child of `development`.
 - Requires an exact ownership annotation before reusing a branch or refreshing its TTL.
 - Sets and verifies a 14-day expiration.
 - Does not provision a compute endpoint, export a connection string, run a migration, seed data, or modify Vercel environments.
@@ -73,7 +73,7 @@ Do not add checkout, scripts, artifacts, package installation, or commands sourc
 
 This workflow is not active until it is merged into the repository default branch. Keep the PR Draft until independent review is complete. Before treating the lifecycle as operationally accepted, run a controlled same-repository PR and verify:
 
-- the branch is created from `main`, not from another branch;
+- the permanent `development` branch is validated as a direct child of canonical `main`;\n- the PR branch is created from `development`, not directly from `main` or another branch;
 - no compute endpoint is provisioned;
 - retry/synchronize reuses only the exact owned branch;
 - the expiration matches 14 days;
