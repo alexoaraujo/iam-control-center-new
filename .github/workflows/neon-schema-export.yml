@@ -1,7 +1,14 @@
 name: Neon post-hardening schema export
 
 on:
-  workflow_dispatch:
+  # Only the trusted default branch may run the source export. Removing
+  # workflow_dispatch prevents selecting an attacker-controlled workflow ref.
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/neon-schema-export.yml"
+      - "database/scripts/export-neon-schema.sh"
 
 permissions:
   contents: read
@@ -23,6 +30,8 @@ jobs:
     steps:
       - name: Checkout exact workflow commit
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
 
       - name: Validate source and export schema with verified TLS
         shell: bash
@@ -41,7 +50,7 @@ jobs:
 
           raw = os.environ.get("NEON_SCHEMA_EXPORT_URL", "")
           u = urlparse(raw)
-          allowed_host = "ep-lucky-frost-b631bopg.c-2.sa-east-1.aws.neon.tech"
+          allowed_host = "ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech"
           if u.scheme not in ("postgres", "postgresql"):
               raise SystemExit("Connection must use PostgreSQL URI scheme")
           if u.hostname != allowed_host or (u.hostname or "").endswith("-pooler.c-2.sa-east-1.aws.neon.tech"):
@@ -94,8 +103,8 @@ jobs:
             echo "branch=${GITHUB_REF_NAME}"
             echo "commit=${GITHUB_SHA}"
             echo "database=iam_database"
-            echo "source_branch=schema-export-validation-20261105"
-            echo "source_host=ep-lucky-frost-b631bopg.c-2.sa-east-1.aws.neon.tech"
+            echo "source_branch=main"
+            echo "source_host=ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech"
             echo "format=plain SQL, schema-only"
             echo "schemas=iam,audit,app_private"
             echo "extension_dependency=pgcrypto in public"
@@ -104,7 +113,7 @@ jobs:
           } > artifacts/manifest.txt
 
       - name: Publish immutable run artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: neon-iam-schema-post-hardening-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
