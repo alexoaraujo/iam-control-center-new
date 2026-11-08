@@ -17,6 +17,7 @@ on:
       - "feat/iam-role-bootstrap-review"
     paths:
       - "database/**"
+      - "iam_database_schema.sql"
       - "role-security-harness/**"
       - "scripts/test-postgres18-role-security-harness.sh"
       - "docs/architecture/iam-decisions.md"
@@ -91,11 +92,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
-      - name: Install PostgreSQL client
+      - name: Restore complete source schema with PostgreSQL 18 client
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes postgresql-client
-      - name: Verify PostgreSQL version
-        run: psql -X --no-password "$DATABASE_URL" -Atc "SHOW server_version;"
-      - name: Restore complete source schema in disposable PostgreSQL
-        run: bash database/tests/restore-source-schema.sh
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            --env DATABASE_URL="$DATABASE_URL" \
+            --env PGPASSWORD="$PGPASSWORD" \
+            postgres:18-bookworm \
+            bash -euo pipefail -c '
+              psql -X --no-password "$DATABASE_URL" -Atc "SHOW server_version;"
+              bash database/tests/restore-source-schema.sh
+            '
