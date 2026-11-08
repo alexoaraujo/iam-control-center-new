@@ -288,6 +288,6 @@ A branch main contém ainda as roles `iam_owner`, `iam_migrator`, `iam_app_runti
 
 1. Para o workflow `.github/workflows/neon-pr-branch-lifecycle.yml`, `twilight-fire-88497009` é o project ID autorizado. O workflow deve validar a branch `main` default e `development` como filha direta de main; não deve chamar main de Production.
 2. O projeto `wandering-wildflower-90908845` continua existindo e contém evidências históricas de outra topologia. Ele não é o alvo desta automação de entrega do banco e não deve ser usado como fallback.
-3. O inventário atual da API lista 10 branches no projeto de destino, atingindo o limite Free informado de 10. O workflow deve falhar fechado ao tentar criar uma nova branch de PR enquanto o limite estiver cheio. Não excluir branches existentes automaticamente nem reduzir evidências para liberar espaço.
+3. O inventário read-only da API em 2026-11-08 lista 5 branches no projeto de destino; o limite informado do plano Free é 10. Há capacidade nominal disponível neste inventário, mas o workflow deve recalcular a contagem no momento da execução e falhar fechado se o limite for atingido. Não excluir branches existentes automaticamente nem reduzir evidências para liberar espaço.
 4. A contagem de 23 tabelas do snapshot `schema-export-validation-20261105` é um artefato histórico de uma branch isolada do projeto de destino. Ela não prova equivalência com o estado atual de `main`.
 5. Nenhuma migration, DDL, grant, alteração de dados, senha/secret ou branch persistente foi alterada nesta reconciliação.
