@@ -83,3 +83,13 @@ O erro foi reproduzido no restore descartável: o dump contém app_private.curre
 Consulta read-only atual à fonte Neon canônica confirmou app_private.current_tenant_id() SECURITY DEFINER, owner iam_owner e search_path=pg_catalog, app_private, iam. Portanto, a origem está hardened e o arquivo iam_database_schema.sql versionado está desatualizado; não corrigir o dump por edição manual nem declarar equivalência. É necessário regenerar o dump com pg_dump 18 autenticado contra a fonte allowlisted, preservar checksum/manifesto, restaurar novamente e comparar objeto-a-objeto.
 
 O workflow neon-schema-export está configurado apenas para push em main e o Environment neon-schema-export/deployment branch policy não foi verificado por ferramenta disponível nesta sessão. Não foi executado export autenticado nesta rodada. O gate de baseline permanece BLOCKED até existir artefato exportado da fonte, com provenance e checksum verificáveis.
+
+
+## Resultado de CI — 2026-11-08 (HEAD 51f9098a5a8b8506fae05909c9e289b799fea97a)
+
+- CI run 42460672899: quality SUCCESS no HEAD da PR; preview-deployment e auth0-e2e SKIPPED.
+- Database run 42460672895: postgres-18-schema-contract SUCCESS; postgres-18-source-schema-restore FAILURE.
+- Causa exata: o restore restaurou 23 tabelas, 1 view, 9 funções, 7 enums, 12 triggers, 41 policies, 63 índices, 20 tabelas com RLS/FORCE RLS, ownership e pgcrypto; porém app_private.current_tenant_id() no dump foi restaurada com config search_path=pg_catalog, app_private, iam, public, enquanto o catálogo Neon atual confirma search_path=pg_catalog, app_private, iam. O novo gate falhou corretamente e bloqueou o contrato dinâmico seguinte.
+- O primeiro run do contrato dinâmico (42460479806) falhou no caso de assinatura adulterada porque os casos estavam agrupados em um único bloco DO. A implementação foi separada em DOs independentes; ainda não há execução verde do contrato dinâmico, pois o restore agora falha antes de invocá-lo.
+- Estado: catálogo/restore atual BLOCKED por drift real do dump; contrato dinâmico ADDED / NOT YET EXECUTED; não declarar PASS.
+- Próximo passo seguro: export autenticado via workflow aprovado da fonte Neon canônica, regenerar artefato sem edição manual, validar checksum e comparação objeto-a-objeto; depois reexecutar restore e contrato runtime.
