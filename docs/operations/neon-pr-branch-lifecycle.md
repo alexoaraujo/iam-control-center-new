@@ -1,129 +1,91 @@
-# Ciclo de vida seguro de branch PR no Neon
+# Neon PR branch lifecycle
 
-## Objetivo
+## Canonical Neon target
 
-Garantir que cada pull request do próprio repositório receba uma branch temporária isolada no Neon, mantendo a linha permanente de `Production -> Development` intacta e sem criar migrations, endpoints de computação ou credenciais adicionais.
+This repository uses the following Neon project for IAM database delivery:
 
-## Escopo e limites
+| Setting | Canonical value |
+|---|---|
+| Project | `iam-database-delivery` |
+| Project ID | `twilight-fire-88497009` |
+| Permanent branch | `main` |
+| Branch ID | `br-little-fire-b6adup9f` |
+| Endpoint | `ep-twilight-shadow-b618ef5h` |
+| Database | `iam_database` |
+| Migration login | `iam_migrator_login` |
+| TLS mode | `sslmode=require` |
 
-Este documento cobre o workflow `.github/workflows/neon-pr-branch-lifecycle.yml` e a intenção operacional dele. Ele não substitui uma auditoria de produção, nem prova que a infraestrutura remota está 100% isolada em todos os níveis.
+The workflow pins the project and main-branch identifiers in its trusted default-branch definition. It does not depend on a mutable `NEON_PROJECT_ID` Actions variable. The only required GitHub Actions secret is `NEON_API_KEY`; its value must never be printed, copied into logs, or committed.
 
-O workflow:
-- reage somente a `pull_request_target` para PRs do mesmo repositório;
-- ignora forks e eventos fora do repositório canônico;
-- não faz `checkout`, não baixa artefatos e não executa código do PR;
-- cria ou reutiliza `preview/pr-<número>` como branch filha de `development`;
-- define expiração de 14 dias e verifica nome, parent e TTL;
-- falha fechado em caso de dados inválidos, projeto incorreto, parent inesperado ou limite da conta;
-- não exclui automaticamente ao fechar o PR, por ausência de prova de autoria da branch.
+For migration clients, use the direct (non-pooled) endpoint host:
 
-## Premissas
+```text
+postgresql://iam_migrator_login:<PASSWORD>@ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech/iam_database?sslmode=require
+```
 
-Antes do uso em produção, o repositório deve possuir:
-- `NEON_API_KEY` configurado como GitHub Actions secret;
-- `NEON_PROJECT_ID` configurado como repository variable com valor canônico;
-- `Production` e `Development` como branches permanentes esperadas no projeto Neon;
-- projeto Neon canônico identificado como `wandering-wildflower-90908845`.
+Supply the password through the CI secret store, never in source control. Do not use the `-pooler` hostname for schema migrations. Application runtime connections must use their separately provisioned least-privilege login, not the migration login.
 
-## Como o workflow funciona
+## Verified Neon inventory
 
-### 1. Validação inicial
+Read-only Neon API inspection confirmed:
 
-O primeiro passo valida:
-- número do PR em formato numérico positivo;
-- `NEON_PROJECT_ID` igual ao projeto canônico;
-- presença de `NEON_API_KEY`;
-- ação permitida: `opened`, `reopened`, `synchronize` ou `closed`.
+- Project `twilight-fire-88497009` exists in `aws-sa-east-1`, PostgreSQL 18.
+- `main` is the unique default branch, ID `br-little-fire-b6adup9f`, state `ready`.
+- Endpoint `ep-twilight-shadow-b618ef5h` is the read-write endpoint attached to that branch. It was idle/suspended at inspection time; the first connection may incur a cold start.
+- Database `iam_database` exists and is owned by `iam_database_owner`.
+- Login `iam_migrator_login` exists.
+- A read-only session using that login confirmed `current_user = iam_migrator_login`, database `iam_database`, CONNECT and public schema USAGE, and no CREATE on schema `public`.
+- The role has LOGIN, and does not have SUPERUSER, BYPASSRLS, CREATEDB, or CREATEROLE.
+- The Neon project currently has 8 branches against the Free-plan limit of 10. The workflow fails closed when the project already has 10 branches; it never deletes permanent or existing branches to make room.
 
-Todas as validações são feitas sem expor segredos em logs.
+The MCP SQL session is not proof of TLS on the application's network path. The actual CI migration connection must use `sslmode=require` and its TLS behavior must be verified from the runner before a migration is considered validated.
 
-### 2. Verificação da linha permanente
+## Purpose and lifecycle
 
-A API do Neon é consultada para listar as branches do projeto. Em seguida, o workflow confirma:
-- existe exatamente uma branch `default == true`;
-- seu `current_state` é `ready`;
-- existe exatamente uma branch `development` com `parent_id` igual ao `id` da branch de produção;
-- a branch de desenvolvimento também está pronta.
+Create one short-lived Neon branch for each same-repository pull request, using the canonical `main` branch as its parent. The workflow:
 
-Se qualquer um desses passos falhar, o job termina sem alterar a infraestrutura de PR.
+- Runs on `opened`, `reopened`, `synchronize`, and `closed` events through `pull_request_target`.
+- Ignores fork PRs.
+- Uses the unique default branch only if its name and ID exactly match the canonical `main` branch above and its state is `ready`.
+- Creates or reuses `preview/pr-<number>` as a child of `main`.
+- Requires an exact ownership annotation before reusing a branch or refreshing its TTL.
+- Sets and verifies a 14-day expiration.
+- Does not provision a compute endpoint, export a connection string, run a migration, seed data, or modify Vercel environments.
+- Does not delete a branch automatically on PR close. The TTL is the fallback; manual cleanup requires independent ownership and dependency verification.
 
-### 3. Nome da branch temporária
+## Security model
 
-A branch gerenciada é:
-- `preview/pr-<PR_NUMBER>`
+The workflow is privileged because it uses the Neon Management API key. It therefore:
 
-Esse nome é determinístico para o PR em questão e ajuda a evitar conflitos com branches permanentes do ambiente.
+1. Uses the workflow definition from the repository default branch.
+2. Does not check out, download, build, or execute PR content.
+3. Has no `GITHUB_TOKEN` permissions (`permissions: {}`).
+4. Accepts only a numeric PR number from the event and constructs the branch name internally.
+5. Ignores fork PRs.
+6. Validates the canonical project ID, canonical default main-branch ID, and `ready` state before creating a branch.
+7. Serializes trusted PR lifecycle events for this repository.
+8. Fails closed on unexpected branch parent, missing ownership annotation, quota exhaustion, or API errors.
+9. Never logs the API key, passwords, or connection strings.
 
-### 4. Criação ou reutilização
+Do not add checkout, scripts, artifacts, package installation, or commands sourced from PR content to this privileged workflow.
 
-Se a branch ainda não existe:
-- verifica se o limite gratuito de 10 branches foi atingido;
-- cria a branch como filha de `development`;
-- define `expires_at` para 14 dias no futuro;
-- anexa metadados de propriedade para rastrear que a branch foi criada por este workflow.
+## Operational acceptance
 
-Se a branch já existe:
-- exige que haja exatamente uma correspondência pelo nome;
-- exige que `parent_id` seja o mesmo da branch `development`;
-- exige que a API devolva os metadados de propriedade esperados para o PR atual;
-- recusa qualquer branch que não tenha origem verificada, evitando reutilização perigosa.
+This workflow is not active until it is merged into the repository default branch. Keep the PR Draft until independent review is complete. Before treating the lifecycle as operationally accepted, run a controlled same-repository PR and verify:
 
-### 5. Espera de prontidão
+- the branch is created from `main`, not from another branch;
+- no compute endpoint is provisioned;
+- retry/synchronize reuses only the exact owned branch;
+- the expiration matches 14 days;
+- fork PRs do not create branches;
+- closing a PR does not delete a branch;
+- missing configuration, unexpected main-branch identity, quota exhaustion, and API failures fail closed.
 
-Antes de aplicar a expiração, o workflow aguarda a branch ficar em estado `ready`.
+A successful GitHub workflow run proves only the Management API operation for that event. It does not prove database runtime connectivity, TLS, migration correctness, tenant isolation, RLS, or application integration. Those require separate evidence on the exact commit and target environment.
 
-A espera é limitada e falha fechado se a branch não estabilizar dentro do timeout de 6 minutos.
+## Explicit operational boundaries
 
-### 6. Expiração e verificação final
-
-A branch recebe `expires_at` com 14 dias e o workflow reconsulta o objeto completo para verificar:
-- `name` correto;
-- `parent_id` igual ao da branch `development`;
-- `expires_at` dentro de uma janela aceitável do valor solicitado.
-
-Se qualquer verificação falhar, o workflow conclui com erro e não tenta corrigir a branch por suposição.
-
-## Política de fechamento do PR
-
-Quando a ação é `closed`, o workflow não remove a branch automaticamente.
-
-Isso foi intencionalmente desabilitado porque:
-- o nome e o parent não provam autoria da branch;
-- uma branch manualmente criada poderia coincidir com o padrão;
-- a API do Neon não expõe um histórico de autoria suficientemente confiável para uma exclusão segura;
-- a política de segurança do repositório prioriza falhar fechado e preservar infra existente.
-
-Nesse caso, a branch mantém a expiração previamente validada e o sistema continua operacional, sem remover dados que não puderam ser atribuídos com segurança.
-
-## Riscos e limitações
-
-Este workflow reduz muito o risco operacional, mas ainda possui limitações explícitas:
-- depende da validade e disponibilidade da API Neon;
-- depende da presença correta de variáveis e segredos do GitHub Actions;
-- não cria ou valida endpoint de computação, conexão de banco, migration ou variáveis do runtime;
-- não prova isolamento funcional de dados em nível de aplicação;
-- não substitui revisão de segurança e testes de integração para branch de preview.
-
-## Segurança operacional
-
-Os princípios de proteção deste workflow são:
-- `permissions: {}` para minimizar privilégios;
-- `pull_request_target` apenas para PRs do mesmo repositório;
-- ausência de `checkout` ou execução de código de PR;
-- validação explícita de `NEON_PROJECT_ID` e `Production/Development`;
-- `cancel-in-progress: false` para evitar串行/eliminação de execuções em fila de sincronização;
-- falha fechada em caso de inconsistência.
-
-## Checklist de ativação
-
-Antes de ativar o workflow em produção, confirmar:
-- [ ] `NEON_API_KEY` presente e acessível no contexto do workflow;
-- [ ] `NEON_PROJECT_ID` configurado com o ID canônico correto;
-- [ ] `Production` e `Development` existem e estão `ready`;
-- [ ] a branch `preview/pr-*` não conflita com ambientes já existentes;
-- [ ] todas as equipe/owners entenderam que a branch não será removida automaticamente no fechamento do PR;
-- [ ] os limites do plano gratuito e a política de expiração foram revisados com a operação.
-
-## Observação final
-
-Este workflow foi desenhado como um guardrail de segurança e integridade operacional, não como um mecanismo de execução de código ou de provisionamento de runtime. Seu objetivo é garantir que branches de PR tenham uma existência temporária, previsível e rastreável sem comprometer as branches permanentes do projeto.
+- No migration was run by this configuration update.
+- No Neon branch was created, modified, or deleted.
+- No Neon role, password, database, endpoint, or permanent branch was changed.
+- No Vercel environment, Production deployment, or Auth0 configuration was changed.
