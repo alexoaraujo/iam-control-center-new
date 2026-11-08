@@ -15,7 +15,10 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   }
 
   const previewHost = new URL(baseURL).hostname;
-  const trustedHosts = new Set([previewHost, callbackHost]);
+  if (previewHost !== callbackHost) {
+    throw new Error("Auth0 E2E must start and return on the same Preview alias so transaction cookies remain same-origin.");
+  }
+  const trustedHosts = new Set([callbackHost]);
   let callbackRequestSeen = false;
   const context = page.context();
   const cdp = await context.newCDPSession(page);
