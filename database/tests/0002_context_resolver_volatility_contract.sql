@@ -2,10 +2,14 @@
 -- Run after the proposal is applied to the disposable operational fixture.
 \set ON_ERROR_STOP on
 
+SELECT set_config('ci.resolver_checksum', :'resolver_checksum', false);
+SELECT set_config('ci.source_sha', :'source_sha', false);
+
 DO $assert_function_hardening$
 DECLARE
   v_current record;
   v_setter record;
+  v_ledger record;
 BEGIN
   SELECT p.provolatile, p.prosecdef, pg_get_userbyid(p.proowner) AS owner,
          p.proconfig
@@ -28,6 +32,17 @@ BEGIN
      OR NOT (v_setter.proconfig @> ARRAY['search_path=pg_catalog, app_private, iam']::text[])
      OR v_setter.proconfig @> ARRAY['search_path=pg_catalog, app_private, iam, public']::text[] THEN
     RAISE EXCEPTION 'set_tenant_context must remain SECURITY DEFINER and remove public from search_path';
+  END IF;
+
+  SELECT migration_id, checksum_sha256, source_sha, execution_role
+    INTO v_ledger
+    FROM iam.schema_migrations
+   WHERE migration_id = '0002_context_resolver_volatility_hardening';
+  IF NOT FOUND
+     OR v_ledger.checksum_sha256 <> current_setting('ci.resolver_checksum')
+     OR v_ledger.source_sha <> current_setting('ci.source_sha')
+     OR v_ledger.execution_role <> 'iam_migrator_login' THEN
+    RAISE EXCEPTION 'proposal 0002 ledger evidence mismatch: %', v_ledger;
   END IF;
 END
 $assert_function_hardening$;
