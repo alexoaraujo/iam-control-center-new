@@ -153,7 +153,7 @@ manifest AS (
         n.nspname,c.relname,
         CASE x.grantee WHEN 0 THEN 'PUBLIC'::name ELSE pg_get_userbyid(x.grantee)::name END,
         x.privilege_type,x.is_grantable,pg_get_userbyid(x.grantor)::name
-      FROM relations c JOIN app_schemas n ON n.oid=c.relnamespace
+      FROM relations c JOIN app_schemas n ON n.nspname=c.nspname
       CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl,acldefault(
         CASE WHEN c.relkind='S' THEN 's'::"char" ELSE 'r'::"char" END,c.relowner))) x
       UNION ALL
