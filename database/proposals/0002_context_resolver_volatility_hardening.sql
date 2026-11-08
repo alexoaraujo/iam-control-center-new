@@ -7,9 +7,29 @@
 BEGIN;
 
 DO $authenticated_preflight$
+DECLARE
+  v_login record;
 BEGIN
-  IF session_user <> 'iam_migrator_login' OR current_user <> 'iam_migrator_login' THEN
-    RAISE EXCEPTION 'proposal must start as authenticated iam_migrator_login';
+  IF session_user <> 'iam_migrator_login' OR current_user <> session_user THEN
+    RAISE EXCEPTION 'proposal must start as a direct authenticated iam_migrator_login session';
+  END IF;
+
+  SELECT rolcanlogin, rolinherit, rolsuper, rolcreatedb, rolcreaterole,
+         rolreplication, rolbypassrls
+    INTO v_login
+    FROM pg_roles
+   WHERE rolname = session_user;
+  IF NOT FOUND OR NOT v_login.rolcanlogin OR v_login.rolinherit
+     OR v_login.rolsuper OR v_login.rolcreatedb OR v_login.rolcreaterole
+     OR v_login.rolreplication OR v_login.rolbypassrls THEN
+    RAISE EXCEPTION 'migration login has unexpected or privileged role attributes';
+  END IF;
+
+  IF NOT pg_has_role(session_user, 'iam_migrator', 'MEMBER')
+     OR pg_has_role(session_user, 'iam_migrator', 'USAGE')
+     OR NOT pg_has_role(session_user, 'iam_owner', 'MEMBER')
+     OR pg_has_role(session_user, 'iam_owner', 'USAGE') THEN
+    RAISE EXCEPTION 'migration login must have SET-only transitive membership and no inherited owner privileges';
   END IF;
 END
 $authenticated_preflight$;
