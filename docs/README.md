@@ -4,6 +4,8 @@ Documentação de referência para Next.js + TypeScript, Auth0, Neon PostgreSQL,
 
 ## Começar
 
+- [Auditoria integral do repositório — 2026-11-07](evidence/repository-audit-2026-11-07.md)
+
 - [Visão geral da arquitetura](architecture/overview.md)
 - [Política de planos Free e limites](operations/free-plan-policy.md)
 - [Evidências de validação e bloqueios](evidence/validation-2026-10-31.md)
