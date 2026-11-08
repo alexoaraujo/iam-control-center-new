@@ -82,6 +82,18 @@ CREATE ROLE iam_app_runtime_login
   LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
   NOREPLICATION NOBYPASSRLS;
 
+-- PostgreSQL grants the role creator ADMIN OPTION on roles it creates.
+-- Remove those bootstrap-only memberships before defining the approved chain;
+-- the administrative bootstrap principal must not remain a grantee of IAM roles.
+DO $revoke_creator_memberships$
+BEGIN
+  EXECUTE format(
+    'REVOKE iam_owner, iam_migrator, iam_app_runtime FROM %I',
+    current_user
+  );
+END
+$revoke_creator_memberships$;
+
 -- Exact, non-admin membership topology expected by migration 0001.
 GRANT iam_owner TO iam_migrator
   WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
