@@ -148,3 +148,7 @@ $restore_contract$;
 SQL
 
 echo "PASS: full schema-only restore and catalog contract completed in disposable PostgreSQL 18."
+
+
+echo "[source-schema-restore] running dynamic RLS and signed tenant-context contract as iam_app_runtime"
+psql -X --no-password "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/runtime-rls-contract.sql
