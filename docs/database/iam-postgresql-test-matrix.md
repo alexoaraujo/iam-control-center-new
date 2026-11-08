@@ -178,3 +178,14 @@ Registro obtido por SELECT read-only em `main`. É metadado de controle; não es
 Conexão read-only via Neon MCP usando explicitamente `role_name=iam_schema_export_reader` foi bem-sucedida. `current_user=session_user=iam_schema_export_reader`, database `iam_database`; LOGIN=true, NOINHERIT, sem SUPERUSER/BYPASSRLS/CREATEDB/CREATEROLE/REPLICATION; CONNECT=true; CREATE/TEMP=false; USAGE=true e CREATE=false em iam/audit/app_private; SELECT no ledger=false; nenhum table/sequence data privilege; nenhuma membership concedida ao reader; exatamente uma aresta provider-managed inversa do database owner, SET=false/INHERIT=false/ADMIN=true.
 
 Isso valida a identidade e os predicados do preflight diretamente na origem, sem ler o secret GitHub nem executar DDL. Ainda não prova que NEON_SCHEMA_EXPORT_URL usa a mesma role nem que pg_dump 18 schema-only funciona com esse conjunto de privilégios; essas duas etapas dependem do workflow real.
+
+
+## Revalidação do HEAD atual — 9822074c38051dee88d50d8e4de4763fcf05b3f0
+
+- CI run 42462385742: quality SUCCESS; Preview/Auth0 E2E SKIPPED.
+- Database run 42462385689: schema-contract SUCCESS; source-schema-restore FAILURE.
+- O restore reproduziu o mismatch de search_path de app_private.current_tenant_id() com public presente no dump e ausente na origem.
+- O runtime RLS não executou porque o restore falhou antes.
+- O preflight do export reader foi validado por conexão read-only direta, mas pg_dump 18 e o Environment secret continuam sem execução/verificação.
+
+Status do gate: BLOCKED; não declarar baseline equivalente.
