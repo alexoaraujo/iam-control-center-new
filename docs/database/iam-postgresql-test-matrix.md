@@ -158,3 +158,16 @@ Isso protege o export contra secret apontando para iam_migrator_login, iam_datab
 
 
 A verificação de objetos também confirmou zero privilégios SELECT/INSERT/UPDATE/DELETE em todas as tabelas, views, materialized views e sequences de iam, audit e app_private. O export script agora exige essa ausência de acesso a dados, além de negar CREATE/TEMP; o papel é limitado à leitura de metadados/catálogos para pg_dump --schema-only.
+
+
+### Registro de origem observado
+
+| Campo | Valor |
+|---|---|
+| migration_id | `0001_context_key_hardening` |
+| checksum_sha256 | `2447395628fa0f1230abd95eb522e5b45d1baea1208c9c21b20346a10718fbab` |
+| source_sha | `b80c98c51746e1d49039015eb649b9bdd735ef7f` |
+| execution_role | `iam_migrator_login` |
+| applied_at (UTC) | `2026-11-05T04:16:49.492Z` |
+
+Registro obtido por SELECT read-only em `main`. É metadado de controle; não está contido no dump schema-only.
