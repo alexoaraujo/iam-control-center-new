@@ -33,6 +33,16 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f database/tests/role-assumption-contract.sql
 
+echo "Simulating the Neon database-owner SET-only membership recorded by the source catalog..."
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+SET ROLE iam_bootstrap_admin;
+GRANT iam_owner TO iam_bootstrap_admin
+  WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
+GRANT iam_app_runtime TO iam_bootstrap_admin
+  WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
+RESET ROLE;
+SQL
+
 echo "Verifying the one-time bootstrap principal can no longer authenticate..."
 if PGPASSWORD="$BOOTSTRAP_TEST_PASSWORD" psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 -c "SELECT 1;" >/dev/null 2>&1; then
   echo "ERROR: locked bootstrap principal unexpectedly authenticated" >&2
