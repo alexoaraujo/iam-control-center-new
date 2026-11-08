@@ -174,3 +174,15 @@ O commit documental foi validado novamente:
 - ledger idempotência/checksum/rollback e bootstrap inicial independente PASS.
 
 Preview deployment e Auth0 E2E continuaram SKIPPED.
+
+
+### Registro exato do ledger na fonte Neon
+
+SELECT read-only em main confirmou uma única linha:
+- migration_id: `0001_context_key_hardening`
+- checksum_sha256: `2447395628fa0f1230abd95eb522e5b45d1baea1208c9c21b20346a10718fbab`
+- source_sha: `b80c98c51746e1d49039015eb649b9bdd735ef7f`
+- execution_role: `iam_migrator_login`
+- applied_at: `2026-11-05T04:16:49.492Z` (UTC)
+
+Esses metadados são evidência de proveniência da fonte e devem ser preservados fora do dump DDL-only; não são prova de que o HEAD atual da PR executou essa migration.
