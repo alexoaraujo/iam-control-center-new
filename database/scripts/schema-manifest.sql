@@ -90,7 +90,7 @@ manifest AS (
       'owner', pg_get_userbyid(p.proowner),
       'security_definer', p.prosecdef, 'volatility', p.provolatile,
       'parallel', p.proparallel, 'configuration', p.proconfig,
-      'definition', pg_get_functiondef(p.oid)
+      'definition_included', false
     ) ORDER BY n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)), '[]'::jsonb)
     FROM pg_proc p JOIN app_schemas n ON n.oid=p.pronamespace
     JOIN pg_language l ON l.oid=p.prolang
