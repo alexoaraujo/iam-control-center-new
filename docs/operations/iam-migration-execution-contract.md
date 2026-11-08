@@ -145,3 +145,20 @@ O teste database/tests/migration-lock-ledger-contract.sh usa dois processos psql
 O dump iam_database_schema.sql é DDL-only. Ele restaura a tabela iam.schema_migrations, mas não transporta o registro 0001_context_key_hardening que existe na fonte Neon. O export reader iam_schema_export_reader não tem SELECT nesse ledger; o catálogo confirmou SELECT=false e DML=false. Logo, o dump não é, isoladamente, uma baseline de migration reproduzível.
 
 A linha de ledger observada na fonte deve ser capturada por um canal read-only separado, aprovado e com provenance; não copiar manualmente para o dump nem conceder SELECT ao export reader sem aprovação. Até isso existir, não declarar a predecessor/lineage da migration 0001 estabelecida. A migration 0002 permanece em database/proposals e é executada somente na fixture descartável.
+
+
+## Evidência final dos contratos no HEAD — 2026-11-08
+
+**HEAD validado:** 09a71dd9ad2dc87d0a2771aa8a92271b3c2155b3  
+**CI:** run 42461924302 — quality SUCCESS; Preview deployment SKIPPED; Auth0 E2E SKIPPED.  
+**PostgreSQL 18:** run 42461924344, job 128672859800 — SUCCESS.
+
+O log confirma, no mesmo job:
+- preflight negativo: 12 cenários de role/membership rejeitados antes de DDL, sem índice nem ledger entry;
+- proposta 0002 aplicada apenas na database descartável; current_tenant_id passou para VOLATILE e set_tenant_context perdeu public do search_path;
+- contrato same-statement RLS: CTEs materializadas e dependentes trocaram tenant A → B e validaram visibilidade por tenant;
+- advisory lock: backends distintos A=198/B=199; B aguardou 3.948 ms; A adquiriu antes da tentativa B e B só adquiriu após o marcador pre-COMMIT de A e a liberação transacional;
+- ledger: chamadas idênticas idempotentes, checksum divergente rejeitado, rollback removeu a linha sintética;
+- bootstrap inicial independente aplicado em database limpa pela sessão iam_migrator_login com SET ROLE iam_migrator → iam_owner; contrato de ownership, default-deny, tenant-integrity e audit passou.
+
+O resultado comprova somente a fixture e o PostgreSQL 18 descartável nesse SHA. Não autoriza executar a proposta 0002 em Neon; não prova export/baseline integral nem resolve a colisão de lineage/versionamento. O P1 de migration lineage permanece aberto.
