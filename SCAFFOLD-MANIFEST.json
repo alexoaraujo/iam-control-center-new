@@ -2,7 +2,7 @@
   "project": "iam-control-center",
   "status": "bootstrap scaffold; not production-ready",
   "manifest_updated_at_utc": "2026-11-08",
-  "tracked_file_count": 98,
+  "tracked_file_count": 99,
   "tracked_files": [
     ".env.example",
     ".github/e2e/README.md",
@@ -66,6 +66,7 @@
     "docs/database/neon-free-nextjs.md",
     "docs/evidence/dependency-security-remediation.md",
     "docs/evidence/policy.md",
+    "docs/evidence/repository-audit-2026-11-07.md",
     "docs/evidence/validation-2026-10-31.md",
     "docs/operations/auth0-neon-integration-readiness.md",
     "docs/operations/auth0-preview-app-base-url-proposal.md",
