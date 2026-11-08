@@ -86,8 +86,13 @@ jobs:
           # Resolve and validate the permanent main (default) -> Development lineage.
           DEFAULT_BRANCH_JSON="$(jq -ce '[.branches[] | select(.default == true)] |
             if length == 1 then .[0] else error("Expected exactly one default main branch") end' <<< "${BRANCHES_JSON}")"
+          DEFAULT_BRANCH_NAME="$(jq -r '.name // empty' <<< "${DEFAULT_BRANCH_JSON}")"
           DEFAULT_BRANCH_ID="$(jq -r '.id' <<< "${DEFAULT_BRANCH_JSON}")"
           DEFAULT_BRANCH_STATE="$(jq -r '.current_state // empty' <<< "${DEFAULT_BRANCH_JSON}")"
+          [[ "${DEFAULT_BRANCH_NAME}" == "main" ]] || {
+            echo "::error::The default Neon branch must be named exactly main; refusing topology drift."
+            exit 1
+          }
           [[ "${DEFAULT_BRANCH_STATE}" == "ready" ]] || {
             echo "::error::Default main branch is not ready."
             exit 1
