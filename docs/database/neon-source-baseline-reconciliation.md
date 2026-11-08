@@ -446,3 +446,14 @@ A consulta read-only executada na fonte Neon canônica confirmou que a função 
 Não editar o dump manualmente para remover public: isso apagaria a proveniência do export e mascararia a divergência. Regenerar via pg_dump 18 autenticado contra a origem allowlisted, guardar SHA-256 e manifesto, restaurar novamente em database vazia e comparar objeto-a-objeto. O workflow atual executa apenas em push para main e o Environment neon-schema-export não foi verificável pelas ferramentas desta sessão; portanto, export autenticado permanece BLOCKED.
 
 O contrato runtime RLS foi adicionado e agora separa os casos de contexto válido/inválido em statements distintos. Ainda não há PASS para ele porque o restore falhou antes de executar o teste dinâmico. O contrato de roles/migration passou neste SHA, mas não substitui o restore nem a equivalência com a fonte.
+
+
+## CI pós-asserção de search_path — 2026-11-08
+
+- HEAD testado: 51f9098a5a8b8506fae05909c9e289b799fea97a.
+- CI run 42460672899: quality SUCCESS; Preview e Auth0 E2E SKIPPED.
+- Database run 42460672895: postgres-18-schema-contract SUCCESS; postgres-18-source-schema-restore FAILURE.
+- O restore reportou os demais totais esperados, mas falhou no novo gate porque o dump configura current_tenant_id com search_path=pg_catalog, app_private, iam, public. A consulta read-only no Neon canônico confirmou search_path=pg_catalog, app_private, iam.
+- O contrato runtime HMAC/RLS não foi executado nesse run, pois o restore falhou antes da etapa de teste. O contrato dinâmico continua ADDED / NOT EXECUTED.
+- O teste anterior 42460479806 chegou ao contrato runtime, mas falhou no caso de assinatura adulterada; os cenários foram separados em DOs independentes no HEAD seguinte, sem evidência verde ainda.
+- Não alterar o dump manualmente. A correção deve vir de export autenticado da origem canônica, checksum e comparação integral objeto-a-objeto.
