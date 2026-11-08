@@ -27,76 +27,65 @@ VALUES ('ci-runtime-rls-key', decode(repeat('42', 32), 'hex'), true);
 RESET ROLE;
 SET LOCAL ROLE iam_app_runtime;
 
-DO $runtime_rls_contract$
-DECLARE
-  v_tenant_a uuid := '10000000-0000-4000-8000-000000000001';
-  v_tenant_b uuid := '20000000-0000-4000-8000-000000000002';
-  v_identity_a uuid := '10000000-0000-4000-8000-000000000011';
-  v_identity_b uuid := '20000000-0000-4000-8000-000000000022';
-  v_expires bigint;
-  v_nonce text;
-  v_signature text;
-  v_count bigint;
-  v_rejected boolean;
-  v_secret bytea := decode(repeat('42', 32), 'hex');
+-- Missing context must deny all tenant-scoped reads.
+DO $missing_context$
 BEGIN
-  IF current_user <> 'iam_app_runtime' THEN
-    RAISE EXCEPTION 'RLS test must execute as iam_app_runtime; current_user=%', current_user;
-  END IF;
-
-  IF app_private.current_tenant_id() IS NOT NULL
+  IF current_user <> 'iam_app_runtime'
+     OR app_private.current_tenant_id() IS NOT NULL
      OR (SELECT count(*) FROM iam.tenants) <> 0
      OR (SELECT count(*) FROM iam.memberships) <> 0
      OR (SELECT count(*) FROM iam.identities) <> 0 THEN
-    RAISE EXCEPTION 'missing context must fail closed for all tenant-scoped reads';
+    RAISE EXCEPTION 'missing context must fail closed for runtime reads';
   END IF;
+END
+$missing_context$;
 
-  v_expires := floor(extract(epoch FROM clock_timestamp()))::bigint + 180;
-  v_nonce := 'ci-tenant-a';
-  v_signature := encode(
-    public.hmac(
-      convert_to(v_tenant_a::text || '|' || v_identity_a::text || '|' ||
-                 v_expires::text || '|' || v_nonce, 'UTF8'),
-      v_secret,
-      'sha256'
-    ),
-    'hex'
-  );
+-- A valid signature resolves exactly tenant A and cannot write into tenant B.
+DO $valid_tenant_a$
+DECLARE
+  v_tenant uuid := '10000000-0000-4000-8000-000000000001';
+  v_identity uuid := '10000000-0000-4000-8000-000000000011';
+  v_expires bigint := floor(extract(epoch FROM clock_timestamp()))::bigint + 180;
+  v_nonce text := 'ci-tenant-a';
+  v_signature text;
+  v_secret bytea := decode(repeat('42', 32), 'hex');
+  v_count bigint;
+  v_rejected boolean := false;
+BEGIN
+  v_signature := encode(public.hmac(
+    convert_to(v_tenant::text || '|' || v_identity::text || '|' ||
+               v_expires::text || '|' || v_nonce, 'UTF8'),
+    v_secret, 'sha256'), 'hex');
 
-  PERFORM iam.set_tenant_context(
-    v_tenant_a, v_identity_a, v_expires, v_nonce, v_signature
-  );
-
-  IF app_private.current_tenant_id() IS DISTINCT FROM v_tenant_a THEN
+  PERFORM iam.set_tenant_context(v_tenant, v_identity, v_expires, v_nonce, v_signature);
+  IF app_private.current_tenant_id() IS DISTINCT FROM v_tenant THEN
     RAISE EXCEPTION 'valid signed context did not resolve tenant A';
   END IF;
 
   SELECT count(*) INTO v_count FROM iam.tenants;
-  IF v_count <> 1 OR NOT EXISTS (SELECT 1 FROM iam.tenants WHERE id = v_tenant_a) THEN
-    RAISE EXCEPTION 'tenant A context did not isolate iam.tenants; visible=%', v_count;
+  IF v_count <> 1 OR NOT EXISTS (SELECT 1 FROM iam.tenants WHERE id = v_tenant) THEN
+    RAISE EXCEPTION 'tenant A did not isolate iam.tenants; visible=%', v_count;
   END IF;
 
   SELECT count(*) INTO v_count FROM iam.memberships;
   IF v_count <> 1 OR NOT EXISTS (
     SELECT 1 FROM iam.memberships
-     WHERE tenant_id = v_tenant_a AND identity_id = v_identity_a
+     WHERE tenant_id = v_tenant AND identity_id = v_identity
   ) THEN
-    RAISE EXCEPTION 'tenant A context did not isolate iam.memberships; visible=%', v_count;
+    RAISE EXCEPTION 'tenant A did not isolate iam.memberships; visible=%', v_count;
   END IF;
 
   SELECT count(*) INTO v_count FROM iam.identities;
-  IF v_count <> 1 OR NOT EXISTS (SELECT 1 FROM iam.identities WHERE id = v_identity_a) THEN
-    RAISE EXCEPTION 'identity_scope did not restrict identities to tenant A; visible=%', v_count;
+  IF v_count <> 1 OR NOT EXISTS (SELECT 1 FROM iam.identities WHERE id = v_identity) THEN
+    RAISE EXCEPTION 'identity_scope did not isolate tenant A; visible=%', v_count;
   END IF;
 
-  -- The runtime has INSERT on organizations; RLS WITH CHECK must still reject
-  -- a row whose tenant_id is not the authenticated tenant.
-  v_rejected := false;
   BEGIN
     INSERT INTO iam.organizations (
       tenant_id, provider, external_organization_id, display_name
     ) VALUES (
-      v_tenant_b, 'ci', 'cross-tenant-write', 'Must be rejected'
+      '20000000-0000-4000-8000-000000000002',
+      'ci', 'cross-tenant-write', 'Must be rejected'
     );
   EXCEPTION WHEN insufficient_privilege THEN
     v_rejected := true;
@@ -105,22 +94,22 @@ BEGIN
     RAISE EXCEPTION 'cross-tenant INSERT unexpectedly succeeded';
   END IF;
 
-  -- Clear the previously valid tenant A context before testing invalid inputs.
-  -- PostgreSQL rolls back a function's transaction-local GUC changes when its
-  -- exception is caught by the caller; this test therefore asserts fail-closed
-  -- behavior from a clean context rather than assuming a failed call clears an
-  -- earlier valid context.
   PERFORM iam.clear_tenant_context();
-  IF app_private.current_tenant_id() IS NOT NULL THEN
-    RAISE EXCEPTION 'clear_tenant_context did not clear the active tenant';
-  END IF;
+END
+$valid_tenant_a$;
 
-  -- Invalid signatures, expired contexts, and lifetimes over 300 seconds
-  -- must be rejected when no prior tenant context is active.
-  v_rejected := false;
+-- Each invalid-context case is a separate top-level statement so the
+-- STABLE resolver is re-evaluated after the previous GUC state is cleared.
+DO $tampered_signature$
+DECLARE
+  v_rejected boolean := false;
+BEGIN
   BEGIN
     PERFORM iam.set_tenant_context(
-      v_tenant_a, v_identity_a, v_expires, v_nonce, repeat('0', 64)
+      '10000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000011',
+      floor(extract(epoch FROM clock_timestamp()))::bigint + 180,
+      'ci-tampered', repeat('0', 64)
     );
   EXCEPTION WHEN insufficient_privilege THEN
     v_rejected := true;
@@ -128,13 +117,19 @@ BEGIN
   IF NOT v_rejected OR app_private.current_tenant_id() IS NOT NULL THEN
     RAISE EXCEPTION 'tampered signature was not rejected fail-closed';
   END IF;
+END
+$tampered_signature$;
 
-  v_rejected := false;
+DO $expired_context$
+DECLARE
+  v_rejected boolean := false;
+BEGIN
   BEGIN
     PERFORM iam.set_tenant_context(
-      v_tenant_a, v_identity_a,
+      '10000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000011',
       floor(extract(epoch FROM clock_timestamp()))::bigint - 1,
-      'ci-expired', v_signature
+      'ci-expired', repeat('0', 64)
     );
   EXCEPTION WHEN insufficient_privilege THEN
     v_rejected := true;
@@ -142,57 +137,65 @@ BEGIN
   IF NOT v_rejected OR app_private.current_tenant_id() IS NOT NULL THEN
     RAISE EXCEPTION 'expired context was not rejected fail-closed';
   END IF;
+END
+$expired_context$;
 
-  v_rejected := false;
-  v_expires := floor(extract(epoch FROM clock_timestamp()))::bigint + 301;
-  v_nonce := 'ci-too-long';
-  v_signature := encode(
-    public.hmac(
-      convert_to(v_tenant_a::text || '|' || v_identity_a::text || '|' ||
-                 v_expires::text || '|' || v_nonce, 'UTF8'),
-      v_secret,
-      'sha256'
-    ),
-    'hex'
-  );
+DO $excessive_lifetime$
+DECLARE
+  v_tenant uuid := '10000000-0000-4000-8000-000000000001';
+  v_identity uuid := '10000000-0000-4000-8000-000000000011';
+  v_expires bigint := floor(extract(epoch FROM clock_timestamp()))::bigint + 301;
+  v_nonce text := 'ci-too-long';
+  v_signature text;
+  v_rejected boolean := false;
+BEGIN
+  v_signature := encode(public.hmac(
+    convert_to(v_tenant::text || '|' || v_identity::text || '|' ||
+               v_expires::text || '|' || v_nonce, 'UTF8'),
+    decode(repeat('42', 32), 'hex'), 'sha256'), 'hex');
+
   BEGIN
-    PERFORM iam.set_tenant_context(
-      v_tenant_a, v_identity_a, v_expires, v_nonce, v_signature
-    );
+    PERFORM iam.set_tenant_context(v_tenant, v_identity, v_expires, v_nonce, v_signature);
   EXCEPTION WHEN insufficient_privilege THEN
     v_rejected := true;
   END;
   IF NOT v_rejected OR app_private.current_tenant_id() IS NOT NULL THEN
     RAISE EXCEPTION 'context lifetime over 300 seconds was not rejected fail-closed';
   END IF;
+END
+$excessive_lifetime$;
 
-  -- A separately signed tenant B context must expose B only, never A.
-  v_expires := floor(extract(epoch FROM clock_timestamp()))::bigint + 180;
-  v_nonce := 'ci-tenant-b';
-  v_signature := encode(
-    public.hmac(
-      convert_to(v_tenant_b::text || '|' || v_identity_b::text || '|' ||
-                 v_expires::text || '|' || v_nonce, 'UTF8'),
-      v_secret,
-      'sha256'
-    ),
-    'hex'
-  );
-  PERFORM iam.set_tenant_context(
-    v_tenant_b, v_identity_b, v_expires, v_nonce, v_signature
-  );
+-- A separately signed tenant B context exposes B and identity B only.
+DO $valid_tenant_b$
+DECLARE
+  v_tenant uuid := '20000000-0000-4000-8000-000000000002';
+  v_identity uuid := '20000000-0000-4000-8000-000000000022';
+  v_expires bigint := floor(extract(epoch FROM clock_timestamp()))::bigint + 180;
+  v_nonce text := 'ci-tenant-b';
+  v_signature text;
+  v_count bigint;
+BEGIN
+  v_signature := encode(public.hmac(
+    convert_to(v_tenant::text || '|' || v_identity::text || '|' ||
+               v_expires::text || '|' || v_nonce, 'UTF8'),
+    decode(repeat('42', 32), 'hex'), 'sha256'), 'hex');
+
+  PERFORM iam.set_tenant_context(v_tenant, v_identity, v_expires, v_nonce, v_signature);
 
   SELECT count(*) INTO v_count FROM iam.tenants;
-  IF v_count <> 1 OR NOT EXISTS (SELECT 1 FROM iam.tenants WHERE id = v_tenant_b) THEN
-    RAISE EXCEPTION 'tenant B context did not isolate iam.tenants; visible=%', v_count;
+  IF v_count <> 1 OR NOT EXISTS (SELECT 1 FROM iam.tenants WHERE id = v_tenant) THEN
+    RAISE EXCEPTION 'tenant B did not isolate iam.tenants; visible=%', v_count;
   END IF;
 
   SELECT count(*) INTO v_count FROM iam.identities;
-  IF v_count <> 1 OR NOT EXISTS (SELECT 1 FROM iam.identities WHERE id = v_identity_b) THEN
+  IF v_count <> 1 OR NOT EXISTS (SELECT 1 FROM iam.identities WHERE id = v_identity) THEN
     RAISE EXCEPTION 'tenant B identity visibility crossed tenant boundary; visible=%', v_count;
   END IF;
-END
-$runtime_rls_contract$;
 
+  PERFORM iam.clear_tenant_context();
+END
+$valid_tenant_b$;
+
+RESET ROLE;
 ROLLBACK;
 SELECT 'PASS runtime signed-context, fail-closed, cross-tenant SELECT/INSERT and tenant-isolation contract' AS result;
