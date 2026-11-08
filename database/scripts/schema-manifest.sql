@@ -95,6 +95,22 @@ manifest AS (
     FROM pg_proc p JOIN app_schemas n ON n.oid=p.pronamespace
     JOIN pg_language l ON l.oid=p.prolang
   ),
+  'aggregates', (
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'schema', n.nspname, 'name', p.proname,
+      'identity_arguments', pg_get_function_identity_arguments(p.oid),
+      'owner', pg_get_userbyid(p.proowner), 'kind', a.aggkind,
+      'transition_type', format_type(a.aggtranstype,NULL),
+      'transition_function', a.aggtransfn::regprocedure::text,
+      'final_function', CASE WHEN a.aggfinalfn=0 THEN NULL ELSE a.aggfinalfn::regprocedure::text END,
+      'combine_function', CASE WHEN a.aggcombinefn=0 THEN NULL ELSE a.aggcombinefn::regprocedure::text END,
+      'serial_function', CASE WHEN a.aggserialfn=0 THEN NULL ELSE a.aggserialfn::regprocedure::text END,
+      'deserial_function', CASE WHEN a.aggdeserialfn=0 THEN NULL ELSE a.aggdeserialfn::regprocedure::text END,
+      'initial_condition', a.agginitval, 'parallel', p.proparallel
+    ) ORDER BY n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)), '[]'::jsonb)
+    FROM pg_aggregate a JOIN pg_proc p ON p.oid=a.aggfnoid
+    JOIN app_schemas n ON n.oid=p.pronamespace
+  ),
   'types', (
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'schema', n.nspname, 'name', t.typname, 'kind', t.typtype,
@@ -105,7 +121,14 @@ manifest AS (
       ) ELSE NULL END,
       'domain_base_type', CASE WHEN t.typtype='d' THEN format_type(t.typbasetype,t.typtypmod) ELSE NULL END,
       'domain_not_null', CASE WHEN t.typtype='d' THEN t.typnotnull ELSE NULL END,
-      'domain_default', CASE WHEN t.typtype='d' THEN pg_get_expr(t.typdefaultbin,0) ELSE NULL END
+      'domain_default', CASE WHEN t.typtype='d' THEN pg_get_expr(t.typdefaultbin,0) ELSE NULL END,
+      'domain_constraints', CASE WHEN t.typtype='d' THEN (
+        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+          'name', dc.conname, 'definition', pg_get_constraintdef(dc.oid,true),
+          'validated', dc.convalidated
+        ) ORDER BY dc.conname), '[]'::jsonb)
+        FROM pg_constraint dc WHERE dc.contypid=t.oid
+      ) ELSE NULL END
     ) ORDER BY n.nspname,t.typname), '[]'::jsonb)
     FROM pg_type t JOIN app_schemas n ON n.oid=t.typnamespace
     WHERE t.typtype IN ('e','d')
@@ -134,7 +157,7 @@ manifest AS (
     ) ORDER BY e.extname), '[]'::jsonb)
     FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace
   ),
-  'explicit_acls', (
+  'expanded_object_acls', (
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'object_type', a.object_type, 'schema', a.schema_name,
       'object_name', a.object_name, 'grantee', a.grantee,
@@ -174,6 +197,27 @@ manifest AS (
     ) ORDER BY d.defaclrole,d.defaclnamespace,d.defaclobjtype,x.grantee,x.privilege_type), '[]'::jsonb)
     FROM pg_default_acl d LEFT JOIN pg_namespace n ON n.oid=d.defaclnamespace
     CROSS JOIN LATERAL aclexplode(d.defaclacl) x
+  ),
+  'database_acl', (
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'database', d.datname,
+      'owner', pg_get_userbyid(d.datdba),
+      'grantee', CASE x.grantee WHEN 0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END,
+      'privilege', x.privilege_type, 'grantable', x.is_grantable,
+      'grantor', pg_get_userbyid(x.grantor)
+    ) ORDER BY x.grantee,x.privilege_type), '[]'::jsonb)
+    FROM pg_database d CROSS JOIN LATERAL
+      aclexplode(COALESCE(d.datacl,acldefault('d',d.datdba))) x
+    WHERE d.datname=current_database()
+  ),
+  'roles', (
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'name', r.rolname, 'superuser', r.rolsuper, 'inherit', r.rolinherit,
+      'create_role', r.rolcreaterole, 'create_database', r.rolcreatedb,
+      'login', r.rolcanlogin, 'replication', r.rolreplication,
+      'bypass_rls', r.rolbypassrls, 'connection_limit', r.rolconnlimit
+    ) ORDER BY r.rolname), '[]'::jsonb)
+    FROM pg_roles r
   ),
   'role_memberships', (
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
