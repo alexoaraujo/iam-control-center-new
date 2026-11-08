@@ -155,3 +155,6 @@ Estado: BLOCKED / MIGRATION LINEAGE. O ledger não pode ser inventado, copiado m
 O script export-neon-schema.sh agora falha fechado se a conexão não for diretamente iam_schema_export_reader. Valida atributos LOGIN/NOINHERIT sem privilégios administrativos, ausência de memberships concedidas ao reader, a única aresta provider-managed inversa exata do database owner, CONNECT sem CREATE/TEMP, USAGE sem CREATE nos schemas e ausência de SELECT/DML no ledger. O workflow também identifica explicitamente no manifest que migration_ledger_rows não é exportado.
 
 Isso protege o export contra secret apontando para iam_migrator_login, iam_database_owner ou outra role privilegiada. O código foi atualizado, mas não foi executado contra a fonte nesta sessão porque o workflow está restrito a push em main e o Environment/secret não é verificável pelas ferramentas disponíveis.
+
+
+A verificação de objetos também confirmou zero privilégios SELECT/INSERT/UPDATE/DELETE em todas as tabelas, views, materialized views e sequences de iam, audit e app_private. O export script agora exige essa ausência de acesso a dados, além de negar CREATE/TEMP; o papel é limitado à leitura de metadados/catálogos para pg_dump --schema-only.
