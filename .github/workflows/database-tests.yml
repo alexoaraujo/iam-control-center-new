@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "database/**"
+      - "docs/database/schema-manifest-contract.md"
       - "role-security-harness/**"
       - "scripts/test-postgres18-role-security-harness.sh"
       - "docs/architecture/iam-decisions.md"
@@ -16,6 +17,7 @@ on:
       - "feat/iam-role-bootstrap-review"
     paths:
       - "database/**"
+      - "docs/database/schema-manifest-contract.md"
       - "role-security-harness/**"
       - "scripts/test-postgres18-role-security-harness.sh"
       - "docs/architecture/iam-decisions.md"
