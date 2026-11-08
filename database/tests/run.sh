@@ -23,6 +23,10 @@ echo "Running the reviewed role bootstrap as its least-privilege administrative 
 PGPASSWORD="$BOOTSTRAP_TEST_PASSWORD" psql "$BOOTSTRAP_DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f database/bootstrap/0000_iam_roles.sql
 
+echo "Locking the one-time bootstrap principal through the separate PostgreSQL administrator session..."
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "ALTER ROLE iam_bootstrap_admin WITH NOLOGIN NOCREATEROLE PASSWORD NULL;"
+
 echo "Checking role attributes, membership options, and database privileges..."
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f database/tests/0000_role_bootstrap_contract.sql
