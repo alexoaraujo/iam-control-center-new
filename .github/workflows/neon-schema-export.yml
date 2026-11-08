@@ -50,7 +50,7 @@ jobs:
               raise SystemExit("Connection database is not the allowlisted source database")
           user = unquote(u.username or "")
           password = unquote(u.password or "")
-          if not user or not password or any(c in user + password for c in "\\r\\n"):
+          if not user or not password or any(c in user + password for c in "\r\n"):
               raise SystemExit("Connection URI must contain valid credentials without line breaks")
           port = u.port or 5432
           values = {
@@ -63,22 +63,22 @@ jobs:
               "PGSSLROOTCERT": "system",
           }
           for value in values.values():
-              if any(c in value for c in "\\r\\n"):
+              if any(c in value for c in "\r\n"):
                   raise SystemExit("Connection settings contain an invalid line break")
           with open(sys.argv[1], "w", encoding="utf-8") as f:
               for key, value in values.items():
-                  f.write(f"{key}={value}\\n")
+                  f.write(f"{key}={value}\n")
           os.chmod(sys.argv[1], 0o600)
           print("Allowlisted source URI validated; TLS hostname verification is enabled.")
           PY
 
           mkdir -p artifacts
-          docker run --rm \\
-            --user "$(id -u):$(id -g)" \\
-            --env-file "${ENV_FILE}" \\
-            --volume "$GITHUB_WORKSPACE:/workspace" \\
-            --workdir /workspace \\
-            postgres:18-bookworm \\
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env-file "${ENV_FILE}" \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            postgres:18-bookworm \
             bash -c '
               set -euo pipefail
               test -n "${PGPASSWORD:-}"
