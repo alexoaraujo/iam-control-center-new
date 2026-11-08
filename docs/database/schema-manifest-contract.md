@@ -58,10 +58,37 @@ A successful execution proves only that this query can inventory the catalogs vi
 
 - Query file: `database/scripts/schema-manifest.sql`
 - Repository branch: `chore/schema-manifest-catalog-contract`
-- Tested target: canonical Neon `iam-database-delivery / main / iam_database`
+- Tested source: canonical Neon `twilight-fire-88497009 / main / iam_database`
 - Execution role: `iam_schema_export_reader`
-- Execution mode: single read-only catalog query
-- Result: SQL executed successfully and returned the v1 JSON manifest (about 294 KB in the connector response).
-- Not tested yet: manifest capture from a restored PostgreSQL 18 database, structural source-vs-restore diff, stable artifact storage/checksum workflow, and independent review.
+- Source capture: single read-only catalog query; no application rows or migration ledger read.
+- Restore fixture: pinned schema-only dump and restore contract from PR #86 at `79ae7dcf0f3523fab152f485fe699e90fb7ac6e9`, restored into disposable PostgreSQL 18.6.
+- Successful run on SHA `4343952aa26fdc8552f91bf2dc034ffaf5be15be`: database-schema-tests run `42472017801`; both `postgres-18-schema-contract` and `postgres-18-source-schema-restore-manifest` succeeded. CI run `42472017594`, quality job, succeeded.
+- Restore validation: 23 tables, 1 view, 9 IAM functions, 7 enums, 12 triggers, 41 policies, 20 FORCE-RLS tables, ownership and pgcrypto verified; no application rows. Signed-context, fail-closed, cross-tenant SELECT/INSERT and tenant isolation contract passed.
+- Post-restore manifest: two captures byte-identical; validator v1 passed (4 schemas, 27 relations, 46 routines, 41 policies); full manifest SHA-256 `bd38ab0fb5316573e3cd2db5e7047f71201d2472082fb904a67c9b05f7dee600`.
 
-No DDL, GRANT, migration, seed, role change, or application-data query was performed for this validation.
+## Source-to-restore fingerprint comparison (2026-11-08)
+
+The same manifest SQL and JSONB section-hash expression were executed against the Neon source and the disposable restore.
+
+Exact section fingerprint matches:
+- `schemas`: 4
+- `relations`: 27
+- `types`: 7
+- `policies`: 41
+- `triggers`: 12
+- `sequences`: 3
+- `aggregates`: 0
+- `format` and `server_version_num`
+
+Section differences requiring explicit classification:
+- `database` and `server_version`: expected environment identity/provider build differences; the numeric PostgreSQL version matches.
+- `default_acls`: source has 9 entries; restore has 0. All nine source entries are owned/granted by Neon provider roles (`cloud_admin` → `neon_superuser`) in schema `public` for tables/sequences. Do not reproduce these provider defaults in the portable baseline.
+- `roles` / `role_memberships`: source has 29 roles and 26 membership edges; restore has 21 roles and 3 edges. The source includes Neon provider roles (`cloud_admin`, `iam_database_owner`, `neon_service`, `neon_superuser`) plus environment-provisioned IAM login principals (`iam_migrator_login`, `iam_app_runtime_login`, `iam_worker_login`, `iam_schema_export_reader`). Provider roles/memberships are not portable; application login roles and their grants remain a separate provisioning contract and must not be silently dropped from deployment evidence.
+- `database_acl`: source has 9 entries; restore has 5. Source entries include provider-owned database grants and application-specific CONNECT/CREATE grants. Reconcile by principal and privilege before any baseline decision.
+- `expanded_object_acls`: source has 386 entries; restore has 383. The three-entry delta remains unresolved at object/principal level; no normalization is approved.
+- `extensions`: both sides have 2 entries, but the section fingerprint differs. Source `pgcrypto` is owned by `iam_database_owner` and `plpgsql` by `cloud_admin`; extension ownership/version/schema differences must be classified as provider-managed only after object-level comparison.
+- `routines`: both sides have 46 entries. The source has 37 routines in `public` owned by `cloud_admin` (extension functions) and 9 application routines in `iam`, `audit`, and `app_private` owned by `iam_owner`. The overall fingerprint differs; a filtered application-routine fingerprint is being added so provider extension ownership cannot mask an IAM routine mismatch.
+
+These results prove exact equality for the listed structural sections, not full equivalence. ACL, role, extension, and routine deltas remain explicit gates. No provider role or ACL is being copied into the portable restore.
+
+No DDL, GRANT, migration, seed, role change, or application-data query was performed on the Neon source for this validation. Independent review and the protected authenticated export workflow remain separate gates.
