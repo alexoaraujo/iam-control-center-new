@@ -466,3 +466,60 @@ O catálogo Neon read-only também confirma current_tenant_id() com provolatile=
 A migration 0001_context_key_hardening já consta no ledger Neon e não deve ser reescrita. A PR #85 adicionou proposta separada database/proposals/0002_context_resolver_volatility_hardening.sql para alterar a função para VOLATILE e retirar public do search_path de iam.set_tenant_context. O contrato de regressão troca tenant A → B dentro de um único bloco DO e verifica RLS. A proposta é executada somente no PostgreSQL 18 descartável; não foi aplicada ao Neon persistente.
 
 A equivalência do dump, a correção da semântica da função, a lineage e a revisão permanecem gates independentes.
+
+
+## Revalidação fonte × dump candidato — 2026-11-08 (HEAD bccf9b27496be0e04f11e4b5a5cfe46c27c62a7e)
+
+Esta seção supersede as notas históricas anteriores que afirmavam que o dump atual ainda continha `public` no `search_path` de `app_private.current_tenant_id()`. No artefato atual (blob `1920b7946c88e624ec224917dc0f7742d2174904`), essa função está com `search_path=pg_catalog, app_private, iam`, igual ao catálogo Neon consultado. O `search_path` de `iam.set_tenant_context(...)` ainda inclui `public` tanto na origem quanto no dump; é um hardening separado, não uma divergência fonte × dump.
+
+### Correção do alvo de restore CI
+
+O job `postgres-18-source-schema-restore-manifest` anteriormente fazia checkout do dump histórico `79ae7dcf0f3523fab152f485fe699e90fb7ac6e9`, portanto seu PASS não era evidência de restore do candidato atual. No HEAD desta atualização:
+- removido o checkout do SHA histórico;
+- restore e geração do manifesto usam diretamente os arquivos do HEAD da PR;
+- checkout do job `postgres-18-source-schema-restore` usa `persist-credentials: false`.
+
+Evidência no SHA exato:
+- CI run `42491683869`: `quality` SUCCESS; `preview-deployment` e `auth0-e2e` SKIPPED.
+- Database run `42491683797`: `postgres-18-schema-contract`, `postgres-18-source-schema-restore` e `postgres-18-source-schema-restore-manifest` SUCCESS.
+- Job `128765229352`: o dump candidato foi restaurado em PostgreSQL 18 descartável; dois manifests restaurados foram byte-idênticos; validator v1 passou; SHA-256 do manifesto restaurado `bd38ab0fb5316573e3cd2db5e7047f71201d2472082fb904a67c9b05f7dee600`.
+- Job `128765229543`: 23 tabelas, 1 view, 9 funções IAM, 7 enums, 12 triggers, 41 policies, 20 tabelas FORCE RLS, ownership e pgcrypto; zero linhas de aplicação; contrato runtime signed-context/fail-closed/cross-tenant SELECT/INSERT passou.
+
+### Fingerprints por seção: fonte canônica × restore candidato
+
+Fonte: Neon project `twilight-fire-88497009`, branch `main` (`br-little-fire-b6adup9f`), database `iam_database`, PostgreSQL 18.6, consulta read-only com `iam_schema_export_reader`. O mesmo `schema-manifest.sql` e a mesma expressão de hash JSONB foram usados na fonte e no restore candidato.
+
+Igualdade exata confirmada:
+- schemas: 4;
+- relations: 27;
+- types: 7;
+- policies: 41;
+- triggers: 12;
+- sequences: 3;
+- aggregates: 0;
+- IAM routines: 9;
+- server_version_num.
+
+Deltas que continuam explícitos:
+- database identity e build string do servidor: diferença ambiental;
+- database ACL: fonte 9 entradas; restore 5. Inclui grants provider-managed e grants operacionais de `iam_owner`/`iam_schema_export_reader`;
+- default ACL: fonte 9; restore 0. As nove entradas observadas são defaults provider-managed em `public` (`cloud_admin` → `neon_superuser`);
+- expanded object ACL: fonte 386; restore 383. As três entradas adicionais na fonte são USAGE de `iam_schema_export_reader` nos schemas `app_private`, `audit` e `iam`;
+- extensions: duas em ambos; fingerprint diferente por atributos/ownership do ambiente;
+- public extension routines: 37 em ambos; fingerprint diferente. As 37 rotinas públicas da fonte pertencem a `cloud_admin`; não são rotinas de aplicação IAM;
+- roles: fonte 29; restore 21. O restore não representa integralmente os papéis provider-managed e as credenciais LOGIN provisionadas no ambiente;
+- role memberships: fonte 26; restore 3. As memberships de logins e provider roles precisam de contrato separado;
+- routines total: 46 em ambos, mas o fingerprint total diverge por `public`; o subconjunto das 9 rotinas IAM tem igualdade exata.
+
+O catálogo fonte confirma `iam_app_runtime_login → iam_app_runtime` com `INHERIT TRUE / SET TRUE / ADMIN FALSE`, enquanto o contrato aprovado em `database/bootstrap/0000_iam_roles.sql` e `database/tests/0000_role_bootstrap_contract.sql` exige `INHERIT TRUE / SET FALSE / ADMIN FALSE`. Classificação: **DRIFT**. Não copiar a opção SET TRUE para a baseline e não executar GRANT/REVOKE/ALTER ROLE no Neon persistente sem revisão e gate de execução próprios.
+
+A classificação detalhada e a decisão de normalização provider-managed estão registradas em `docs/database/schema-manifest-contract.md` (seção “Source-to-restore fingerprint comparison (2026-11-08)”).
+
+### Gates restantes
+
+- comparação integral objeto-a-objeto com política de normalização revisada e verificável;
+- export autenticado reproduzível via workflow protegido em `main`, incluindo prova da proteção do GitHub Environment `neon-schema-export`;
+- proveniência do ledger `iam.schema_migrations` por canal read-only separado; a role de export não possui SELECT e não terá privilégios ampliados automaticamente;
+- revisão independente aprovada no SHA final.
+
+Não marcar Ready for Review nem merge. Não executar DDL, GRANT, migration, seed, alteração de role ou dados no Neon persistente/Production.
