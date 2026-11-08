@@ -13,7 +13,9 @@ on:
 permissions: {}
 
 concurrency:
-  group: neon-pr-lifecycle-${{ github.repository }}
+  # Fork events receive unique groups and cannot replace a trusted PR's
+  # pending lifecycle run in the repository-wide serialization queue.
+  group: neon-pr-lifecycle-${{ github.repository }}-${{ github.event.pull_request.head.repo.full_name == github.repository && 'trusted' || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -104,6 +106,10 @@ jobs:
           EXISTING="$(jq -c --arg name "${BRANCH_NAME}" '[.branches[] | select(.name == $name)]' <<< "${BRANCHES_JSON}")"
           EXISTING_COUNT="$(jq -r 'length' <<< "${EXISTING}")"
 
+          OWNERSHIP_KEY="iam-control-center-managed-by"
+          OWNERSHIP_VALUE="neon-pr-branch-lifecycle"
+          OWNER_PR_KEY="iam-control-center-pr-number"
+
           if [[ "${PR_ACTION}" == "closed" ]]; then
             # Do not delete by deterministic name/parent alone: a manually
             # created branch could share both. Neon branch provenance is not
@@ -120,8 +126,16 @@ jobs:
               exit 1
             fi
 
-            CREATE_BODY="$(jq -cn --arg name "${BRANCH_NAME}" --arg parent "${DEVELOPMENT_ID}" \
-              '{branch:{name:$name,parent_id:$parent}}')"
+            EXPIRES_AT="$(date -u -d '+14 days' '+%Y-%m-%dT%H:%M:%SZ')"
+            CREATE_BODY="$(jq -cn \
+              --arg name "${BRANCH_NAME}" \
+              --arg parent "${DEVELOPMENT_ID}" \
+              --arg expiry "${EXPIRES_AT}" \
+              --arg owner_key "${OWNERSHIP_KEY}" \
+              --arg owner_value "${OWNERSHIP_VALUE}" \
+              --arg pr_key "${OWNER_PR_KEY}" \
+              --arg pr_number "${PR_NUMBER}" \
+              '{branch:{name:$name,parent_id:$parent,expires_at:$expiry},annotation_value:{($owner_key):$owner_value,($pr_key):$pr_number}}')"
             CREATE_RESPONSE="$(curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --request POST \
               --header "Authorization: Bearer ${NEON_API_KEY}" \
               --header "Accept: application/json" \
@@ -133,7 +147,7 @@ jobs:
               echo "::error::Neon did not return the created branch ID."
               exit 1
             }
-            echo "Created temporary branch without provisioning a compute endpoint."
+            echo "Created temporary branch with an initial 14-day TTL and ownership annotation; no compute endpoint was provisioned."
           else
             [[ "${EXISTING_COUNT}" == "1" ]] || {
               echo "::error::More than one branch matched the exact PR branch name."
@@ -145,7 +159,14 @@ jobs:
               echo "::error::Existing branch has an unexpected parent; refusing to reuse or replace it."
               exit 1
             }
-            echo "Reusing the existing PR branch; no branch replacement performed."
+            EXISTING_DETAILS="$(api_get_branch "${CREATED_ID}")"
+            EXISTING_OWNER="$(jq -r --arg key "${OWNERSHIP_KEY}" '.annotation.value[$key] // empty' <<< "${EXISTING_DETAILS}")"
+            EXISTING_PR="$(jq -r --arg key "${OWNER_PR_KEY}" '.annotation.value[$key] // empty' <<< "${EXISTING_DETAILS}")"
+            [[ "${EXISTING_OWNER}" == "${OWNERSHIP_VALUE}" && "${EXISTING_PR}" == "${PR_NUMBER}" ]] || {
+              echo "::error::Existing branch lacks the exact lifecycle ownership annotation; refusing reuse or TTL changes."
+              exit 1
+            }
+            echo "Reusing the previously annotated branch owned by this lifecycle workflow."
           fi
 
           # Wait for Neon to finish provisioning before applying the 14-day TTL.
@@ -170,7 +191,7 @@ jobs:
             exit 1
           }
 
-          EXPIRES_AT="$(date -u -d '+14 days' '+%Y-%m-%dT%H:%M:%SZ')"
+          EXPIRES_AT="${EXPIRES_AT:-$(date -u -d '+14 days' '+%Y-%m-%dT%H:%M:%SZ')}"
           PATCH_BODY="$(jq -cn --arg expiry "${EXPIRES_AT}" '{branch:{expires_at:$expiry}}')"
           curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --request PATCH \
             --header "Authorization: Bearer ${NEON_API_KEY}" \
