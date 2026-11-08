@@ -15,11 +15,11 @@ echo "[initial-schema] creating an isolated empty database owned by iam_owner"
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql -X --no-password "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $database_name OWNER iam_owner;"
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql -X --no-password "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "REVOKE CONNECT ON DATABASE $database_name FROM PUBLIC;"
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql -X --no-password "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE $database_name TO iam_migrator_login;"
-echo "[initial-schema] applying migration 0001 through the real LOGIN and two-step SET ROLE chain"
+echo "[initial-schema] applying clean-database bootstrap through the real LOGIN and two-step SET ROLE chain"
 PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql -X --no-password "$migrator_url" -v ON_ERROR_STOP=1 <<'SQL'
 SET ROLE iam_migrator;
 SET ROLE iam_owner;
-\i database/migrations/0001_initial_iam_schema.sql
+\i database/bootstrap/0001_initial_iam_schema.sql
 SQL
 echo "[initial-schema] running the independent bootstrap, ownership, default-deny, tenant-integrity, and audit contracts"
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql -X --no-password "$admin_url" -v ON_ERROR_STOP=1 -f database/tests/0001_initial_schema_contract.sql
