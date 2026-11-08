@@ -132,7 +132,7 @@ A role iam_schema_export_reader existe na fonte canônica:
 - nenhuma membership concedida ao reader;
 - a única aresta relacionada é iam_database_owner → iam_schema_export_reader, concedida por cloud_admin com ADMIN=true, INHERIT=false e SET=false (provider-managed; não é capacidade do reader).
 
-O perfil catalogado é compatível com export schema-only least-privilege. Ainda falta provar autenticação efetiva e executar pg_dump 18 pelo Environment neon-schema-export; não presumir que o secret NEON_SCHEMA_EXPORT_URL esteja configurado com essa role, pois seu valor não foi lido.
+O perfil catalogado tem grants mínimos para leitura de metadados sem acesso a dados. A capacidade real de executar pg_dump 18 schema-only ainda NÃO foi comprovada; é necessário executar o workflow e validar a autenticação. Não presumir que NEON_SCHEMA_EXPORT_URL esteja configurado com essa role, pois seu valor não foi lido.
 
 
 ## Proveniência do ledger — dado de controle fora do schema-only dump
