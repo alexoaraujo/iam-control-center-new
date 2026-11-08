@@ -200,7 +200,8 @@ jobs:
           fi
 
           echo "Exact-SHA Vercel status is successful; using branch alias: ${deployment_host}"
-          printf 'E2E_BASE_URL=https://%s\\n' "${deployment_host}" >> "$GITHUB_ENV"
+          printf 'E2E_DEPLOYMENT_URL=https://%s\n' "${deployment_host}" >> "$GITHUB_ENV"
+          printf 'E2E_BASE_URL=https://%s\n' "${E2E_CALLBACK_HOST}" >> "$GITHUB_ENV"
 
       - name: Install isolated Playwright runner
         run: |
@@ -266,7 +267,7 @@ jobs:
         run: |
           set -euo pipefail
           node <<'NODE'
-          const deploymentOrigin = new URL(process.env.E2E_BASE_URL);
+          const deploymentOrigin = new URL(process.env.E2E_DEPLOYMENT_URL);
           const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
           const callbackHost = process.env.E2E_CALLBACK_HOST;
           const trustedHeader = "x-vercel-trusted-oidc-idp-token";
