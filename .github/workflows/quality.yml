@@ -87,9 +87,10 @@ jobs:
     permissions:
       contents: read
       statuses: read
+      checks: read
       deployments: write
     steps:
-      - name: Wait for successful Vercel Preview deployment
+      - name: Wait for an exact-SHA READY Vercel Preview deployment
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -98,16 +99,237 @@ jobs:
           set -euo pipefail
           for attempt in $(seq 1 36); do
             state="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status" --jq '[.statuses[] | select(.context == "Vercel")] | first | .state // "missing"')"
-            if [ "${state}" = "success" ]; then
-              echo "Vercel status is successful for ${COMMIT_SHA}."
-              exit 0
-            fi
             if [ "${state}" = "failure" ] || [ "${state}" = "error" ]; then
               echo "::error::Vercel reported ${state} for ${COMMIT_SHA}."
               exit 1
             fi
-            echo "Waiting for Vercel status (attempt ${attempt}/36); current state: ${state}."
+
+            checks="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/check-runs?per_page=100")"
+            preview_host="$(jq -er --arg sha "${COMMIT_SHA}" '
+              [ .check_runs[]
+                | select(
+                    .head_sha == $sha
+                    and .app.slug == "vercel"
+                    and .name == "Vercel Preview Comments"
+                    and .conclusion == "success"
+                  )
+                | (.output.summary // "")
+                | try (capture("https://vercel\\.live/open-feedback/(?<host>[^/?#]+)").host) catch empty
+              ]
+              | unique
+              | if length == 1 then .[0] else empty end
+            ' <<< "${checks}" 2>/dev/null || true)"
+
+            if [ "${state}" = "success" ] && [ -n "${preview_host}" ]; then
+              case "${preview_host}" in
+                *.vercel.app)
+                  echo "Exact-SHA Vercel Preview is ready: ${preview_host}"
+                  exit 0
+                  ;;
+                *)
+                  echo "::error::Vercel returned a non-deployment hostname for ${COMMIT_SHA}."
+                  exit 1
+                  ;;
+              esac
+            fi
+
+            echo "Waiting for exact-SHA Vercel Preview (attempt ${attempt}/36); status: ${state}; deployment URL: ${preview_host:-missing}."
             sleep 20
           done
-          echo "::error::Timed out waiting for a successful Vercel status for ${COMMIT_SHA}."
+          echo "::error::No exact-SHA READY Vercel Preview deployment was found for ${COMMIT_SHA}."
           exit 1
+
+  auth0-e2e:
+    name: auth0-e2e
+    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true' && needs.quality.outputs.preview_required == 'true'
+    needs:
+      - quality
+      - preview-deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Must match the GitHub Actions environment configured in Vercel Trusted Sources.
+    # Without this, GitHub issues a ref-based OIDC subject instead of environment:Preview.
+    environment:
+      name: Preview
+    permissions:
+      contents: read
+      checks: read
+      statuses: read
+      id-token: write
+    env:
+      AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
+      AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
+      # The Auth0 redirect_uri uses this branch-bound Preview alias.
+      E2E_CALLBACK_HOST: iam-control-center-preview.vercel.app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+
+      - name: Resolve the exact Vercel Preview branch alias for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          # Branch alias returned by Vercel for fix/next16-proxy-r2.
+          # The preceding exact-SHA Vercel status gate must be green before use.
+          E2E_DEPLOYMENT_HOST: iam-control-center-git-fix-426b37-alexoaraujo83-8387s-projects.vercel.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status" \
+            --jq '[.statuses[] | select(.context == "Vercel")] | first | .state // "missing"')"
+          if [ "${status}" != "success" ]; then
+            echo "::error::Vercel Preview status is not successful for ${COMMIT_SHA} (state: ${status})."
+            exit 1
+          fi
+
+          deployment_host="${E2E_DEPLOYMENT_HOST}"
+          if [[ "${deployment_host}" != *.vercel.app ]]; then
+            echo "::error::Configured Vercel Preview branch alias is invalid."
+            exit 1
+          fi
+          if [ "${deployment_host}" = "${E2E_CALLBACK_HOST}" ]; then
+            echo "::error::Deployment hostname and callback alias must be distinct."
+            exit 1
+          fi
+
+          echo "Exact-SHA Vercel status is successful; using branch alias: ${deployment_host}"
+          printf 'E2E_DEPLOYMENT_URL=https://%s\n' "${deployment_host}" >> "$GITHUB_ENV"
+          printf 'E2E_BASE_URL=https://%s\n' "${E2E_CALLBACK_HOST}" >> "$GITHUB_ENV"
+
+      - name: Install isolated Playwright runner
+        run: |
+          mkdir -p "$RUNNER_TEMP/playwright"
+          cd "$RUNNER_TEMP/playwright"
+          npm init -y >/dev/null
+          npm install --save-exact --no-audit --no-fund @playwright/test@1.64.1
+          npm audit --audit-level=high
+
+      - name: Install Chromium
+        run: "$RUNNER_TEMP/playwright/node_modules/.bin/playwright install --with-deps chromium"
+
+      - name: Request Vercel Trusted Source OIDC token
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error \
+            --get \
+            --data-urlencode "audience=https://github.com/alexoaraujo83" \
+            --header "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}")"
+          token="$(jq -er '.value | select(type == "string" and length > 0)' <<< "$response")"
+          echo "::add-mask::${token}"
+          printf 'VERCEL_TRUSTED_OIDC_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          unset token response
+
+      - name: Verify GitHub OIDC claims for Vercel Trusted Sources
+        run: |
+          node <<'NODE'
+          const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
+          if (!token) throw new Error("OIDC token missing from job environment.");
+          const parts = token.split(".");
+          if (parts.length !== 3) throw new Error("OIDC token is not a JWT.");
+          const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+          const expectedIssuer = "https://token.actions.githubusercontent.com";
+          // GitHub's OIDC subject for this repository includes immutable owner/repository IDs.
+          const expectedSubject = "repo:alexoaraujo83@288204053/iam-control-center@1431662503:environment:Preview";
+          const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+          // These claims are non-secret diagnostics; never print or persist the JWT.
+          console.log(JSON.stringify({
+            issuer: claims.iss ?? null,
+            audience,
+            subject: claims.sub ?? null,
+            repository: claims.repository ?? null,
+            ref: claims.ref ?? null,
+            environment: claims.environment ?? null,
+            event_name: claims.event_name ?? null,
+            issued_at: claims.iat ?? null,
+            expires_at: claims.exp ?? null,
+            token_age_seconds: Number.isFinite(claims.iat) ? Math.floor(Date.now() / 1000) - claims.iat : null,
+            seconds_until_expiry: Number.isFinite(claims.exp) ? claims.exp - Math.floor(Date.now() / 1000) : null,
+          }));
+          const now = Math.floor(Date.now() / 1000);
+          if (!Number.isFinite(claims.iat) || !Number.isFinite(claims.exp)) throw new Error("OIDC token is missing iat/exp claims.");
+          if (claims.iat > now + 60 || claims.exp <= now) throw new Error("OIDC token is not currently valid.");
+          if (claims.iss !== expectedIssuer) throw new Error("Unexpected OIDC issuer.");
+          if (!audience.includes("https://github.com/alexoaraujo83")) throw new Error("Unexpected OIDC audience.");
+          if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
+          NODE
+
+      - name: Preflight Vercel Deployment Protection (negative and positive controls)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const deploymentOrigin = new URL(process.env.E2E_DEPLOYMENT_URL);
+          const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
+          const callbackHost = process.env.E2E_CALLBACK_HOST;
+          const trustedHeader = "x-vercel-trusted-oidc-idp-token";
+          const auth0Host = "iam-control-center.us.auth0.com";
+          const trustedHosts = new Set([deploymentOrigin.hostname, callbackHost]);
+
+          if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
+          if (callbackHost !== "iam-control-center-preview.vercel.app") {
+            throw new Error("Unexpected Auth0 callback Preview host.");
+          }
+          if (deploymentOrigin.hostname === callbackHost) {
+            throw new Error("Deployment hostname and callback alias must be distinct.");
+          }
+
+          // Negative control: deployment hostname must be protected without OIDC.
+          const anonymous = await fetch(new URL("/protected", deploymentOrigin), { redirect: "manual" });
+          const anonymousLocation = anonymous.headers.get("location");
+          const intercepted = anonymous.status === 401 || anonymous.status === 403 ||
+            (anonymousLocation && new URL(anonymousLocation, deploymentOrigin).hostname === "vercel.com");
+          if (!intercepted) {
+            throw new Error(`Negative control failed: HTTP ${anonymous.status}, Location ${anonymousLocation ?? "none"}.`);
+          }
+          console.log(`Negative control passed: ${deploymentOrigin.hostname} blocks access without OIDC.`);
+
+          // Follow only same-Preview-host redirects until Auth0. Attach the
+          // trusted token only to the two explicit Preview hosts, never Auth0.
+          async function reachAuth0(start, label) {
+            let current = new URL(start);
+            for (let attempt = 0; attempt < 6; attempt += 1) {
+              if (!trustedHosts.has(current.hostname)) {
+                throw new Error(`Refusing to send OIDC token to untrusted host ${current.hostname}.`);
+              }
+              const response = await fetch(current, {
+                redirect: "manual",
+                headers: { [trustedHeader]: token },
+              });
+              const location = response.headers.get("location");
+              if (!location) {
+                throw new Error(`${label}: expected redirect from ${current.pathname}; HTTP ${response.status}, no Location.`);
+              }
+              const next = new URL(location, current);
+              if (next.hostname === auth0Host) {
+                console.log(`${label} passed: reached Auth0 after ${attempt + 1} Preview redirect(s).`);
+                return;
+              }
+              if (next.hostname === "vercel.com") {
+                throw new Error(`${label}: Vercel Deployment Protection intercepted a request carrying the OIDC token.`);
+              }
+              if (!trustedHosts.has(next.hostname)) {
+                throw new Error(`${label}: unexpected redirect host ${next.hostname}.`);
+              }
+              current = next;
+            }
+            throw new Error(`${label}: did not reach Auth0 within six redirects.`);
+          }
+
+          await reachAuth0(new URL("/protected", deploymentOrigin), "Positive control");
+          await reachAuth0(new URL("/protected", `https://${callbackHost}`), "Callback alias");
+          NODE
+
+      - name: Run Auth0 end-to-end flow
+        run: |
+          NODE_PATH="$RUNNER_TEMP/playwright/node_modules" \
+            "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" test \
+            --config=.github/e2e/playwright.config.cjs
