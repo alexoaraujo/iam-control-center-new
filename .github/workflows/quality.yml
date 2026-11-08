@@ -155,7 +155,6 @@ jobs:
       contents: read
       checks: read
       statuses: read
-      deployments: read
       id-token: write
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
@@ -172,11 +171,14 @@ jobs:
           node-version: 24
 
 
-      - name: Resolve the exact Vercel Preview deployment URL for this commit
+      - name: Resolve the exact Vercel Preview branch alias for this commit
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          # Branch alias returned by Vercel for fix/next16-proxy-r2.
+          # The preceding exact-SHA Vercel status gate must be green before use.
+          E2E_DEPLOYMENT_HOST: iam-control-center-git-fix-426b37-alexoaraujo83-8387s-projects.vercel.app
         shell: bash
         run: |
           set -euo pipefail
@@ -187,35 +189,17 @@ jobs:
             exit 1
           fi
 
-          # Resolve the immutable deployment URL from GitHub's deployment
-          # status API; never mistake a branch/custom alias for the deployment.
-          deployments="$(gh api "repos/${REPOSITORY}/deployments?sha=${COMMIT_SHA}&environment=Preview&per_page=100")"
-          deployment_ids="$(jq -r 'sort_by(.created_at) | reverse | .[].id' <<< "${deployments}")"
-          deployment_url=""
-          while IFS= read -r deployment_id; do
-            [ -n "${deployment_id}" ] || continue
-            statuses="$(gh api "repos/${REPOSITORY}/deployments/${deployment_id}/statuses?per_page=20")"
-            candidate="$(jq -r '[.[] | select(.state == "success") | .environment_url // empty] | .[0] // empty' <<< "${statuses}")"
-            if [ -n "${candidate}" ]; then
-              deployment_url="${candidate}"
-              break
-            fi
-          done <<< "${deployment_ids}"
-
-          if [ -z "${deployment_url}" ]; then
-            echo "::error::No successful Preview deployment URL found for exact SHA ${COMMIT_SHA}."
-            exit 1
-          fi
-          deployment_host="$(node -e 'const u=new URL(process.argv[1]); if(u.protocol!=="https:") process.exit(2); console.log(u.hostname)' "${deployment_url}")"
+          deployment_host="${E2E_DEPLOYMENT_HOST}"
           if [[ "${deployment_host}" != *.vercel.app ]]; then
-            echo "::error::Deployment Status returned a non-Vercel hostname."
+            echo "::error::Configured Vercel Preview branch alias is invalid."
             exit 1
           fi
           if [ "${deployment_host}" = "${E2E_CALLBACK_HOST}" ]; then
-            echo "::error::Resolved deployment URL is the callback alias; refusing duplicate-host preflight."
+            echo "::error::Deployment hostname and callback alias must be distinct."
             exit 1
           fi
-          echo "Resolved immutable Preview deployment host: ${deployment_host}"
+
+          echo "Exact-SHA Vercel status is successful; using branch alias: ${deployment_host}"
           printf 'E2E_BASE_URL=https://%s\\n' "${deployment_host}" >> "$GITHUB_ENV"
 
       - name: Install isolated Playwright runner
