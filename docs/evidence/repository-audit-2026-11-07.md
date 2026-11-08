@@ -19,7 +19,7 @@
 | Auth0 E2E no main | SKIPPED | Check `auth0-e2e` |
 | AuthN/AuthZ IAM | BLOCKED | Rota protegida verifica somente sessão Auth0 |
 | Persistência Neon runtime | NOT IMPLEMENTED | Cliente criado sem query/sessão |
-| Baseline/migrations | BLOCKED | Migration clean-db reduzida; fonte operacional tem 23 tabelas |
+| Baseline/migrations | BLOCKED | Snapshot schema-only de branch isolada histórica tem 23 tabelas; equivalência com o projeto Neon canônico atual ainda não foi comprovada |
 | Evidências/documentação | FAIL (drift) | Manifesto, setup e snapshots históricos desatualizados; correções nesta branch |
 
 ## 2. Evidência CI vinculada ao SHA
@@ -49,10 +49,10 @@
 ## 5. Banco, lineage e testes
 
 ### DB-01 — Migration main não é baseline operacional
-`database/migrations/0001_initial_iam_schema.sql` é REVIEW PROPOSAL para database limpa; cria 10 tabelas e não reproduz 23 tabelas, view, funções, policies, triggers, enums, ACLs e índices da fonte Neon. Não executar sobre a fonte existente nem tratá-la como baseline canônica.
+`database/migrations/0001_initial_iam_schema.sql` é REVIEW PROPOSAL para database limpa; cria 10 tabelas e não reproduz o snapshot schema-only de 23 tabelas, view, funções, policies, triggers, enums, ACLs e índices. **Proveniência do snapshot:** Neon project `twilight-fire-88497009`, branch isolada `schema-export-validation-20261105`, database `iam_database`, host `ep-lucky-frost-b631bopg.c-2.sa-east-1.aws.neon.tech`, dump iniciado em `2026-11-05 03:46:00 UTC`. Esse é um snapshot histórico de validação isolada, não a branch live do projeto canônico atual `wandering-wildflower-90908845`. A contagem de 23 tabelas descreve somente esse artefato/snapshot. Não executar a migration sobre uma fonte existente nem tratar esse snapshot como prova da baseline canônica atual; reexportar e reconciliar a branch canônica aprovada antes de qualquer decisão operacional.
 
 ### DB-02 — Migration histórica incremental fora do main
-A fonte Neon registrou `0001_context_key_hardening`, associada ao SHA `b80c98c51746e1d49039015eb649b9bdd735ef7f`. O arquivo histórico não está no main atual e pressupõe schema operacional preexistente. Não substitui baseline inicial. O checksum do arquivo recuperado ainda precisa de comparação byte-a-byte com o ledger; não declarar match ainda.
+O ledger do snapshot de validação isolado acima registrou `0001_context_key_hardening`, associada ao SHA `b80c98c51746e1d49039015eb649b9bdd735ef7f`. O arquivo histórico não está no main atual e pressupõe schema preexistente nesse snapshot; não substitui baseline inicial nem prova que o mesmo estado existe no projeto canônico atual. O checksum do arquivo recuperado ainda precisa de comparação byte-a-byte com o ledger; não declarar match ainda.
 
 ### DB-03 — Trigger de sessions inconsistente no restore
 No restore pós-hardening, `sessions_touch` chama `iam.touch_updated_at()`, mas `iam.sessions` não tem coluna `updated_at` (tem `last_seen_at`). UPDATE falha. Uma alternativa foi testada somente em rollback; não é correção aprovada. Definir semântica antes de alterar trigger, pois revogação não deve necessariamente atualizar `last_seen_at`.
