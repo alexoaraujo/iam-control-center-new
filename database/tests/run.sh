@@ -138,6 +138,12 @@ assert_migration_rejected "direct iam_owner membership"
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -c "REVOKE iam_owner FROM iam_migrator_login;"
 
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "GRANT iam_migrator TO iam_app_runtime_login WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;"
+assert_migration_rejected "unapproved login membership granted to iam_migrator"
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "REVOKE iam_migrator FROM iam_app_runtime_login;"
+
 echo "Running migration over the authenticated, least-privilege LOGIN session..."
 PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1 \
   -v migration_checksum="$migration_checksum" -v source_sha="$source_sha" \
