@@ -162,7 +162,7 @@ ALTER TYPE "iam"."tenant_status" OWNER TO "iam_owner";
 
 CREATE FUNCTION "app_private"."current_tenant_id"() RETURNS "uuid"
     LANGUAGE "plpgsql" STABLE SECURITY DEFINER
-    SET "search_path" TO 'pg_catalog', 'app_private', 'iam', 'public'
+    SET "search_path" TO 'pg_catalog', 'app_private', 'iam'
     AS $$
 DECLARE
  v_tenant uuid; v_identity uuid; v_expires bigint; v_nonce text; v_signature text; v_secret bytea; v_payload text;
