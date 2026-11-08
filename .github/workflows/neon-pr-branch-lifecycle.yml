@@ -42,7 +42,7 @@ jobs:
             echo "::error::Invalid pull request number."
             exit 1
           }
-          [[ "${NEON_PROJECT_ID}" == "wandering-wildflower-90908845" ]] || {
+          [[ "${NEON_PROJECT_ID}" == "twilight-fire-88497009" ]] || {
             echo "::error::NEON_PROJECT_ID does not match the canonical IAM Control Center Neon project."
             exit 1
           }
