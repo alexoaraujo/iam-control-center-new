@@ -4,6 +4,9 @@
 
 \restrict BTtOBzwWrKDmVJdcDohRkbkfHhjmYFDz9yewOtmlGZApmjt9EE8mJFWj6HjlsBx
 
+-- Required dependency for app_private.current_tenant_id() public.hmac(...).
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+
 -- Dumped from database version 18.6 (ac70818)
 -- Dumped by pg_dump version 18.6
 
