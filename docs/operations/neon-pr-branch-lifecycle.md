@@ -1,76 +1,91 @@
 # Neon PR branch lifecycle
 
-## Purpose
+## Canonical Neon target
 
-Create one short-lived Neon branch for each same-repository pull request, using the permanent `development` branch as its parent. Keep `preview` and `production` untouched.
+This repository uses the following Neon project for IAM database delivery:
 
-## Required GitHub configuration
+| Setting | Canonical value |
+|---|---|
+| Project | `iam-database-delivery` |
+| Project ID | `twilight-fire-88497009` |
+| Permanent branch | `main` |
+| Branch ID | `br-little-fire-b6adup9f` |
+| Endpoint | `ep-twilight-shadow-b618ef5h` |
+| Database | `iam_database` |
+| Migration login | `iam_migrator_login` |
+| TLS mode | `sslmode=require` |
 
-| Name | GitHub location | Purpose |
-|---|---|---|
-| `NEON_API_KEY` | Repository Actions secret | Neon Management API authentication |
-| `NEON_PROJECT_ID` | Repository Actions variable | Must equal the canonical project ID `wandering-wildflower-90908845`; workflow rejects any other value |
+The workflow pins the project and main-branch identifiers in its trusted default-branch definition. It does not depend on a mutable `NEON_PROJECT_ID` Actions variable. The only required GitHub Actions secret is `NEON_API_KEY`; its value must never be printed, copied into logs, or committed.
 
-The Neon GitHub integration previously installed these names. Confirm their presence in repository Settings before enabling the workflow. The workflow also compares `NEON_PROJECT_ID` to the canonical project ID `wandering-wildflower-90908845`. Never print, copy into logs, or commit secret values.
+For migration clients, use the direct (non-pooled) endpoint host:
 
-## Lifecycle
+```text
+postgresql://iam_migrator_login:<PASSWORD>@ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech/iam_database?sslmode=require
+```
 
-- Events: `opened`, `reopened`, `synchronize`, and `closed` through `pull_request_target`.
-- Same-repository PRs only. Fork PRs are ignored and receive no Neon branch.
-- Branch name: `preview/pr-<number>`.
-- Parent: the unique branch named `development`, which must itself be a child of the unique default Production branch.
-- Idempotency: an existing branch is reused only when its parent is the expected Development branch. It is never replaced automatically.
-- Expiration: 14 days, refreshed on open/reopen/synchronize.
-- Close: automatic deletion is intentionally disabled. A deterministic branch name and parent do not prove that the workflow created the branch. Existing branches retain their previously assigned 14-day expiration; manual cleanup requires a separate provenance check.
-- Capacity: fail closed at 10 total project branches (current Free-plan limit). Permanent branches are never removed to make room.
-- No migration, seed, compute endpoint, connection-string export, Vercel environment update, or Production operation is performed.
+Supply the password through the CI secret store, never in source control. Do not use the `-pooler` hostname for schema migrations. Application runtime connections must use their separately provisioned least-privilege login, not the migration login.
+
+## Verified Neon inventory
+
+Read-only Neon API inspection confirmed:
+
+- Project `twilight-fire-88497009` exists in `aws-sa-east-1`, PostgreSQL 18.
+- `main` is the unique default branch, ID `br-little-fire-b6adup9f`, state `ready`.
+- Endpoint `ep-twilight-shadow-b618ef5h` is the read-write endpoint attached to that branch. It was idle/suspended at inspection time; the first connection may incur a cold start.
+- Database `iam_database` exists and is owned by `iam_database_owner`.
+- Login `iam_migrator_login` exists.
+- A read-only session using that login confirmed `current_user = iam_migrator_login`, database `iam_database`, CONNECT and public schema USAGE, and no CREATE on schema `public`.
+- The role has LOGIN, and does not have SUPERUSER, BYPASSRLS, CREATEDB, or CREATEROLE.
+- The Neon project currently has 8 branches against the Free-plan limit of 10. The workflow fails closed when the project already has 10 branches; it never deletes permanent or existing branches to make room.
+
+The MCP SQL session is not proof of TLS on the application's network path. The actual CI migration connection must use `sslmode=require` and its TLS behavior must be verified from the runner before a migration is considered validated.
+
+## Purpose and lifecycle
+
+Create one short-lived Neon branch for each same-repository pull request, using the canonical `main` branch as its parent. The workflow:
+
+- Runs on `opened`, `reopened`, `synchronize`, and `closed` events through `pull_request_target`.
+- Ignores fork PRs.
+- Uses the unique default branch only if its name and ID exactly match the canonical `main` branch above and its state is `ready`.
+- Creates or reuses `preview/pr-<number>` as a child of `main`.
+- Requires an exact ownership annotation before reusing a branch or refreshing its TTL.
+- Sets and verifies a 14-day expiration.
+- Does not provision a compute endpoint, export a connection string, run a migration, seed data, or modify Vercel environments.
+- Does not delete a branch automatically on PR close. The TTL is the fallback; manual cleanup requires independent ownership and dependency verification.
 
 ## Security model
 
-The workflow is deliberately privileged because it uses the Neon Management API key. It therefore:
+The workflow is privileged because it uses the Neon Management API key. It therefore:
 
-1. Uses `pull_request_target`, which takes the workflow from the repository's default branch.
-2. Does not check out, download, build, or execute code from the pull request.
+1. Uses the workflow definition from the repository default branch.
+2. Does not check out, download, build, or execute PR content.
 3. Has no `GITHUB_TOKEN` permissions (`permissions: {}`).
 4. Accepts only a numeric PR number from the event and constructs the branch name internally.
 5. Ignores fork PRs.
-6. Checks the Production → Development ancestry and fails closed if it differs.
-7. Serializes all lifecycle events globally for this repository/project, reducing concurrent branch-quota races.
-8. Does not delete branches on close because deterministic name and parent do not prove automation provenance; the 14-day TTL remains the fallback.
-9. Never logs the API key or connection strings.
+6. Validates the canonical project ID, canonical default main-branch ID, and `ready` state before creating a branch.
+7. Serializes trusted PR lifecycle events for this repository.
+8. Fails closed on unexpected branch parent, missing ownership annotation, quota exhaustion, or API errors.
+9. Never logs the API key, passwords, or connection strings.
 
-Do not add checkout, scripts, artifacts, package installation, or commands sourced from PR content to this workflow.
+Do not add checkout, scripts, artifacts, package installation, or commands sourced from PR content to this privileged workflow.
 
-## Parent-branch data audit
+## Operational acceptance
 
-Read-only audit of Development branch `br-bitter-rain-b6j4sexv`:
+This workflow is not active until it is merged into the repository default branch. Keep the PR Draft until independent review is complete. Before treating the lifecycle as operationally accepted, run a controlled same-repository PR and verify:
 
-| Database | Finding | Interpretation |
-|---|---|---|
-| `iam_control_center` | No user tables, views, materialized views, or large objects | No application data objects found in this database |
-| `postgres` | Platform schemas `neon` and `neon_migration`; `public.health_check` (1 row) and `public.lakebase_attributes` (0 rows), all inspected relations owned by `cloud_admin` | Appears to be Neon-managed metadata; row contents were not inspected |
-| Neon Object Storage | API reports unavailable in `aws-sa-east-1` | Branchable Object Storage is not available in this project's region |
-
-The application database has no user data objects in the inspected catalogs. However, the parent-data safety gate remains **NOT VERIFIED**: the health-check row was not inspected, role password reuse from the parent is inherent to Neon branching, and the audit does not prove the absence of sensitive data in every possible platform object. Do not use Development as a production-data clone. Keep it synthetic-only.
-
-The Neon API inspection connected as `Administrador`; it does not prove the application's effective runtime login or its effective grants/RLS behavior.
-
-## Capacity and cost
-
-The workflow creates a branch without a compute endpoint. It does not automatically provide a per-PR `DATABASE_URL` to Vercel. That is a separate integration and must be designed with scoped credentials and explicit environment handling. The Free-plan ceiling is 10 branches per project; the workflow checks the current count before creation and serializes lifecycle events globally to reduce quota races. Neon remains the authoritative quota enforcement. A rejected create operation fails the job; no permanent branch is removed. API requests have bounded connection and total timeouts.
-
-Development currently has an active read-write compute endpoint. The lifecycle workflow does not create additional endpoints for PR branches.
-
-## Activation and acceptance
-
-This workflow runs only after it is merged into the default branch. Keep its PR Draft until review. After merge, test with a controlled same-repository PR and verify:
-
-- branch is created from Development, not Production;
+- the branch is created from `main`, not from another branch;
 - no compute endpoint is provisioned;
-- retry/synchronize reuses the same branch;
-- expiration is set to approximately 14 days;
-- fork PR does not create a branch;
-- close does not delete a branch automatically; existing branches retain their verified TTL,
-- missing configuration, wrong ancestry, quota exhaustion, and API failures fail closed.
+- retry/synchronize reuses only the exact owned branch;
+- the expiration matches 14 days;
+- fork PRs do not create branches;
+- closing a PR does not delete a branch;
+- missing configuration, unexpected main-branch identity, quota exhaustion, and API failures fail closed.
 
-A successful GitHub workflow run proves only the lifecycle API operation for that event. It does not prove database runtime connectivity, tenant isolation, RLS, or application integration.
+A successful GitHub workflow run proves only the Management API operation for that event. It does not prove database runtime connectivity, TLS, migration correctness, tenant isolation, RLS, or application integration. Those require separate evidence on the exact commit and target environment.
+
+## Explicit operational boundaries
+
+- No migration was run by this configuration update.
+- No Neon branch was created, modified, or deleted.
+- No Neon role, password, database, endpoint, or permanent branch was changed.
+- No Vercel environment, Production deployment, or Auth0 configuration was changed.
