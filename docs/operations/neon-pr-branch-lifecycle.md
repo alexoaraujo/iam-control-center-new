@@ -36,7 +36,7 @@ Read-only Neon API inspection confirmed:
 - Login `iam_migrator_login` exists.
 - A read-only session using that login confirmed `current_user = iam_migrator_login`, database `iam_database`, CONNECT and public schema USAGE, and no CREATE on schema `public`.
 - The role has LOGIN, and does not have SUPERUSER, BYPASSRLS, CREATEDB, or CREATEROLE.
-- The Neon project currently has 5 branches against the Free-plan limit of 10. The workflow fails closed when the project already has 10 branches; it never deletes permanent or existing branches to make room.
+- The Neon project currently has 8 branches against the Free-plan limit of 10. The workflow fails closed when the project already has 10 branches; it never deletes permanent or existing branches to make room.
 
 The MCP SQL session is not proof of TLS on the application's network path. The actual CI migration connection must use `sslmode=require` and its TLS behavior must be verified from the runner before a migration is considered validated.
 
