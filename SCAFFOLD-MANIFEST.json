@@ -140,6 +140,17 @@
     "Parallel migration-lock contention has not been proven with independent PostgreSQL sessions/backend PIDs.",
     "Historical dependency versions in older evidence documents are superseded by the current package manifest."
   ],
+  "neon_schema_snapshot": {
+    "project_id": "twilight-fire-88497009",
+    "branch": "schema-export-validation-20261105",
+    "database": "iam_database",
+    "host": "ep-lucky-frost-b631bopg.c-2.sa-east-1.aws.neon.tech",
+    "dump_started_at_utc": "2026-11-05T03:46:00Z",
+    "table_count": 23,
+    "source_classification": "historical isolated validation-branch schema snapshot; not the current canonical Neon project's live state",
+    "canonical_project_id": "wandering-wildflower-90908845",
+    "limitations": "Schema-only dump with no application rows. Re-export from the canonical current project/branch is required before treating it as current operational baseline."
+  },
   "production_ready": false,
   "dependency_security": {
     "packages": {
@@ -158,6 +169,6 @@
     "vulnerabilities_found": 0,
     "audit_run": "https://github.com/alexoaraujo83/iam-control-center/actions/runs/42430949038",
     "audit_sha": "64f96d84b33aff57d9c09bbe7ff54396e651552c",
-    "note": "The permanent quality workflow, including pnpm audit, passed on audit_sha. This run checked the PR merge commit combining the security branch head with fix/health-runtime-config. Evidence applies to that tested commit; every subsequent commit must pass CI before it is considered validated."
+    "note": "The permanent quality workflow, including pnpm audit, passed on the main audit commit 64f96d84b33aff57d9c09bbe7ff54396e651552c (run 42430949038). This run validates that exact main commit; it does not describe or validate the historical security-branch merge. Every subsequent commit must pass CI before it is considered validated."
   }
 }
