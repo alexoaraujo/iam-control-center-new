@@ -1,15 +1,15 @@
 # GitHub Actions secrets and variables — IAM Control Center
 
 **Status:** inventory and target design; not evidence that GitHub settings have been populated.
-**Repository inspected:** `alexoaraujo83/iam-control-center`, default branch `main`, current main SHA at audit `18a30ab67b9422be4c86c73675384e709a40a03d`.
+**Repository inspected:** `alexoaraujo83/iam-control-center`, default branch `main`, main SHA auditado em 2026-11-07: `64f96d84b33aff57d9c09bbe7ff54396e651552c`.
 
 ## 1. Current-state findings
 
 - `.github/workflows/quality.yml` runs dependency audit, lint, typecheck, tests, and build. It declares `contents: read` and does not reference a GitHub deployment environment.
-- The workflow pins Node.js 24 and pnpm 10.12.1 directly in YAML. It currently needs no custom GitHub Actions secret or configuration variable.
+- The workflow pins Node.js 24 and pnpm 10.34.9 directly in YAML. It currently needs no custom GitHub Actions secret or configuration variable.
 - `.env.example` describes application/runtime configuration. Its presence does not mean those values are consumed by the CI workflow.
-- The GitHub repository API currently reports visibility as `public`, while README says the repository is private. Reconcile this governance/documentation mismatch before relying on plan-specific secret/environment behavior.
-- The repository ruleset expects deployments to environments named exactly `Development` and `Preview`. A successful `quality` job is not a deployment to either environment.
+- The GitHub repository API confirms visibility `private`, consistente com README. A API de rulesets retornou HTTP 403 nesta conexão; enforcement não foi revalidado independentemente.
+- Ruleset enforcement is NOT VERIFIED: the private-repository rulesets API returned HTTP 403. The versioned `main ci quality.json` snapshot lists `quality`, code quality, pull-request, and non-fast-forward requirements, but no deployment rule. The `preview-deployment` workflow job is a separate conditional CI job, not evidence of an active ruleset requirement for `Development`/`Preview` deployments.
 
 ## 2. GitHub Actions configuration inventory
 
@@ -104,7 +104,7 @@ Before a real deployment is marked PASS, record the exact commit SHA, environmen
 2. Keep Development and Preview credentials isolated; do not reuse secrets by copying the same value across environments unless that is a deliberate, documented design.
 3. Open **Settings → Secrets and variables → Actions** and review Repository secrets and Repository variables. Do not add unused entries just to make the lists look populated.
 4. For each environment, review its **Environment secrets** and **Environment variables** separately.
-5. Reconcile repository visibility: the current GitHub API reports `public`, but README claims `private`.
+5. Repository visibility is reconciled: the current GitHub repository API reports `private`, consistent with the README and manifest. Re-check only if repository visibility is intentionally changed.
 6. Re-run CI and deployment verification against the exact SHA after any workflow change.
 
 Official references:
@@ -112,3 +112,13 @@ Official references:
 - https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-variables
 - https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments
 - https://docs.github.com/en/actions/concepts/security/secrets
+
+
+## 6. Audit refresh — 2026-11-07
+
+- `main` HEAD: `64f96d84b33aff57d9c09bbe7ff54396e651552c`.
+- Repository visibility: `private` (GitHub repository metadata).
+- Toolchain: Node 24, pnpm 10.34.9, Next.js 16.4.3.
+- Exact-SHA `quality` on main: SUCCESS, run `42430949038`.
+- `preview-deployment` and `auth0-e2e`: SKIPPED on this main run.
+- Ruleset API inspection: NOT VERIFIED (HTTP 403 for the private-repository rulesets endpoint).

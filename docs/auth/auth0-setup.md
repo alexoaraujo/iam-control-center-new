@@ -54,15 +54,13 @@ O SDK v4 usa `AUTH0_DOMAIN` sem `https://` e `APP_BASE_URL`. A configuração m�
 
 Use `apps/web/.env.local` localmente e os armazenamentos de segredos por ambiente no host de deploy. Não usar prefixo `NEXT_PUBLIC_` para credenciais. Nunca ler, copiar ou imprimir o conteúdo de arquivos de ambiente com segredos.
 
-## Integração técnica ainda necessária
+## Estado técnico observado no repositório — 2026-11-07
 
-1. Instalar `@auth0/nextjs-auth0` v4 e atualizar o `pnpm-lock.yaml` com pnpm 10.12.1.
-2. Criar o cliente server-side em `apps/web/src/lib/auth0.ts`.
-3. Criar `apps/web/src/middleware.ts` para Next.js 15, montando `auth0.middleware()`.
-4. Adicionar UI de login/logout e uma rota/página de sessão que não exponha tokens.
-5. Testar comportamento sem configuração, sessão ausente, login/callback/logout e erros de configuração.
-6. Executar lint, typecheck, testes e build; registrar evidência vinculada ao SHA do PR.
-7. Depois, configurar as URLs reais de Preview e validar o fluxo E2E com o tenant.
+O SDK Auth0 v4, o cliente server-side e o entrypoint Next.js 16 `apps/web/src/proxy.ts` já existem no main auditado (`64f96d84b33aff57d9c09bbe7ff54396e651552c`). A rota `/protected` verifica apenas a existência de uma sessão Auth0; não implementa autorização IAM por tenant, membership ou permission.
+
+O workflow contém um fluxo E2E, mas `auth0-e2e` foi SKIPPED no SHA de main auditado. Portanto login/callback/logout não estão comprovados nesse SHA. Instalação/cliente/proxy estão implementados; autenticação E2E e autorização IAM permanecem **PENDING / NOT VERIFIED**.
+
+Toolchain atual: pnpm `10.34.9`, Next.js `16.4.3`, Node.js 24.
 
 ## Limites de autorização e segurança
 
