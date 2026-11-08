@@ -34,6 +34,15 @@ Migrations are versioned, checksum-verified proposals. This PR replaces the unsa
 - No source IP/User-Agent is collected in this initial audit proposal.
 - Clean database only; never apply over prototype objects or data.
 
+## Corrective migration 0002 — sessions touch contract
+
+- `0002_sessions_touch_contract.sql` is a separate corrective migration for the existing Development-derived schema, where `iam.sessions` already exists and has `last_seen_at` but no `updated_at`.
+- It preserves migration 0001 unchanged and does not modify the shared `iam.touch_updated_at()` function used by nine other tables.
+- It introduces `iam.touch_session_last_seen_at()`, rebinds only `iam.sessions_touch`, and fails closed unless the existing trigger points to `iam.touch_updated_at()` and the expected columns are present.
+- This is not a clean-database migration and must not be appended to the 0001 clean-install pipeline. Apply only after schema-lineage review on an isolated Development-derived branch.
+- Contract test: `database/tests/0002_sessions_touch_contract.sql`. Run after migration 0002 using the authenticated migrator login with the `iam_migrator_login -> iam_migrator -> iam_owner` SET chain. The test rolls back its temporary probe objects.
+- The repository still has no general migration runner. Do not infer automatic migration discovery or checksum-ledger registration.
+
 ## Migration integrity
 
 The future runner must SHA-256 the exact file bytes, serialize execution with a database advisory lock, and compare version/checksum in the ledger before applying. Same version+checksum is a no-op; same version with different checksum is a hard failure. `IF NOT EXISTS` is not migration idempotency. DDL and ledger write must be atomic.
