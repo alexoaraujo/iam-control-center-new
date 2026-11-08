@@ -155,6 +155,7 @@ jobs:
       contents: read
       checks: read
       statuses: read
+      deployments: read
       id-token: write
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
@@ -171,7 +172,7 @@ jobs:
           node-version: 24
 
 
-      - name: Resolve the exact Vercel Preview URL for this commit
+      - name: Resolve the exact Vercel Preview deployment URL for this commit
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -186,29 +187,36 @@ jobs:
             exit 1
           fi
 
-          checks="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/check-runs?per_page=100")"
-          preview_host="$(jq -er --arg sha "${COMMIT_SHA}" '
-            [ .check_runs[]
-              | select(
-                  .head_sha == $sha
-                  and .app.slug == "vercel"
-                  and .name == "Vercel Preview Comments"
-                  and .conclusion == "success"
-                )
-              | (.output.summary // "")
-              | try (capture("https://vercel\\.live/open-feedback/(?<host>[^/?#]+)").host) catch empty
-            ]
-            | unique
-            | if length == 1 then .[0] else error("Expected exactly one Vercel Preview URL for this SHA") end
-          ' <<< "${checks}")"
+          # Resolve the immutable deployment URL from GitHub's deployment
+          # status API; never mistake a branch/custom alias for the deployment.
+          deployments="$(gh api "repos/${REPOSITORY}/deployments?sha=${COMMIT_SHA}&environment=Preview&per_page=100")"
+          deployment_ids="$(jq -r 'sort_by(.created_at) | reverse | .[].id' <<< "${deployments}")"
+          deployment_url=""
+          while IFS= read -r deployment_id; do
+            [ -n "${deployment_id}" ] || continue
+            statuses="$(gh api "repos/${REPOSITORY}/deployments/${deployment_id}/statuses?per_page=20")"
+            candidate="$(jq -r '[.[] | select(.state == "success") | .environment_url // empty] | .[0] // empty' <<< "${statuses}")"
+            if [ -n "${candidate}" ]; then
+              deployment_url="${candidate}"
+              break
+            fi
+          done <<< "${deployment_ids}"
 
-          case "${preview_host}" in
-            *.vercel.app) ;;
-            *) echo "::error::Resolved Preview host is not a Vercel deployment hostname."; exit 1 ;;
-          esac
-
-          echo "Resolved exact-SHA Vercel Preview host: ${preview_host}"
-          printf 'E2E_BASE_URL=https://%s\n' "${preview_host}" >> "$GITHUB_ENV"
+          if [ -z "${deployment_url}" ]; then
+            echo "::error::No successful Preview deployment URL found for exact SHA ${COMMIT_SHA}."
+            exit 1
+          fi
+          deployment_host="$(node -e 'const u=new URL(process.argv[1]); if(u.protocol!=="https:") process.exit(2); console.log(u.hostname)' "${deployment_url}")"
+          if [[ "${deployment_host}" != *.vercel.app ]]; then
+            echo "::error::Deployment Status returned a non-Vercel hostname."
+            exit 1
+          fi
+          if [ "${deployment_host}" = "${E2E_CALLBACK_HOST}" ]; then
+            echo "::error::Resolved deployment URL is the callback alias; refusing duplicate-host preflight."
+            exit 1
+          fi
+          echo "Resolved immutable Preview deployment host: ${deployment_host}"
+          printf 'E2E_BASE_URL=https://%s\\n' "${deployment_host}" >> "$GITHUB_ENV"
 
       - name: Install isolated Playwright runner
         run: |
@@ -269,7 +277,7 @@ jobs:
           if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
           NODE
 
-      - name: Preflight Vercel Trusted Sources access to Preview hosts
+      - name: Preflight Vercel Deployment Protection (negative and positive controls)
         shell: bash
         run: |
           set -euo pipefail
@@ -277,55 +285,50 @@ jobs:
           const deploymentOrigin = new URL(process.env.E2E_BASE_URL);
           const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
           const callbackHost = process.env.E2E_CALLBACK_HOST;
-          const previewHosts = new Set([deploymentOrigin.hostname, callbackHost]);
+          const trustedHeader = "x-vercel-trusted-oidc-idp-token";
           const auth0Host = "iam-control-center.us.auth0.com";
+
           if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
           if (callbackHost !== "iam-control-center-preview.vercel.app") {
             throw new Error("Unexpected Auth0 callback Preview host.");
           }
-
-          for (const origin of [
-            deploymentOrigin,
-            new URL(`https://${callbackHost}`),
-          ]) {
-            let current = new URL("/protected", origin);
-            let reachedAuth0 = false;
-            for (let attempt = 0; attempt < 6; attempt += 1) {
-              const headers = previewHosts.has(current.hostname)
-                ? { "x-vercel-trusted-oidc-idp-token": token }
-                : {};
-              const response = await fetch(current, { redirect: "manual", headers });
-              const location = response.headers.get("location");
-
-              if (!location) {
-                throw new Error(
-                  `Expected redirect to Auth0 from ${origin.hostname}; received HTTP ${response.status} with no Location header.`
-                );
-              }
-
-              const next = new URL(location, current);
-              if (next.hostname === auth0Host) {
-                reachedAuth0 = true;
-                break;
-              }
-              if (next.hostname === "vercel.com") {
-                throw new Error(
-                  `Vercel Deployment Protection intercepted ${origin.hostname}. Verify the GitHub Actions Trusted Source and Preview environment.`
-                );
-              }
-              if (!previewHosts.has(next.hostname)) {
-                throw new Error(
-                  `Unexpected redirect host during preflight: ${next.hostname}.`
-                );
-              }
-              current = next;
-            }
-
-            if (!reachedAuth0) {
-              throw new Error(`Preflight did not reach Auth0 from ${origin.hostname}.`);
-            }
-            console.log(`Preview preflight passed: ${origin.hostname} reached Auth0.`);
+          if (deploymentOrigin.hostname === callbackHost) {
+            throw new Error("Deployment hostname and callback alias must be distinct.");
           }
+
+          // Negative control: deployment hostname must be protected without OIDC.
+          const anonymous = await fetch(new URL("/protected", deploymentOrigin), { redirect: "manual" });
+          const anonymousLocation = anonymous.headers.get("location");
+          const intercepted = anonymous.status === 401 || anonymous.status === 403 ||
+            (anonymousLocation && new URL(anonymousLocation, deploymentOrigin).hostname === "vercel.com");
+          if (!intercepted) {
+            throw new Error(`Negative control failed: HTTP ${anonymous.status}, Location ${anonymousLocation ?? "none"}.`);
+          }
+          console.log(`Negative control passed: ${deploymentOrigin.hostname} blocks access without OIDC.`);
+
+          // Positive control: same deployment hostname must accept the GitHub OIDC token.
+          const positive = await fetch(new URL("/protected", deploymentOrigin), {
+            redirect: "manual",
+            headers: { [trustedHeader]: token },
+          });
+          const positiveLocation = positive.headers.get("location");
+          if (!positiveLocation || new URL(positiveLocation, deploymentOrigin).hostname !== auth0Host) {
+            throw new Error(`Positive control failed: expected Auth0 redirect, got HTTP ${positive.status} and Location ${positiveLocation ?? "none"}.`);
+          }
+          console.log(`Positive control passed: ${deploymentOrigin.hostname} accepted OIDC and reached Auth0.`);
+
+          // Verify the registered callback alias separately; token is scoped to
+          // these two allowlisted Preview hosts and is never sent to Auth0.
+          const callbackOrigin = new URL(`https://${callbackHost}`);
+          const callback = await fetch(new URL("/protected", callbackOrigin), {
+            redirect: "manual",
+            headers: { [trustedHeader]: token },
+          });
+          const callbackLocation = callback.headers.get("location");
+          if (!callbackLocation || new URL(callbackLocation, callbackOrigin).hostname !== auth0Host) {
+            throw new Error(`Callback alias ${callbackHost} did not reach Auth0.`);
+          }
+          console.log(`Callback alias passed: ${callbackHost} reached Auth0.`);
           NODE
 
       - name: Run Auth0 end-to-end flow
