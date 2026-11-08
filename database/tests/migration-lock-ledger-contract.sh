@@ -33,7 +33,7 @@ SELECT 'A_LOCK_ACQUIRED|' || pg_backend_pid() || '|' || extract(epoch FROM clock
 \! touch "$ready_file"
 SELECT pg_sleep(4);
 INSERT INTO iam.migration_lock_probe (id, marker) VALUES (1, 'transaction-a-committed');
-SELECT 'A_LOCK_RELEASE|' || pg_backend_pid() || '|' || extract(epoch FROM clock_timestamp())::text;
+SELECT 'A_PRECOMMIT_MARKER|' || pg_backend_pid() || '|' || extract(epoch FROM clock_timestamp())::text;
 COMMIT;
 SELECT 'A_TRANSACTION_COMMITTED|' || pg_backend_pid() || '|' || extract(epoch FROM clock_timestamp())::text;
 SQL
@@ -67,11 +67,11 @@ a_pid="$(awk -F'|' '$1 == "A_LOCK_ATTEMPT" {print $2; exit}' "$holder_log")"
 b_pid="$(awk -F'|' '$1 == "B_LOCK_ATTEMPT" {print $2; exit}' "$contender_log")"
 a_acquired="$(awk -F'|' '$1 == "A_LOCK_ACQUIRED" {print $3; exit}' "$holder_log")"
 b_attempt="$(awk -F'|' '$1 == "B_LOCK_ATTEMPT" {print $3; exit}' "$contender_log")"
-a_release="$(awk -F'|' '$1 == "A_LOCK_RELEASE" {print $3; exit}' "$holder_log")"
+a_precommit="$(awk -F'|' '$1 == "A_PRECOMMIT_MARKER" {print $3; exit}' "$holder_log")"
 b_marker_visible="$(awk -F'|' '$1 == "B_COMMIT_MARKER_VISIBLE" {print $2; exit}' "$contender_log")"
 b_acquired="$(awk -F'|' '$1 == "B_LOCK_ACQUIRED" {print $3; exit}' "$contender_log")"
 
-if [[ -z "$a_pid" || -z "$b_pid" || -z "$a_acquired" || -z "$b_attempt" || -z "$a_release" || -z "$b_acquired" || -z "$b_marker_visible" ]]; then
+if [[ -z "$a_pid" || -z "$b_pid" || -z "$a_acquired" || -z "$b_attempt" || -z "$a_precommit" || -z "$b_acquired" || -z "$b_marker_visible" ]]; then
   cat "$holder_log" "$contender_log" >&2
   echo "ERROR: missing lock concurrency evidence" >&2
   exit 1
@@ -85,17 +85,17 @@ if [[ "$a_pid" == "$b_pid" ]]; then
   echo "ERROR: lock contenders did not use distinct PostgreSQL backend PIDs ($a_pid)" >&2
   exit 1
 fi
-if ! awk -v aa="$a_acquired" -v ba="$b_attempt" -v ar="$a_release" -v bc="$b_acquired" \
+if ! awk -v aa="$a_acquired" -v ba="$b_attempt" -v ar="$a_precommit" -v bc="$b_acquired" \
   'BEGIN { exit !(aa < ba && ba < ar && ar < bc) }'; then
   cat "$holder_log" "$contender_log" >&2
-  echo "ERROR: lock event order must be A_acquired < B_attempt < A_lock_release < B_acquired" >&2
+  echo "ERROR: lock event order must be A_acquired < B_attempt < A_precommit_marker < B_acquired" >&2
   exit 1
 fi
 if (( elapsed_ms < 2000 )); then
   echo "ERROR: transaction B did not block long enough on the migration advisory lock (${elapsed_ms}ms)" >&2
   exit 1
 fi
-echo "PASS: distinct backend PIDs A=$a_pid B=$b_pid; B observed A's committed marker after lock acquisition; event order A_acquired < B_attempt < A_lock_release < B_acquired; B waited ${elapsed_ms}ms"
+echo "PASS: distinct backend PIDs A=$a_pid B=$b_pid; B observed A's committed marker after lock acquisition; event order A_acquired < B_attempt < A_precommit_marker < B_acquired; B waited ${elapsed_ms}ms"
 echo "[migration-ledger] validating idempotency, checksum mismatch rejection, and rollback"
 PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql -X --no-password "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
