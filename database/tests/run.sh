@@ -36,6 +36,8 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 echo "Simulating the Neon database-owner SET-only membership recorded by the source catalog..."
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
 SET ROLE iam_bootstrap_admin;
+GRANT iam_migrator TO iam_bootstrap_admin
+  WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
 GRANT iam_owner TO iam_bootstrap_admin
   WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
 GRANT iam_app_runtime TO iam_bootstrap_admin
