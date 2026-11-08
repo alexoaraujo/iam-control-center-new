@@ -134,3 +134,12 @@ jobs:
           cmp artifacts/schema-manifest-restored-a.json artifacts/schema-manifest-restored-b.json
           python3 database/tests/validate-schema-manifest.py artifacts/schema-manifest-restored-a.json
           sha256sum artifacts/schema-manifest-restored-a.json
+          python3 database/tests/render-schema-manifest-section-hashes.py database/scripts/schema-manifest.sql \
+            | docker run --rm -i --network host \
+                --env DATABASE_URL="$DATABASE_URL" \
+                --env PGPASSWORD="$PGPASSWORD" \
+                postgres:18-bookworm \
+                psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
+            > artifacts/schema-manifest-restored-sections.tsv
+          echo "Restored manifest section hashes (section, item_count, sha256):"
+          cat artifacts/schema-manifest-restored-sections.tsv
