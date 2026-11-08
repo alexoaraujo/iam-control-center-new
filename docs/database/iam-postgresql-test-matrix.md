@@ -171,3 +171,10 @@ A verificação de objetos também confirmou zero privilégios SELECT/INSERT/UPD
 | applied_at (UTC) | `2026-11-05T04:16:49.492Z` |
 
 Registro obtido por SELECT read-only em `main`. É metadado de controle; não está contido no dump schema-only.
+
+
+### Validação direta da identidade export reader — 2026-11-08
+
+Conexão read-only via Neon MCP usando explicitamente `role_name=iam_schema_export_reader` foi bem-sucedida. `current_user=session_user=iam_schema_export_reader`, database `iam_database`; LOGIN=true, NOINHERIT, sem SUPERUSER/BYPASSRLS/CREATEDB/CREATEROLE/REPLICATION; CONNECT=true; CREATE/TEMP=false; USAGE=true e CREATE=false em iam/audit/app_private; SELECT no ledger=false; nenhum table/sequence data privilege; nenhuma membership concedida ao reader; exatamente uma aresta provider-managed inversa do database owner, SET=false/INHERIT=false/ADMIN=true.
+
+Isso valida a identidade e os predicados do preflight diretamente na origem, sem ler o secret GitHub nem executar DDL. Ainda não prova que NEON_SCHEMA_EXPORT_URL usa a mesma role nem que pg_dump 18 schema-only funciona com esse conjunto de privilégios; essas duas etapas dependem do workflow real.
