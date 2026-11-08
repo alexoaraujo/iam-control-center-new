@@ -1,0 +1,126 @@
+name: Neon post-hardening schema export
+
+on:
+  # Only the trusted default branch may run the source export. Removing
+  # workflow_dispatch prevents selecting an attacker-controlled workflow ref.
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/neon-schema-export.yml"
+      - "database/scripts/export-neon-schema.sh"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neon-schema-export-canonical-main
+  cancel-in-progress: false
+
+jobs:
+  export-schema:
+    name: Read-only schema export from canonical Neon main
+    # workflow_dispatch can select an arbitrary ref. Never expose the
+    # environment secret unless the workflow is running from protected main.
+    if: github.repository == 'alexoaraujo83/iam-control-center' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: neon-schema-export
+
+    steps:
+      - name: Checkout exact workflow commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Validate source and export schema with verified TLS
+        shell: bash
+        env:
+          NEON_SCHEMA_EXPORT_URL: ${{ secrets.NEON_SCHEMA_EXPORT_URL }}
+        run: |
+          set -euo pipefail
+          umask 077
+          ENV_FILE="$(mktemp "${RUNNER_TEMP}/neon-pg-env.XXXXXX")"
+          trap 'rm -f "${ENV_FILE}"; unset NEON_SCHEMA_EXPORT_URL PGPASSWORD' EXIT
+
+          python3 - "${ENV_FILE}" <<'PY'
+          import os
+          import sys
+          from urllib.parse import unquote, urlparse
+
+          raw = os.environ.get("NEON_SCHEMA_EXPORT_URL", "")
+          u = urlparse(raw)
+          allowed_host = "ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech"
+          if u.scheme not in ("postgres", "postgresql"):
+              raise SystemExit("Connection must use PostgreSQL URI scheme")
+          if u.hostname != allowed_host or (u.hostname or "").endswith("-pooler.c-2.sa-east-1.aws.neon.tech"):
+              raise SystemExit("Connection host is not the allowlisted direct Neon source endpoint")
+          if unquote((u.path or "").lstrip("/")) != "iam_database":
+              raise SystemExit("Connection database is not the allowlisted source database")
+          user = unquote(u.username or "")
+          password = unquote(u.password or "")
+          if not user or not password or any(c in user + password for c in "\r\n"):
+              raise SystemExit("Connection URI must contain valid credentials without line breaks")
+          port = u.port or 5432
+          values = {
+              "PGHOST": allowed_host,
+              "PGPORT": str(port),
+              "PGDATABASE": "iam_database",
+              "PGUSER": user,
+              "PGPASSWORD": password,
+              "PGSSLMODE": "verify-full",
+              "PGSSLROOTCERT": "system",
+          }
+          for value in values.values():
+              if any(c in value for c in "\r\n"):
+                  raise SystemExit("Connection settings contain an invalid line break")
+          with open(sys.argv[1], "w", encoding="utf-8") as f:
+              for key, value in values.items():
+                  f.write(f"{key}={value}\n")
+          os.chmod(sys.argv[1], 0o600)
+          print("Allowlisted source URI validated; TLS hostname verification is enabled.")
+          PY
+
+          mkdir -p artifacts
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env-file "${ENV_FILE}" \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            postgres:18-bookworm \
+            bash -c '
+              set -euo pipefail
+              test -n "${PGPASSWORD:-}"
+              test "${PGSSLMODE}" = "verify-full"
+              test "${PGSSLROOTCERT}" = "system"
+              echo "Password and verified TLS configuration validated; values not logged."
+              bash database/scripts/export-neon-schema.sh artifacts/iam_database_schema.sql
+            '
+          test -s artifacts/iam_database_schema.sql
+          sha256sum artifacts/iam_database_schema.sql | tee artifacts/iam_database_schema.sql.sha256
+          {
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "branch=${GITHUB_REF_NAME}"
+            echo "commit=${GITHUB_SHA}"
+            echo "database=iam_database"
+            echo "source_branch=main"
+            echo "source_host=ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech"
+            echo "format=plain SQL, schema-only"
+            echo "schemas=iam,audit,app_private"
+            echo "extension_dependency=pgcrypto in public"
+            echo "tls=verify-full; root CA store=system"
+            echo "contains_application_rows=false"
+            echo "migration_ledger_rows=not_exported; schema-only dump excludes ledger data"
+            echo "ledger_provenance=separate_approved_read_only_channel_required"
+          } > artifacts/manifest.txt
+
+      - name: Publish immutable run artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: neon-iam-schema-post-hardening-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/iam_database_schema.sql
+            artifacts/iam_database_schema.sql.sha256
+            artifacts/manifest.txt
+          if-no-files-found: error
+          retention-days: 7
