@@ -51,6 +51,9 @@ BEGIN
   IF current_user <> 'iam_schema_export_reader' OR session_user <> current_user THEN
     RAISE EXCEPTION 'schema export must connect directly as iam_schema_export_reader';
   END IF;
+  IF current_database() <> 'iam_database' THEN
+    RAISE EXCEPTION 'schema export is restricted to database iam_database';
+  END IF;
 
   SELECT rolcanlogin, rolinherit, rolsuper, rolcreatedb, rolcreaterole,
          rolreplication, rolbypassrls
