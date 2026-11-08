@@ -4,11 +4,15 @@ on:
   pull_request:
     paths:
       - "database/**"
+      - "iam_database_schema.sql"
       - "role-security-harness/**"
       - "scripts/test-postgres18-role-security-harness.sh"
       - "docs/architecture/iam-decisions.md"
       - "docs/architecture/tenant-context-rfc.md"
       - "docs/operations/iam-role-bootstrap-review.md"
+      - "docs/operations/iam-migration-execution-contract.md"
+      - "docs/database/iam-postgresql-test-matrix.md"
+      - "docs/database/neon-source-baseline-reconciliation.md"
       - ".github/workflows/database-tests.yml"
   push:
     branches:
@@ -16,11 +20,15 @@ on:
       - "feat/iam-role-bootstrap-review"
     paths:
       - "database/**"
+      - "iam_database_schema.sql"
       - "role-security-harness/**"
       - "scripts/test-postgres18-role-security-harness.sh"
       - "docs/architecture/iam-decisions.md"
       - "docs/architecture/tenant-context-rfc.md"
       - "docs/operations/iam-role-bootstrap-review.md"
+      - "docs/operations/iam-migration-execution-contract.md"
+      - "docs/database/iam-postgresql-test-matrix.md"
+      - "docs/database/neon-source-baseline-reconciliation.md"
       - ".github/workflows/database-tests.yml"
 
 permissions:
