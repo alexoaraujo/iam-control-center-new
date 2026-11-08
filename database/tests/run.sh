@@ -121,6 +121,12 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -c "REVOKE iam_app_runtime FROM iam_owner;"
 
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "GRANT iam_owner TO iam_app_runtime_login WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;"
+assert_migration_rejected "unapproved login membership granted to iam_owner"
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "REVOKE iam_owner FROM iam_app_runtime_login;"
+
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -c "GRANT iam_app_runtime TO iam_migrator_login WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;"
 assert_migration_rejected "unexpected iam_app_runtime membership"
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
