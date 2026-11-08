@@ -1,6 +1,6 @@
 # Reconciliação da baseline PostgreSQL com Neon
 
-**Status:** IN PROGRESS — baseline de referência confirmada; export estrutural e reconciliação SQL ainda pendentes.  
+**Status:** IN PROGRESS — dump schema-only source-derived versionado e restore integral PostgreSQL 18 descartável; teste RLS dinâmico adicionado e aguardando CI no HEAD atualizado; export autenticado reproduzível e comparação objeto-a-objeto com a fonte Neon continuam pendentes.  
 **Repositório:** `alexoaraujo83/iam-control-center`  
 **Branch desta documentação:** `chore/reconcile-neon-source-schema-baseline`  
 **Base GitHub:** `main` em `ff71607948c9d02d90fc0b1b26931c573ab660f8`  
@@ -422,3 +422,16 @@ Consulta read-only atual no Neon canônico confirmou para app_private.current_te
 Foi endurecido database/tests/restore-source-schema.sh para falhar fechado se o restore não preservar SECURITY DEFINER, owner iam_owner e o search_path exato sem public. A expectativa é que o job detecte a divergência atual até que um export autenticado da fonte canônica atualize o artefato. Não alterar manualmente o dump para imitar a origem: regenerar pelo processo de export autorizado, validar checksum e comparar objeto-a-objeto.
 
 O search_path de iam.set_tenant_context(...) ainda contém public na fonte e permanece um achado de hardening separado, documentado para correção/revisão futura; não foi alterado nesta etapa.
+
+
+## Atualização de evidência e semântica de contexto — 2026-11-08
+
+O job postgres-18-source-schema-restore passou anteriormente no SHA 50c0e71fa166158a80172dc9b27175982e439b22 para o restore estrutural: 23 tabelas, 1 view, 9 funções, 7 ENUMs, 12 triggers, 41 policies, 20 tabelas com RLS/FORCE RLS, owners, pgcrypto, índice parcial e ausência de linhas de aplicação. Isso não prova igualdade objeto-a-objeto com o catálogo Neon nem ACL efetiva no ambiente persistente.
+
+O contrato runtime RLS foi adicionado ao script de restore. A primeira execução no SHA ad21cb5b4019199ed35a68ec56bcb9bba59793ac falhou no caso de assinatura adulterada porque o teste tentou exigir contexto vazio após um contexto válido de tenant A. A chamada com exceção, capturada pelo chamador, reverte os GUCs transaction-local modificados pela instrução; o contexto válido anterior pode ser restaurado. O teste agora limpa explicitamente o contexto antes de testar entradas inválidas. Novo CI no SHA subsequente é obrigatório; não classificar o contrato dinâmico como PASS com base no restore estrutural anterior.
+
+A aplicação deve começar a operação de contexto em estado limpo. Se capturar falha de iam.set_tenant_context() dentro da transação, deve abortar a transação ou executar iam.clear_tenant_context() antes de continuar. Replay de nonce não está implementado/provado: o campo nonce integra o HMAC, mas não há evidência de armazenamento/consumo único ou rejeição de replay.
+
+A fonte Neon canônica foi consultada por SELECT read-only em 2026-11-08: iam_migrator tem USAGE em iam, SELECT (não INSERT) em iam.schema_migrations e EXECUTE nas duas funções de migration; ambas são SECURITY DEFINER, owner iam_owner, com search_path restrito e sem PUBLIC EXECUTE. O ledger observado contém uma entrada de hardening cujo source SHA/checksum são históricos e não devem ser confundidos com o HEAD da PR.
+
+**Pendências:** CI dinâmico no SHA atual; environment neon-schema-export e deployment branch policy não verificados por API disponível; export autenticado reproduzível; comparação objeto-a-objeto; ACL/ownership integral; replay/inativos/rotação de chave; branch Neon isolada com memberships reais; sequência canônica da migration inicial vs incremental; concorrência de lock com duas sessões independentes.
