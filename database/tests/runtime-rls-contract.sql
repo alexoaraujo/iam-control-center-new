@@ -144,7 +144,7 @@ DO $excessive_lifetime$
 DECLARE
   v_tenant uuid := '10000000-0000-4000-8000-000000000001';
   v_identity uuid := '10000000-0000-4000-8000-000000000011';
-  v_expires bigint := floor(extract(epoch FROM clock_timestamp()))::bigint + 301;
+  v_expires bigint := floor(extract(epoch FROM clock_timestamp()))::bigint + 302;
   v_nonce text := 'ci-too-long';
   v_signature text;
   v_rejected boolean := false;
