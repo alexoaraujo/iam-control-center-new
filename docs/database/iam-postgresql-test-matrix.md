@@ -27,7 +27,7 @@
 | Expiração | mesmo arquivo | contexto expirado e validade superior a 300 segundos são rejeitados | ADICIONADO; CI pendente |
 | Roles e memberships | database/tests/run.sh, role-assumption-contract.sql | atributos administrativos, arestas SET/INHERIT/ADMIN, fronteira owner, bootstrap lockout e cenários negativos antes de DDL | PASS histórico no SHA 71c17ae648521b3f3b5d73689e756e981f6f9bfd; conferir SHA atual após novo CI |
 | Migration incremental | migration 0001_context_key_hardening.sql e 0001_schema_contract.sql | preflight, índice parcial, SECURITY DEFINER/search_path, ledger, checksum/source SHA e rollback de fixtures | PASS histórico no SHA acima; lineage permanece BLOCKED |
-| Concorrência do lock | duas sessões psql independentes | PIDs distintos; sessão B aguarda A; T_B_attempt < T_A_commit < T_B_acquired; ledger final sem entrada de migration de teste | PENDING — evidência independente ainda não registrada |
+| Concorrência do lock | duas sessões psql independentes | PIDs distintos; sessão B aguarda A; T_B_attempt < T_A_lock_release < T_B_acquired; ledger final sem entrada de migration de teste | PENDING — evidência independente ainda não registrada |
 | Idempotência/checksum | runner de migration | mesma migration/checksum não duplica ledger; checksum divergente deve falhar fechado | Cobertura parcial; reforçar com testes explícitos |
 | Estado de membership/identity/tenant | contrato de contexto | membership, identidade ou tenant inativos devem invalidar o contexto | PENDING no novo contrato dinâmico |
 | Chave HMAC | contrato de contexto | ausência de chave ativa, chave curta, rotação e múltiplas chaves ativas | Parcial: constraint e índice único são verificados; comportamento de rotação/ausência deve ser testado |
@@ -39,7 +39,7 @@ Executar em uma branch Neon descartável ou PostgreSQL descartável com dois cli
 
 - Sessão A: BEGIN, SET LOCAL ROLE iam_migrator, registrar PID e instante, adquirir iam.acquire_migration_lock(), aguardar e confirmar.
 - Sessão B: iniciar depois de A, registrar PID/instante antes de chamar a mesma função; deve ficar bloqueada até A confirmar.
-- Evidência: PIDs distintos; A adquiriu antes de B; B só adquiriu depois do COMMIT de A; ambas as transações encerraram; ledger permaneceu inalterado.
+- Evidência: PIDs distintos; A adquiriu antes de B tentar; o evento A_LOCK_RELEASE ocorre antes de B adquirir; como a função usa pg_advisory_xact_lock, o lock só é liberado no COMMIT de A; ambas as transações encerraram; ledger permaneceu inalterado.
 - Não marcar PASS com apenas pg_sleep em uma única sessão ou logs sem correlação temporal entre os dois clientes.
 
 ## Limites e pendências
@@ -93,3 +93,8 @@ O workflow neon-schema-export está configurado apenas para push em main e o Env
 - O primeiro run do contrato dinâmico (42460479806) falhou no caso de assinatura adulterada porque os casos estavam agrupados em um único bloco DO. A implementação foi separada em DOs independentes; ainda não há execução verde do contrato dinâmico, pois o restore agora falha antes de invocá-lo.
 - Estado: catálogo/restore atual BLOCKED por drift real do dump; contrato dinâmico ADDED / NOT YET EXECUTED; não declarar PASS.
 - Próximo passo seguro: export autenticado via workflow aprovado da fonte Neon canônica, regenerar artefato sem edição manual, validar checksum e comparação objeto-a-objeto; depois reexecutar restore e contrato runtime.
+
+
+### Precisão da instrumentação do lock
+
+O teste registra A_LOCK_RELEASE imediatamente antes do COMMIT de A e B_LOCK_ACQUIRED depois de a sessão B retornar de pg_advisory_xact_lock. Não comparar o timestamp de um SELECT executado depois do COMMIT de A com B_LOCK_ACQUIRED: a sessão B pode acordar e adquirir o lock antes que A execute esse SELECT pós-commit, embora o COMMIT tenha necessariamente liberado o lock. A semântica transacional de pg_advisory_xact_lock, o evento A_LOCK_RELEASE anterior ao COMMIT, o evento B_LOCK_ACQUIRED posterior e o tempo de bloqueio comprovam a contenção sem essa corrida de observabilidade.
