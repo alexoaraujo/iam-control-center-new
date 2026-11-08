@@ -69,6 +69,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export PGPASSWORD="$POSTGRES_TEST_PASSWORD"
           mkdir -p artifacts
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
             -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-a.json
