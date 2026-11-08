@@ -36,6 +36,96 @@ trap 'rm -f "$tmp" "$dump_tmp"' EXIT
 
 export PGHOST PGPORT PGDATABASE PGUSER PGSSLMODE PGPASSWORD
 
+# Fail closed unless the secret uses the dedicated read-only schema exporter.
+# This validates role identity, provider-managed membership direction, and
+# effective database/schema privileges without printing the connection URI.
+echo "[schema-export] validating least-privilege export identity"
+psql -X --no-password -v ON_ERROR_STOP=1 <<'SQL'
+DO $export_role_preflight$
+DECLARE
+  v_role record;
+  v_database_owner name;
+  v_reader_oid oid;
+  v_schema text;
+BEGIN
+  IF current_user <> 'iam_schema_export_reader' OR session_user <> current_user THEN
+    RAISE EXCEPTION 'schema export must connect directly as iam_schema_export_reader';
+  END IF;
+
+  SELECT rolcanlogin, rolinherit, rolsuper, rolcreatedb, rolcreaterole,
+         rolreplication, rolbypassrls
+    INTO v_role
+    FROM pg_roles
+   WHERE rolname = current_user;
+  IF NOT FOUND OR NOT v_role.rolcanlogin OR v_role.rolinherit
+     OR v_role.rolsuper OR v_role.rolcreatedb OR v_role.rolcreaterole
+     OR v_role.rolreplication OR v_role.rolbypassrls THEN
+    RAISE EXCEPTION 'schema export role has unexpected or privileged attributes';
+  END IF;
+
+  SELECT pg_get_userbyid(datdba)
+    INTO v_database_owner
+    FROM pg_database
+   WHERE datname = current_database();
+  SELECT oid INTO v_reader_oid FROM pg_roles WHERE rolname = current_user;
+
+  IF EXISTS (SELECT 1 FROM pg_auth_members WHERE member = v_reader_oid) THEN
+    RAISE EXCEPTION 'schema export role must not inherit any other role';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+     WHERE m.roleid = v_reader_oid
+       AND NOT (
+         member_role.rolname = v_database_owner
+         AND m.admin_option
+         AND NOT m.inherit_option
+         AND NOT m.set_option
+         AND pg_get_userbyid(m.grantor) = 'cloud_admin'
+       )
+  ) THEN
+    RAISE EXCEPTION 'schema export role has an unexpected incoming membership';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles member_role ON member_role.oid = m.member
+     WHERE m.roleid = v_reader_oid
+       AND member_role.rolname = v_database_owner
+       AND m.admin_option
+       AND NOT m.inherit_option
+       AND NOT m.set_option
+       AND pg_get_userbyid(m.grantor) = 'cloud_admin'
+  ) THEN
+    RAISE EXCEPTION 'expected provider-managed database-owner membership is missing';
+  END IF;
+
+  IF NOT has_database_privilege(current_user, current_database(), 'CONNECT')
+     OR has_database_privilege(current_user, current_database(), 'CREATE')
+     OR has_database_privilege(current_user, current_database(), 'TEMP') THEN
+    RAISE EXCEPTION 'schema export role has unexpected database privileges';
+  END IF;
+
+  FOREACH v_schema IN ARRAY ARRAY['iam', 'audit', 'app_private', 'public'] LOOP
+    IF NOT has_schema_privilege(current_user, v_schema, 'USAGE')
+       OR has_schema_privilege(current_user, v_schema, 'CREATE') THEN
+      RAISE EXCEPTION 'schema export role has unexpected USAGE/CREATE privileges on schema %', v_schema;
+    END IF;
+  END LOOP;
+
+  IF has_table_privilege(current_user, 'iam.schema_migrations', 'SELECT')
+     OR has_table_privilege(current_user, 'iam.schema_migrations', 'INSERT')
+     OR has_table_privilege(current_user, 'iam.schema_migrations', 'UPDATE')
+     OR has_table_privilege(current_user, 'iam.schema_migrations', 'DELETE') THEN
+    RAISE EXCEPTION 'schema export role must not access migration ledger data; capture ledger provenance through a separate approved channel';
+  END IF;
+END
+$export_role_preflight$;
+SQL
+
 # Diagnóstico não sensível: identifica a role efetiva e separa cada etapa
 # para localizar falhas de autorização sem ampliar privilégios.
 echo "[schema-export] checking connection identity and schema usage"
