@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
-: "\${DATABASE_URL:?DATABASE_URL must authenticate as the disposable PostgreSQL administrator}"
-: "\${MIGRATOR_DATABASE_URL:?MIGRATOR_DATABASE_URL must authenticate as iam_migrator_login}"
-: "\${POSTGRES_TEST_PASSWORD:?POSTGRES_TEST_PASSWORD is required}"
-: "\${MIGRATOR_TEST_PASSWORD:?MIGRATOR_TEST_PASSWORD is required}"
+: "${DATABASE_URL:?DATABASE_URL must authenticate as the disposable PostgreSQL administrator}"
+: "${MIGRATOR_DATABASE_URL:?MIGRATOR_DATABASE_URL must authenticate as iam_migrator_login}"
+: "${POSTGRES_TEST_PASSWORD:?POSTGRES_TEST_PASSWORD is required}"
+: "${MIGRATOR_TEST_PASSWORD:?MIGRATOR_TEST_PASSWORD is required}"
 tmp_dir="$(mktemp -d)"
 ready_file="$tmp_dir/lock-held"
 holder_log="$tmp_dir/holder.log"
 contender_log="$tmp_dir/contender.log"
 cleanup() {
-  if [[ -n "\${holder_pid:-}" ]]; then wait "$holder_pid" 2>/dev/null || true; fi
+  if [[ -n "${holder_pid:-}" ]]; then wait "$holder_pid" 2>/dev/null || true; fi
   rm -rf "$tmp_dir"
 }
 trap cleanup EXIT
@@ -21,7 +21,7 @@ SET LOCAL ROLE iam_migrator;
 SELECT 'A_LOCK_ATTEMPT|' || pg_backend_pid() || '|' || extract(epoch FROM clock_timestamp())::text;
 SELECT iam.acquire_migration_lock();
 SELECT 'A_LOCK_ACQUIRED|' || pg_backend_pid() || '|' || extract(epoch FROM clock_timestamp())::text;
-\\! touch "$ready_file"
+\! touch "$ready_file"
 SELECT pg_sleep(4);
 SELECT 'A_LOCK_RELEASE|' || pg_backend_pid() || '|' || extract(epoch FROM clock_timestamp())::text;
 COMMIT;
@@ -74,10 +74,10 @@ if ! awk -v aa="$a_acquired" -v ba="$b_attempt" -v ac="$a_committed" -v bc="$b_a
   exit 1
 fi
 if (( elapsed_ms < 2000 )); then
-  echo "ERROR: transaction B did not block long enough on the migration advisory lock (\${elapsed_ms}ms)" >&2
+  echo "ERROR: transaction B did not block long enough on the migration advisory lock (${elapsed_ms}ms)" >&2
   exit 1
 fi
-echo "PASS: distinct backend PIDs A=$a_pid B=$b_pid; event order A_acquired < B_attempt < A_commit < B_acquired; B waited \${elapsed_ms}ms"
+echo "PASS: distinct backend PIDs A=$a_pid B=$b_pid; event order A_acquired < B_attempt < A_commit < B_acquired; B waited ${elapsed_ms}ms"
 echo "[migration-ledger] validating idempotency, checksum mismatch rejection, and rollback"
 PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql -X --no-password "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
