@@ -71,7 +71,7 @@ O ledger observado na fonte contém 0001_context_key_hardening, checksum 2447395
 ## Camadas de teste obrigatórias
 
 1. **Bootstrap inicial limpo:** aplicar 0001_initial_iam_schema.sql em database vazia separada; validar ownership, roles, RLS/FORCE RLS, default-deny, integridade cross-tenant e integridade de ator/audit.
-2. **Migration incremental:** preparar somente a fixture operacional mínima explicitamente declarada e aplicar 0001_context_key_hardening.sql por sessão autenticada iam_migrator_login.
+2. **Histórico já aplicado na fonte:** `database/archive/source-applied-migrations/0001_context_key_hardening.sql` é o artefato histórico cujo ID `0001_context_key_hardening` consta no ledger Neon. Ele é executado somente em PostgreSQL descartável para testes de regressão; não integra a sequência de migrations pendentes e não deve ser reaplicado sobre a baseline exportada, que já contém seus efeitos.
 3. **Preflight negativo:** rejeitar atributos administrativos e memberships adicionais antes de DDL; após cada rejeição, confirmar ausência do índice e do ledger entry.
 4. **Concorrência:** duas sessões reais concorrendo pelo advisory transaction lock; a segunda deve bloquear até o COMMIT da primeira.
 5. **Ledger:** idempotência, checksum mismatch, formato inválido e rollback.
