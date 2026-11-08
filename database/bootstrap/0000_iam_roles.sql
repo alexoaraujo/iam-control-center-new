@@ -86,11 +86,11 @@ CREATE ROLE iam_app_runtime_login
   LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
   NOREPLICATION NOBYPASSRLS;
 
--- PostgreSQL 18 automatically grants the CREATEROLE principal ADMIN OPTION
--- on each role it creates. The grantor is the bootstrap superuser, so the
--- creator cannot revoke or change that implicit membership. Keep this
--- one-time principal unusable after provisioning: no LOGIN, no CREATEROLE,
--- and no password. Do not reuse a human or application account for bootstrap.
+-- PostgreSQL 18 / Neon may retain provider-managed ADMIN memberships for the
+-- database owner. Do not attempt to ALTER the authenticated bootstrap role here:
+-- PostgreSQL does not permit this least-privilege principal to disable itself.
+-- A separate, independently privileged operator must lock the one-time login
+-- after this transaction commits. Never reuse it as an application runtime.
 
 -- Exact, non-admin membership topology expected by migration 0001.
 GRANT iam_owner TO iam_migrator
@@ -127,6 +127,7 @@ BEGIN
 END
 $database_grants$;
 
-ALTER ROLE CURRENT_USER WITH NOLOGIN NOCREATEROLE PASSWORD NULL;
+-- Deliberately do not ALTER CURRENT_USER. The caller cannot reliably disable
+-- its own LOGIN under PostgreSQL's role-management rules; lock it separately.
 
 COMMIT;
