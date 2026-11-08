@@ -9,7 +9,7 @@
 - The workflow pins Node.js 24 and pnpm 10.34.9 directly in YAML. It currently needs no custom GitHub Actions secret or configuration variable.
 - `.env.example` describes application/runtime configuration. Its presence does not mean those values are consumed by the CI workflow.
 - The GitHub repository API confirms visibility `private`, consistente com README. A API de rulesets retornou HTTP 403 nesta conexão; enforcement não foi revalidado independentemente.
-- The repository ruleset expects deployments to environments named exactly `Development` and `Preview`. A successful `quality` job is not a deployment to either environment.
+- Ruleset enforcement is NOT VERIFIED: the private-repository rulesets API returned HTTP 403. The versioned `main ci quality.json` snapshot lists `quality`, code quality, pull-request, and non-fast-forward requirements, but no deployment rule. The `preview-deployment` workflow job is a separate conditional CI job, not evidence of an active ruleset requirement for `Development`/`Preview` deployments.
 
 ## 2. GitHub Actions configuration inventory
 
@@ -104,7 +104,7 @@ Before a real deployment is marked PASS, record the exact commit SHA, environmen
 2. Keep Development and Preview credentials isolated; do not reuse secrets by copying the same value across environments unless that is a deliberate, documented design.
 3. Open **Settings → Secrets and variables → Actions** and review Repository secrets and Repository variables. Do not add unused entries just to make the lists look populated.
 4. For each environment, review its **Environment secrets** and **Environment variables** separately.
-5. Reconcile repository visibility: the current GitHub API reports `public`, but README claims `private`.
+5. Repository visibility is reconciled: the current GitHub repository API reports `private`, consistent with the README and manifest. Re-check only if repository visibility is intentionally changed.
 6. Re-run CI and deployment verification against the exact SHA after any workflow change.
 
 Official references:
