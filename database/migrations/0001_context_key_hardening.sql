@@ -13,8 +13,10 @@ DO $authenticated_role_preflight$
 DECLARE
   v_login record;
   v_migrator record;
+  v_owner record;
   v_login_edges integer;
   v_migrator_edges integer;
+  v_owner_edges integer;
 BEGIN
   IF session_user <> 'iam_migrator_login' OR current_user <> session_user THEN
     RAISE EXCEPTION
@@ -54,6 +56,22 @@ BEGIN
     RAISE EXCEPTION 'iam_migrator group role has unexpected or privileged attributes';
   END IF;
 
+  SELECT rolcanlogin, rolinherit, rolsuper, rolbypassrls,
+         rolcreaterole, rolcreatedb, rolreplication
+    INTO v_owner
+    FROM pg_roles
+   WHERE rolname = 'iam_owner';
+  IF NOT FOUND
+     OR v_owner.rolcanlogin IS DISTINCT FROM FALSE
+     OR v_owner.rolinherit IS DISTINCT FROM FALSE
+     OR v_owner.rolsuper IS DISTINCT FROM FALSE
+     OR v_owner.rolbypassrls IS DISTINCT FROM FALSE
+     OR v_owner.rolcreaterole IS DISTINCT FROM FALSE
+     OR v_owner.rolcreatedb IS DISTINCT FROM FALSE
+     OR v_owner.rolreplication IS DISTINCT FROM FALSE THEN
+    RAISE EXCEPTION 'iam_owner group role has unexpected or privileged attributes';
+  END IF;
+
   SELECT count(*) INTO v_login_edges
     FROM pg_auth_members m
     JOIN pg_roles member_role ON member_role.oid = m.member
@@ -88,6 +106,14 @@ BEGIN
        AND m.admin_option IS FALSE
   ) THEN
     RAISE EXCEPTION 'iam_migrator must have exactly one SET-only, non-admin membership: iam_owner';
+  END IF;
+
+  SELECT count(*) INTO v_owner_edges
+    FROM pg_auth_members m
+    JOIN pg_roles member_role ON member_role.oid = m.member
+   WHERE member_role.rolname = 'iam_owner';
+  IF v_owner_edges <> 0 THEN
+    RAISE EXCEPTION 'iam_owner must not be a member of any additional role';
   END IF;
 
   IF NOT pg_has_role(session_user, 'iam_owner', 'MEMBER')
