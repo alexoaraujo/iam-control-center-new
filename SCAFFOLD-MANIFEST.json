@@ -201,7 +201,7 @@
     "database": "iam_database",
     "database_owner": "iam_database_owner",
     "migration_login": "iam_migrator_login",
-    "branch_count": 10,
+    "branch_count": 5,
     "branch_limit": 10,
     "evidence": "Neon API read-only inventory 2026-11-08; provider role metadata does not prove SQL role attributes or successful authentication."
   }
