@@ -1,7 +1,7 @@
 -- Dynamic tenant-context and RLS contract against the full source-schema restore.
 -- Runs only in disposable PostgreSQL 18 CI after iam_database_schema.sql is restored.
 -- All fixtures and context keys are synthetic and rolled back.
-\\set ON_ERROR_STOP on
+\set ON_ERROR_STOP on
 
 BEGIN;
 
