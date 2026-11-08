@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Garantir que cada pull request do próprio repositório receba uma branch temporária isolada no Neon, mantendo a linha permanente de `Production -> Development` intacta e sem criar migrations, endpoints de computação ou credenciais adicionais.
+Garantir que cada pull request do próprio repositório receba uma branch temporária isolada no Neon, mantendo a linha permanente de `main (default) -> development` intacta e sem criar migrations, endpoints de computação ou credenciais adicionais.
 
 ## Escopo e limites
 
@@ -22,8 +22,8 @@ O workflow:
 Antes do uso em produção, o repositório deve possuir:
 - `NEON_API_KEY` configurado como GitHub Actions secret;
 - `NEON_PROJECT_ID` configurado como repository variable com valor canônico;
-- `Production` e `Development` como branches permanentes esperadas no projeto Neon;
-- projeto Neon canônico identificado como `wandering-wildflower-90908845`.
+- `main` (default) e `development` como branches permanentes esperadas no projeto Neon;
+- projeto Neon de entrega IAM identificado como `twilight-fire-88497009`.
 
 ## Como o workflow funciona
 
@@ -42,7 +42,7 @@ Todas as validações são feitas sem expor segredos em logs.
 A API do Neon é consultada para listar as branches do projeto. Em seguida, o workflow confirma:
 - existe exatamente uma branch `default == true`;
 - seu `current_state` é `ready`;
-- existe exatamente uma branch `development` com `parent_id` igual ao `id` da branch de produção;
+- existe exatamente uma branch `development` com `parent_id` igual ao `id` da branch default;
 - a branch de desenvolvimento também está pronta.
 
 Se qualquer um desses passos falhar, o job termina sem alterar a infraestrutura de PR.
@@ -110,7 +110,7 @@ Os princípios de proteção deste workflow são:
 - `permissions: {}` para minimizar privilégios;
 - `pull_request_target` apenas para PRs do mesmo repositório;
 - ausência de `checkout` ou execução de código de PR;
-- validação explícita de `NEON_PROJECT_ID` e `Production/Development`;
+- validação explícita de `NEON_PROJECT_ID` e `main/development`;
 - `cancel-in-progress: false` para evitar串行/eliminação de execuções em fila de sincronização;
 - falha fechada em caso de inconsistência.
 
@@ -119,7 +119,7 @@ Os princípios de proteção deste workflow são:
 Antes de ativar o workflow em produção, confirmar:
 - [ ] `NEON_API_KEY` presente e acessível no contexto do workflow;
 - [ ] `NEON_PROJECT_ID` configurado com o ID canônico correto;
-- [ ] `Production` e `Development` existem e estão `ready`;
+- [ ] `main` e `development` existem e estão `ready`;
 - [ ] a branch `preview/pr-*` não conflita com ambientes já existentes;
 - [ ] todas as equipe/owners entenderam que a branch não será removida automaticamente no fechamento do PR;
 - [ ] os limites do plano gratuito e a política de expiração foram revisados com a operação.
@@ -127,3 +127,13 @@ Antes de ativar o workflow em produção, confirmar:
 ## Observação final
 
 Este workflow foi desenhado como um guardrail de segurança e integridade operacional, não como um mecanismo de execução de código ou de provisionamento de runtime. Seu objetivo é garantir que branches de PR tenham uma existência temporária, previsível e rastreável sem comprometer as branches permanentes do projeto.
+
+## Projeto e topologia vigentes — 08/11/2026
+
+O alvo vigente deste workflow é o projeto Neon `iam-database-delivery` (`twilight-fire-88497009`). A API Neon confirmou a branch `main` (`br-little-fire-b6adup9f`) como única default/primary READY e a branch `development` (`br-proud-brook-b6woqo6z`) como READY e filha direta de `main`. O workflow deve interpretar a branch default como `main`, não como Production.
+
+A branch `preview` (`br-lingering-art-b6lzio6z`) também existe como filha direta de `main`, mas o lifecycle cria branches `preview/pr-<número>` como filhas de `development`.
+
+**Limite operacional:** o projeto lista 10 branches e o plano Free informa limite de 10. A criação de uma nova branch de PR ficará BLOCKED até haver capacidade. O workflow deve falhar fechado e não excluir branches existentes automaticamente.
+
+O endpoint da branch `main` é `ep-twilight-shadow-b618ef5h`; a API informa `pooler_enabled=false`. Isso não altera o lifecycle, mas impede declarar pooler ativo ou utilizar o hostname `-pooler` como se estivesse habilitado.
