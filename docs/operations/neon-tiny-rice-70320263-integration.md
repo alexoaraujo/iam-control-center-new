@@ -12,7 +12,31 @@
 | Database | `iam_database` |
 | Web runtime role | `iam_app_runtime_login`, LOGIN, NOSUPERUSER, NOBYPASSRLS, NOCREATEDB, NOCREATEROLE |
 
-**This is a staged re-point, not an approved data or schema cutover.** New Neon was empty at discovery. `iam_database` and a database-scoped role have been created on the new production branch, then copied into development via Neon branching. The application schemas `iam`, `audit`, `app_private`, policies and migration ledger have NOT been restored to the new project. No application rows were copied. `SELECT 1` and role-attribute checks succeed in development; that does not prove application data parity or tenant isolation.
+**This is a staged re-point, not an approved Production cutover.** The new Neon project's default `production` branch still has no IAM schemas/tables. On 2026-11-10, after a successful isolated validation restore and real runtime tenant-isolation tests, the full checked-in IAM schema was restored into the **new `development` branch only**. It now has 23 base tables, 41 policies and 16 approved permission-catalog rows, but deliberately has **0 migration-ledger rows** pending a provenance strategy. No customer/tenant/session data was transferred. Vercel Production still uses the previous Neon project; no Production database credentials were changed.
+
+## Verified Development restore and runtime tests (2026-11-10)
+
+| Item | Legacy source `twilight-fire-88497009/main` | NEW `tiny-rice-70320263/development` |
+| --- | ---: | ---: |
+| Base tables | 23 | 23 |
+| Views | 1 | 1 |
+| RLS policies | 41 | 41 |
+| FORCE RLS tables | 20 | 20 |
+| Functions / triggers | 9 / 12 | 9 / 12 |
+| ENUM types / indexes / sequences | 7 / 63 / 3 | 7 / 63 / 3 |
+| Permission-catalog rows | 16 | 16 (exact contents/timestamps) |
+| Migration-ledger rows | 1 | **0 — deliberately not copied** |
+| Tenant / session rows | 0 / 0 | 0 / 0 |
+
+- New disposable schema validation branch: `validation/iam-schema-20261110`, ID `br-nameless-hat-b6j2p4m4`, parent `development`. The GitHub-versioned `iam_database_schema.sql` was restored there with **346 SQL statements in one transaction**. The versioned `0003_set_tenant_context_search_path.sql` hardening migration passed on this branch and then on NEW Development; the legacy production function still includes `public` in its function-local search_path.
+- Normalized PostgreSQL catalog comparisons matched the source on **185 columns, 244 constraints, 24 ENUM values, 63 indexes, 12 triggers, 23 RLS flags, 8 unchanged functions**, and all **41 RLS policies**. Policy fingerprint based on role *names* (rather than environment-specific role OIDs): `43322a1a16b3e8da16e0e11acef961ea`.
+- The 16 non-personal permissions were imported from legacy to **NEW Development only**, preserving microsecond timestamps; full field+timestamp fingerprint matches `c1ce8f2a9304273b2b2d699bbaad74e1`. The empty migration ledger means this environment is **not yet migration-ledger-compliant**; do not fabricate or copy legacy execution history without checksum/provenance verification.
+- Runtime isolation was tested on a **separate synthetic fixture branch** `validation/tenant-rls-20261110`, ID `br-flat-grass-b6v3ntck`, child of the schema-validation branch. Tested via **actual `iam_app_runtime_login` PostgreSQL login, not SET ROLE**: absent tenant context, signed tenants A/B, tampered/expired/excessive-lifetime tokens, cross-tenant INSERT, allowed A UPDATE, denied B UPDATE and denied missing-context UPDATE. All passed. Fixture branch expires `2026-11-24T19:31:00Z`; the parent branch cannot expire while a child exists, so schedule separate parent cleanup after expiry.
+- Security privilege correction applied to **all four NEW Neon branches only**: `REVOKE TEMPORARY ON DATABASE iam_database FROM PUBLIC`. Verified the actual runtime login has `CONNECT=true`, `CREATE=false`, `TEMP=false`, `BYPASSRLS=false`. The old Neon source was not modified.
+- On NEW Development, real runtime login sees the 16 permissions but **0 tenants without a signed context**; a no-context INSERT is rejected with SQLSTATE `42501`. Vercel's PR #6 Preview and existing Production `/api/health/database` returned HTTP `200`, but those endpoints do not replace authenticated Auth0/RBAC E2E.
+- Reproducible deployment-side read/deny contract: `database/tests/new-neon-runtime-readiness.sql`. Run with `psql` as **`iam_app_runtime_login`** against the **verified direct** NEW Development endpoint, not as the Neon database owner; do not print the connection URI or inject secrets into CI logs.
+
+**Not completed:** source-ledger checksum and migrations provenance, native protection of NEW Production on Neon Free, GitHub `main` protection (still `protected=false` on inspection), Auth0 callback/login/session/logout E2E, RBAC admin flows, backups and Production cutover. Never treat Development parity as permission to change Vercel Production `DATABASE_URL`. Full evidence: https://github.com/alexoaraujo/iam-control-center-new/issues/5#issuecomment-6777602546
 
 ## Vercel environment boundaries
 
@@ -53,6 +77,6 @@ Neon returned HTTP 422 `maximum number of protected branches for your current pl
 ## Evidence
 
 - New Neon owner and role attributes inspected directly with Neon; Development login returned `current_user=iam_app_runtime_login` and `rolbypassrls=false`.
-- New `iam_database` exists on both the production and development branches, with no IAM application tables yet.
+- NEW Production `iam_database` still has zero IAM application tables. NEW Development now has 23 tables and the source-matching permission catalog, with migration ledger awaiting provenance review.
 - Vercel Preview credentials stored as a Secret, not in Git.
 - This change deliberately does not modify existing Production connection, Auth0 settings, or the legacy source schema export.
