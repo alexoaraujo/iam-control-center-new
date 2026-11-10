@@ -176,7 +176,7 @@ jobs:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
       # The Auth0 redirect_uri uses this branch-bound Preview alias.
-      E2E_CALLBACK_HOST: iam-control-center-preview.vercel.app
+      E2E_CALLBACK_HOST: iam-control-center-new-preview.vercel.app
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
@@ -197,7 +197,7 @@ jobs:
           set -euo pipefail
           # The callback domain is currently bound to this branch in Vercel.
           # Fail closed rather than testing a different PR through that alias.
-          if [[ "${PR_HEAD_REPOSITORY}" != "alexoaraujo83/iam-control-center" || "${PR_HEAD_BRANCH}" != "fix/bind-preview-e2e-deployment" ]]; then
+          if [[ "${PR_HEAD_REPOSITORY}" != "alexoaraujo/iam-control-center-new" || "${PR_HEAD_BRANCH}" != "fix/vercel-deployment-readiness" ]]; then
             echo "::error::Auth0 callback alias is not bound to this PR branch. Configure a branch-specific callback before enabling E2E."
             exit 1
           fi
@@ -245,7 +245,7 @@ jobs:
           const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
           const expectedIssuer = "https://token.actions.githubusercontent.com";
           // GitHub's OIDC subject for this repository includes immutable owner/repository IDs.
-          const expectedSubject = "repo:alexoaraujo83@288204053/iam-control-center@1431662503:environment:Preview";
+          const expectedSubject = "repo:alexoaraujo@325264809/iam-control-center-new@1451861889:environment:Preview";
           const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
           // These claims are non-secret diagnostics; never print or persist the JWT.
           console.log(JSON.stringify({
@@ -265,7 +265,7 @@ jobs:
           if (!Number.isFinite(claims.iat) || !Number.isFinite(claims.exp)) throw new Error("OIDC token is missing iat/exp claims.");
           if (claims.iat > now + 60 || claims.exp <= now) throw new Error("OIDC token is not currently valid.");
           if (claims.iss !== expectedIssuer) throw new Error("Unexpected OIDC issuer.");
-          if (!audience.includes("https://github.com/alexoaraujo83")) throw new Error("Unexpected OIDC audience.");
+          if (!audience.includes("https://github.com/alexoaraujo")) throw new Error("Unexpected OIDC audience.");
           if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
           NODE
 
@@ -282,7 +282,7 @@ jobs:
           const trustedHosts = new Set([deploymentOrigin.hostname, callbackHost]);
 
           if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
-          if (callbackHost !== "iam-control-center-preview.vercel.app") {
+          if (callbackHost !== "iam-control-center-new-preview.vercel.app") {
             throw new Error("Unexpected Auth0 callback Preview host.");
           }
           // A shared deployment/callback hostname is permitted when the exact-SHA
