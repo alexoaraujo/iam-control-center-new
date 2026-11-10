@@ -54,3 +54,11 @@ Owner/superuser tests are not runtime isolation evidence. Neon connector current
 ## Recovery
 
 Do not run against a non-empty database, existing IAM objects, or a branch containing prototype data. A corrective migration requires explicit preconditions and reviewed forward-recovery plan.
+
+## Migration 0003 — SECURITY DEFINER search_path hardening
+
+- `0003_set_tenant_context_search_path.sql` is a targeted **review-only** corrective migration for the canonical IAM source schema. It removes `public` from `iam.set_tenant_context(uuid, uuid, bigint, text, text)`'s function-local `search_path`, retaining `pg_catalog, app_private, iam`. It does **not** change the function body, grants, ownership, or tenant context algorithm.
+- Preflight requires effective `current_user=iam_owner`, the exact function signature, a secure original `SECURITY DEFINER` contract, and an expected prior `search_path`. Unexpected schema lineages fail closed; do not apply to the empty Neon NEW database or replace the canonical source dump blindly.
+- Disposable PostgreSQL 18 schema-restore jobs exercise the migration under `SET ROLE iam_owner`, run `database/tests/0003_set_tenant_context_search_path_contract.sql`, and then run the existing tenant-context/RLS restore tests. The contract fails if *any* IAM `SECURITY DEFINER` function has a `public` search-path component or lacks a local configuration.
+- A passing disposable test proves only the DDL can be corrected on a fixture; it is **not** evidence that migration 0003 was applied to legacy Neon Production, new Neon Development, or new Neon Production.
+- Before real execution, an approved migration runner must verify a direct non-pooled migration connection, role-assumption graph, privileges, checksum/ledger, backup/rollback, and operator authorization, recording the before/after effective configuration. Avoid schema changes on Production until approved.
