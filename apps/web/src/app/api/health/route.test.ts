@@ -9,6 +9,7 @@ describe("GET /api/health", () => {
     vi.stubEnv("AUTH0_CLIENT_ID", "public-client-id");
     vi.stubEnv("AUTH0_CLIENT_SECRET", "must-not-appear-client-secret");
     vi.stubEnv("AUTH0_SECRET", "must-not-appear-session-secret");
+    vi.stubEnv("APP_BASE_URL", "https://example.com");
     vi.stubEnv(
       "DATABASE_URL",
       "postgres://iam_user:must-not-appear-db-password@localhost/iam",
