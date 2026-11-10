@@ -23,7 +23,7 @@ describe("Next.js 16 Auth0 proxy", () => {
 
   it("keeps the SDK matcher broad while excluding framework assets and metadata", () => {
     expect(config.matcher).toEqual([
-      "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
+      "/((?!api/health(?:/|$)|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
     ]);
   });
 });
