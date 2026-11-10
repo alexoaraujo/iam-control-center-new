@@ -6,11 +6,12 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   const password = process.env.AUTH0_E2E_PASSWORD;
   const trustedOidcToken = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
   const callbackHost = process.env.E2E_CALLBACK_HOST;
+  const auth0Domain = process.env.E2E_AUTH0_DOMAIN;
 
-  if (!baseURL || !username || !password || !trustedOidcToken || !callbackHost) {
+  if (!baseURL || !username || !password || !trustedOidcToken || !callbackHost || !auth0Domain) {
     throw new Error("Required Auth0 E2E configuration is missing.");
   }
-  if (callbackHost !== "iam-control-center-preview.vercel.app") {
+  if (!/^[a-zA-Z0-9-]+\.vercel\.app$/.test(callbackHost)) {
     throw new Error("Unexpected Auth0 callback Preview host.");
   }
 
@@ -40,7 +41,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
 
       // The exact-SHA deployment URL starts the flow; the configured branch
       // alias receives the Auth0 callback. Trust only these two Preview hosts.
-      const trustedHost = trustedHosts.has(requestUrl.hostname);
+      const trustedHost = requestUrl.protocol === "https:" && trustedHosts.has(requestUrl.hostname);
       if (trustedHost) {
         headers.push({ name: trustedHeader, value: trustedOidcToken });
       }
@@ -53,7 +54,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
 
       if (
         trustedHost ||
-        requestUrl.hostname === "iam-control-center.us.auth0.com"
+        requestUrl.hostname === auth0Domain
       ) {
         console.log(
           `CDP request: ${request.method} ${requestUrl.hostname}${requestUrl.pathname}; trusted header: ${trustedHost ? "attached" : "stripped"}`
@@ -73,7 +74,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
 
   // Anonymous access must enter the Auth0 Authorization Code + PKCE flow.
   await page.goto("/protected");
-  await expect(page).toHaveURL(/auth0\.com/);
+  await expect(page).toHaveURL((url) => url.hostname === auth0Domain);
 
   const identifier = page.locator('input[name="username"], input[name="email"]').first();
   await expect(identifier).toBeVisible();
@@ -103,7 +104,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   // Logout returns to the app root, which is immediately redirected to
   // Auth0 by the Next.js proxy. Verify the login screen, not a transient URL.
   await page.goto("/auth/logout");
-  await expect(page).toHaveURL(/iam-control-center\.us\.auth0\.com\/u\/login/, {
+  await expect(page).toHaveURL((url) => url.hostname === auth0Domain && url.pathname.startsWith("/u/login"), {
     timeout: 60000,
   });
   await expect(
@@ -112,7 +113,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
 
   // A fresh protected request must still require authentication after logout.
   await page.goto("/protected");
-  await expect(page).toHaveURL(/iam-control-center\.us\.auth0\.com\/u\/login/, {
+  await expect(page).toHaveURL((url) => url.hostname === auth0Domain && url.pathname.startsWith("/u/login"), {
     timeout: 30000,
   });
   await expect(

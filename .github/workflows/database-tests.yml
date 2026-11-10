@@ -2,36 +2,9 @@ name: database-schema-tests
 
 on:
   pull_request:
-    paths:
-      - "database/**"
-      - "docs/database/neon-source-baseline-reconciliation.md"
-      - "docs/database/iam-postgresql-test-matrix.md"
-      - "docs/operations/iam-migration-execution-contract.md"
-      - "iam_database_schema.sql"
-      - "docs/database/schema-manifest-contract.md"
-      - "role-security-harness/**"
-      - "scripts/test-postgres18-role-security-harness.sh"
-      - "docs/architecture/iam-decisions.md"
-      - "docs/architecture/tenant-context-rfc.md"
-      - "docs/operations/iam-role-bootstrap-review.md"
-      - ".github/workflows/database-tests.yml"
   push:
-    branches:
-      - "feat/iam-schema-migration-review"
-      - "feat/iam-role-bootstrap-review"
-    paths:
-      - "database/**"
-      - "docs/database/neon-source-baseline-reconciliation.md"
-      - "docs/database/iam-postgresql-test-matrix.md"
-      - "docs/operations/iam-migration-execution-contract.md"
-      - "iam_database_schema.sql"
-      - "docs/database/schema-manifest-contract.md"
-      - "role-security-harness/**"
-      - "scripts/test-postgres18-role-security-harness.sh"
-      - "docs/architecture/iam-decisions.md"
-      - "docs/architecture/tenant-context-rfc.md"
-      - "docs/operations/iam-role-bootstrap-review.md"
-      - ".github/workflows/database-tests.yml"
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -43,7 +16,7 @@ concurrency:
 jobs:
   postgres-18:
     name: postgres-18-schema-contract
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
       postgres:
@@ -93,7 +66,7 @@ jobs:
 
   postgres-18-source-schema-restore-manifest:
     name: postgres-18-source-schema-restore-manifest
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
@@ -150,7 +123,7 @@ jobs:
           cat artifacts/schema-manifest-restored-sections.tsv
   restore-source-schema:
       name: postgres-18-source-schema-restore
-      runs-on: ubuntu-latest
+      runs-on: ubuntu-24.04
       timeout-minutes: 10
       services:
         postgres:

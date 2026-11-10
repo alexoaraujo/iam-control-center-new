@@ -7,5 +7,5 @@ export function GET() {
     service: "iam-control-center-web",
     status: "scaffold",
     ...getPublicRuntimeStatus(),
-  });
+  }, { headers: { "Cache-Control": "no-store", "X-Health-Check": "liveness" } });
 }

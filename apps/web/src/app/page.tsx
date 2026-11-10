@@ -1,35 +1,8 @@
-import { redirect } from "next/navigation";
-import { auth0 } from "../lib/auth0";
-
-const navigation = [
-  { label: "Visão geral", href: "#overview", icon: "◫" },
-  { label: "Organizações", href: "#organizations", icon: "▦" },
-  { label: "Identidades", href: "#identities", icon: "◎" },
-  { label: "Acesso e permissões", href: "#access", icon: "⌘" },
-  { label: "Políticas", href: "#policies", icon: "◇" },
-  { label: "Auditoria", href: "#audit", icon: "≋" },
-  { label: "Segurança", href: "#security", icon: "⬡" },
-  { label: "Integrações", href: "#integrations", icon: "⌁" },
-  { label: "Ambientes", href: "#environments", icon: "▤" },
-  { label: "Evidências", href: "#evidence", icon: "▣" },
-];
-
-function Status({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "warning" | "success" | "danger" }) {
-  return <span className={`status status--${tone}`}><span className="status__dot" />{children}</span>;
-}
-
-function SectionHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
-  return (
-    <div className="section-heading">
-      <div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div>
-      <p>{description}</p>
-    </div>
-  );
-}
+import { requireSession } from "../lib/session";
+import { navigation, Status, SectionHeading } from "../components/dashboard/presentation";
 
 export default async function HomePage() {
-  const session = await auth0.getSession();
-  if (!session) redirect("/auth/login?returnTo=/");
+  await requireSession("/");
 
   return (
     <main className="app-shell">

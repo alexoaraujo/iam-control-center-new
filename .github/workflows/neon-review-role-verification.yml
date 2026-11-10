@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   verify-runtime-role:
-    if: github.repository == 'alexoaraujo83/iam-control-center' && github.ref == 'refs/heads/main' && inputs.confirm_review_branch == 'RUN_REVIEW_CHECK'
+    if: github.repository == vars.IAM_INTEGRATION_REPOSITORY && github.ref == 'refs/heads/main' && inputs.confirm_review_branch == 'RUN_REVIEW_CHECK'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: neon-review-maintenance

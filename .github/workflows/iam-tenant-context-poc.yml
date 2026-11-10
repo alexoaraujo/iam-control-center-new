@@ -7,6 +7,7 @@ on:
       - ".github/workflows/iam-tenant-context-poc.yml"
   push:
     branches:
+      - main
       - "poc/iam-tenant-context-01"
     paths:
       - "database/poc/tenant-context/**"
@@ -18,7 +19,7 @@ permissions:
 jobs:
   postgres-harness:
     name: postgres-harness
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:18
