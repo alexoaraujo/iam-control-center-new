@@ -10,7 +10,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   if (!baseURL || !username || !password || !trustedOidcToken || !callbackHost) {
     throw new Error("Required Auth0 E2E configuration is missing.");
   }
-  if (callbackHost !== "iam-control-center-preview.vercel.app") {
+  if (callbackHost !== "iam-control-center-new-preview.vercel.app") {
     throw new Error("Unexpected Auth0 callback Preview host.");
   }
 
