@@ -65,6 +65,9 @@ jobs:
       - name: Test Preview build filter
         run: node --test scripts/vercel-ignore-build.test.mjs
 
+      - name: Test Auth0 Preview E2E configuration contract
+        run: node --test scripts/auth0-preview-contract.test.mjs
+
       - name: Determine whether a Preview deployment is required
         id: preview-impact
         if: github.event_name == 'pull_request'
