@@ -180,7 +180,7 @@ jobs:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
       # The Auth0 redirect_uri uses this branch-bound Preview alias.
-      E2E_CALLBACK_HOST: iam-control-center-new-preview.vercel.app
+      E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
@@ -201,8 +201,13 @@ jobs:
           set -euo pipefail
           # The callback domain is currently bound to this branch in Vercel.
           # Fail closed rather than testing a different PR through that alias.
-          if [[ "${PR_HEAD_REPOSITORY}" != "alexoaraujo/iam-control-center-new" || "${PR_HEAD_BRANCH}" != "fix/vercel-deployment-readiness" ]]; then
+          if [[ "${PR_HEAD_REPOSITORY}" != "alexoaraujo/iam-control-center-new" || "${PR_HEAD_BRANCH}" != "ci/optimize-pr-checks-20261110" ]]; then
             echo "::error::Auth0 callback alias is not bound to this PR branch. Configure a branch-specific callback before enabling E2E."
+            exit 1
+          fi
+          # Credentials must be configured in the protected Preview environment.
+          if [[ -z "${AUTH0_E2E_USERNAME:-}" || -z "${AUTH0_E2E_PASSWORD:-}" ]]; then
+            echo "::error::AUTH0_E2E_USERNAME and AUTH0_E2E_PASSWORD must be set in the protected Preview environment."
             exit 1
           fi
           [[ "${E2E_DEPLOYMENT_HOST}" =~ ^[a-zA-Z0-9-]+\.vercel\.app$ ]] || {
