@@ -10,7 +10,9 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   if (!baseURL || !username || !password || !trustedOidcToken || !callbackHost) {
     throw new Error("Required Auth0 E2E configuration is missing.");
   }
-  if (callbackHost !== "iam-control-center-new-ci-preview.vercel.app") {
+  // The host is an explicitly configured/allowlisted branch alias, never an
+  // arbitrary URL or wildcard. It must equal the browser's verified origin.
+  if (!/^iam-control-center-new-[a-z0-9-]+\.vercel\.app$/.test(callbackHost)) {
     throw new Error("Unexpected Auth0 callback Preview host.");
   }
 
