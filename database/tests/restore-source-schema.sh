@@ -14,6 +14,14 @@ SQL
 echo "[source-schema-restore] restoring canonical schema-only dump into the empty database"
 psql -X --no-password "$DATABASE_URL" -v ON_ERROR_STOP=1 -f iam_database_schema.sql
 
+echo "[source-schema-restore] applying reviewed 0003 hardening as effective iam_owner"
+psql -X --no-password "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+SET ROLE iam_owner;
+\i database/migrations/0003_set_tenant_context_search_path.sql
+RESET ROLE;
+\i database/tests/0003_set_tenant_context_search_path_contract.sql
+SQL
+
 echo "[source-schema-restore] validating restored catalog, ownership, RLS, policies, and empty data"
 psql -X --no-password "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
 DO $restore_contract$
