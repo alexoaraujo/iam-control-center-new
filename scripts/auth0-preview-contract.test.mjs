@@ -9,7 +9,7 @@ const repository = "alexoaraujo/iam-control-center-new";
 const branch = "fix/vercel-deployment-readiness";
 
 test("Auth0 E2E and CI use the same verified branch-specific callback alias", () => {
-  assert.match(workflow, /E2E_CALLBACK_HOST:\\s+iam-control-center-new-preview\\.vercel\\.app/);
+  assert.match(workflow, /E2E_CALLBACK_HOST:\s+iam-control-center-new-preview\.vercel\.app/);
   assert.ok(e2e.includes(`callbackHost !== "${alias}"`));
   assert.ok(workflow.includes(`callbackHost !== "${alias}"`));
   assert.ok(workflow.includes(`"${repository}"`));
