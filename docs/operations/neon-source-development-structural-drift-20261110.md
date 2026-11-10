@@ -49,6 +49,21 @@ Of the nine functions, **eight definitions matched byte-for-byte**. The only dri
 
 **Blocker:** never fabricate an applied migration entry or silently reset migration history. Establish a signed baseline manifest, historical migration provenance and a reproducible bootstrapping/upgrade procedure before a production release.
 
+## Provenance verified for the legacy ledger row (read-only)
+
+The source ledger row was fetched from `twilight-fire-88497009/main` using the read-only query `SELECT migration_id, checksum_sha256, source_sha, applied_at FROM iam.schema_migrations`. It returned exactly one entry:
+
+| Field | Verified value |
+|---|---|
+| `migration_id` | `0001_context_key_hardening` |
+| `source_sha` | `b80c98c51746e1d49039015eb649b9bdd735ef7f` |
+| `checksum_sha256` | `2447395628fa0f1230abd95eb522e5b45d1baea1208c9c21b20346a10718fbab` |
+| `applied_at` | `2026-11-05T04:16:49.492Z` |
+| GitHub source file | [`database/migrations/0001_context_key_hardening.sql` at that exact commit](https://github.com/alexoaraujo/iam-control-center-new/blob/b80c98c51746e1d49039015eb649b9bdd735ef7f/database/migrations/0001_context_key_hardening.sql) |
+| SHA-256 recomputed from GitHub UTF-8 file contents | `2447395628fa0f1230abd95eb522e5b45d1baea1208c9c21b20346a10718fbab` — **MATCH** |
+
+The hash routine was first checked against the standard SHA-256 vector for `abc`. This verifies the historical ledger references the reviewed GitHub file bytes. It does **not** establish that the destination Development schema was built by executing the same migration, nor that copying the historical ledger entry into the empty destination ledger would be valid. Do not insert the row manually or infer full migration-chain equivalence.
+
 ## Additional read-only performance and security signals
 
 - New Development has 20 tables with FORCE RLS and 41 policies. A real `iam_app_runtime_login` session reported `BYPASSRLS=false`, zero visible tenants and zero memberships without tenant context; this does **not** replace full tenant A/B mutation tests.
