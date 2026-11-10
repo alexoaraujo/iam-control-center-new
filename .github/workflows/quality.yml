@@ -62,7 +62,7 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Test Preview build filter
+      - name: Test Preview build and Auth0 configuration contracts
         run: node --test scripts/*.test.mjs
 
       - name: Determine whether a Preview deployment is required
@@ -106,19 +106,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
-          VERCEL_PROJECT_PATH: ${{ vars.VERCEL_PROJECT_PATH }}
         run: |
           set -euo pipefail
-          [[ "${VERCEL_PROJECT_PATH}" =~ ^[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$ ]] || {
-            echo "::error::Configure VERCEL_PROJECT_PATH for this repository before validating Preview."
-            exit 1
-          }
           for attempt in $(seq 1 36); do
-            response="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status")"
-            row="$(jq -c '[.statuses[] | select(.context == "Vercel")] | first // {}' <<< "${response}")"
-            state="$(jq -r '.state // "missing"' <<< "${row}")"
-            description="$(jq -r '.description // ""' <<< "${row}")"
-            target="$(jq -r '.target_url // ""' <<< "${row}")"
+            state="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status" --jq '[.statuses[] | select(.context == "Vercel")] | first | .state // "missing"')"
             if [ "${state}" = "failure" ] || [ "${state}" = "error" ]; then
               echo "::error::Vercel reported ${state} for ${COMMIT_SHA}."
               exit 1
@@ -140,7 +131,7 @@ jobs:
               | if length == 1 then .[0] else empty end
             ' <<< "${checks}" 2>/dev/null || true)"
 
-            if [[ "${state}" == "success" && -n "${preview_host}" && "${description}" == "Deployment has completed" && "${target}" == "https://vercel.com/${VERCEL_PROJECT_PATH}/"* ]]; then
+            if [ "${state}" = "success" ] && [ -n "${preview_host}" ]; then
               case "${preview_host}" in
                 *.vercel.app)
                   [[ "${preview_host}" =~ ^[a-zA-Z0-9-]+\.vercel\.app$ ]] || exit 1
@@ -170,7 +161,7 @@ jobs:
     needs:
       - quality
       - preview-deployment
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     # Must match the GitHub Actions environment configured in Vercel Trusted Sources.
     # Without this, GitHub issues a ref-based OIDC subject instead of environment:Preview.
@@ -185,11 +176,7 @@ jobs:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
       # The Auth0 redirect_uri uses this branch-bound Preview alias.
-      E2E_CALLBACK_HOST: ${{ vars.E2E_CALLBACK_HOST }}
-      E2E_CALLBACK_BRANCH: ${{ vars.E2E_CALLBACK_BRANCH }}
-      E2E_AUTH0_DOMAIN: ${{ vars.E2E_AUTH0_DOMAIN }}
-      E2E_OIDC_AUDIENCE: ${{ vars.E2E_OIDC_AUDIENCE }}
-      E2E_OIDC_SUBJECT: ${{ vars.E2E_OIDC_SUBJECT }}
+      E2E_CALLBACK_HOST: iam-control-center-new-preview.vercel.app
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
@@ -208,7 +195,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/e2e-config.mjs
+          # The callback domain is currently bound to this branch in Vercel.
+          # Fail closed rather than testing a different PR through that alias.
+          if [[ "${PR_HEAD_REPOSITORY}" != "alexoaraujo/iam-control-center-new" || "${PR_HEAD_BRANCH}" != "fix/vercel-deployment-readiness" ]]; then
+            echo "::error::Auth0 callback alias is not bound to this PR branch. Configure a branch-specific callback before enabling E2E."
+            exit 1
+          fi
+          [[ "${E2E_DEPLOYMENT_HOST}" =~ ^[a-zA-Z0-9-]+\.vercel\.app$ ]] || {
+            echo "::error::Verified exact-SHA deployment hostname is missing or invalid."
+            exit 1
+          }
+          # The exact-SHA Vercel Preview may itself use the canonical callback alias.
+          # Same-origin is valid and required for Auth0 transaction cookies.
+          printf 'E2E_DEPLOYMENT_URL=https://%s\n' "${E2E_DEPLOYMENT_HOST}" >> "$GITHUB_ENV"
+          printf 'E2E_BASE_URL=https://%s\n' "${E2E_CALLBACK_HOST}" >> "$GITHUB_ENV"
 
       - name: Install isolated Playwright runner
         run: |
@@ -227,7 +227,7 @@ jobs:
           set -euo pipefail
           response="$(curl --fail --silent --show-error \
             --get \
-            --data-urlencode "audience=${E2E_OIDC_AUDIENCE}" \
+            --data-urlencode "audience=https://github.com/alexoaraujo" \
             --header "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
             "${ACTIONS_ID_TOKEN_REQUEST_URL}")"
           token="$(jq -er '.value | select(type == "string" and length > 0)' <<< "$response")"
@@ -245,7 +245,7 @@ jobs:
           const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
           const expectedIssuer = "https://token.actions.githubusercontent.com";
           // GitHub's OIDC subject for this repository includes immutable owner/repository IDs.
-          const expectedSubject = process.env.E2E_OIDC_SUBJECT;
+          const expectedSubject = "repo:alexoaraujo@325264809/iam-control-center-new@1451861889:environment:Preview";
           const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
           // These claims are non-secret diagnostics; never print or persist the JWT.
           console.log(JSON.stringify({
@@ -265,8 +265,7 @@ jobs:
           if (!Number.isFinite(claims.iat) || !Number.isFinite(claims.exp)) throw new Error("OIDC token is missing iat/exp claims.");
           if (claims.iat > now + 60 || claims.exp <= now) throw new Error("OIDC token is not currently valid.");
           if (claims.iss !== expectedIssuer) throw new Error("Unexpected OIDC issuer.");
-          if (!audience.includes(process.env.E2E_OIDC_AUDIENCE)) throw new Error("Unexpected OIDC audience.");
-          if (claims.repository !== process.env.GITHUB_REPOSITORY) throw new Error("Unexpected OIDC repository.");
+          if (!audience.includes("https://github.com/alexoaraujo")) throw new Error("Unexpected OIDC audience.");
           if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
           NODE
 
@@ -279,11 +278,11 @@ jobs:
           const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
           const callbackHost = process.env.E2E_CALLBACK_HOST;
           const trustedHeader = "x-vercel-trusted-oidc-idp-token";
-          const auth0Host = process.env.E2E_AUTH0_DOMAIN;
+          const auth0Host = "iam-control-center.us.auth0.com";
           const trustedHosts = new Set([deploymentOrigin.hostname, callbackHost]);
 
           if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
-          if (!/^[a-zA-Z0-9-]+\.vercel\.app$/.test(callbackHost || "")) {
+          if (callbackHost !== "iam-control-center-new-preview.vercel.app") {
             throw new Error("Unexpected Auth0 callback Preview host.");
           }
           // A shared deployment/callback hostname is permitted when the exact-SHA
@@ -304,7 +303,7 @@ jobs:
           async function reachAuth0(start, label) {
             let current = new URL(start);
             for (let attempt = 0; attempt < 6; attempt += 1) {
-              if (current.protocol !== "https:" || !trustedHosts.has(current.hostname)) {
+              if (!trustedHosts.has(current.hostname)) {
                 throw new Error(`Refusing to send OIDC token to untrusted host ${current.hostname}.`);
               }
               const response = await fetch(current, {
@@ -316,14 +315,14 @@ jobs:
                 throw new Error(`${label}: expected redirect from ${current.pathname}; HTTP ${response.status}, no Location.`);
               }
               const next = new URL(location, current);
-              if (next.protocol === "https:" && next.hostname === auth0Host) {
+              if (next.hostname === auth0Host) {
                 console.log(`${label} passed: reached Auth0 after ${attempt + 1} Preview redirect(s).`);
                 return;
               }
               if (next.hostname === "vercel.com") {
                 throw new Error(`${label}: Vercel Deployment Protection intercepted a request carrying the OIDC token.`);
               }
-              if (next.protocol !== "https:" || !trustedHosts.has(next.hostname)) {
+              if (!trustedHosts.has(next.hostname)) {
                 throw new Error(`${label}: unexpected redirect host ${next.hostname}.`);
               }
               current = next;

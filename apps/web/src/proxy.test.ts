@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const { middleware } = vi.hoisted(() => ({
-  middleware: vi.fn(async () => new Response("Auth0 handled")),
+  middleware: vi.fn(async (_request: Request) => new Response("Auth0 handled")),
 }));
 
 vi.mock("./lib/auth0", () => ({
@@ -23,7 +23,7 @@ describe("Next.js 16 Auth0 proxy", () => {
 
   it("keeps the SDK matcher broad while excluding framework assets and metadata", () => {
     expect(config.matcher).toEqual([
-      "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
+      "/((?!api/health(?:/|$)|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
     ]);
   });
 });

@@ -60,18 +60,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          VERCEL_PROJECT_PATH: ${{ vars.VERCEL_PROJECT_PATH }}
           COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          [[ "${VERCEL_PROJECT_PATH}" =~ ^[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$ ]] || { echo "::error::Configure VERCEL_PROJECT_PATH (team/project)"; exit 1; }
           for attempt in $(seq 1 48); do
             response="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status")"
             row="$(jq -c '[.statuses[] | select(.context == "Vercel")] | first // {}' <<< "${response}")"
             state="$(jq -r '.state // "missing"' <<< "${row}")"
             description="$(jq -r '.description // ""' <<< "${row}")"
             target="$(jq -r '.target_url // ""' <<< "${row}")"
-            if [[ "${state}" == "success" && "${description}" == "Deployment has completed" && "${target}" == "https://vercel.com/${VERCEL_PROJECT_PATH}/"* ]]; then
+            if [[ "${state}" == "success" && "${description}" == "Deployment has completed" && "${target}" =~ ^https://vercel\.com/aoa4/iam-control-center-new/[a-zA-Z0-9]+$ ]]; then
               echo "Verified completed Vercel deployment of exact PR SHA: ${COMMIT_SHA}"
               echo "Vercel deployment: ${target}"
               exit 0
