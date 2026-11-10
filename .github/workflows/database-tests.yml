@@ -3,6 +3,8 @@ name: database-schema-tests
 on:
   pull_request:
     paths:
+      - "apps/web/src/app/api/health/database/**"
+      - "apps/web/src/lib/db.ts"
       - "database/**"
       - "docs/database/neon-source-baseline-reconciliation.md"
       - "docs/database/iam-postgresql-test-matrix.md"
@@ -17,9 +19,12 @@ on:
       - ".github/workflows/database-tests.yml"
   push:
     branches:
+      - "main"
       - "feat/iam-schema-migration-review"
       - "feat/iam-role-bootstrap-review"
     paths:
+      - "apps/web/src/app/api/health/database/**"
+      - "apps/web/src/lib/db.ts"
       - "database/**"
       - "docs/database/neon-source-baseline-reconciliation.md"
       - "docs/database/iam-postgresql-test-matrix.md"
