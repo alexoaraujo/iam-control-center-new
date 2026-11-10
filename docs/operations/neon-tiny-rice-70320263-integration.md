@@ -19,6 +19,7 @@
 - Existing **Production** `DATABASE_URL` remains on the previous Neon project `twilight-fire-88497009`. Do not replace it or deploy Production until schema, roles, rows, migrations, RLS, authorized login, and rollback have been verified.
 - The **Preview** `DATABASE_URL` for Git branch `chore/sync-neon-tiny-rice-70320263` is a Vercel **Secret**, pointing to the new project's development branch, `iam_database`, runtime role `iam_app_runtime_login`. This setting is branch-scoped and must not be promoted or copied into Production.
 - **Preview** `DATABASE_RUNTIME_ROLE=iam_app_runtime_login` is scoped to that same integration branch.
+- **Preview** `APP_BASE_URL=https://iam-control-center-new-git-chore-sync-neon-tiny-ric-4e647f-aoa4.vercel.app` is scoped to that branch, matching the branch alias returned by Vercel for PR #4. This is an application base URL alignment, **not** proof that Auth0 allows this callback host. Any changed environment variables require a fresh Preview deployment to take effect.
 - The existing Auth0 callback alias `iam-control-center-new-preview.vercel.app` is still bound to the old, merged `fix/vercel-deployment-readiness` branch. Do not claim the new integration branch has Auth0 E2E coverage or bind it to that callback host without an exact-SHA URL/branch/callback reconciliation and explicit Auth0 allowlist check.
 - `DATABASE_MIGRATION_URL` must never be placed into public-facing Vercel application environments. Migration credentials belong in an independently protected migration execution environment.
 
