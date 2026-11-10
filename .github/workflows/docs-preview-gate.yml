@@ -69,7 +69,7 @@ jobs:
             state="$(jq -r '.state // "missing"' <<< "${row}")"
             description="$(jq -r '.description // ""' <<< "${row}")"
             target="$(jq -r '.target_url // ""' <<< "${row}")"
-            if [[ "${state}" == "success" && "${description}" == "Deployment has completed" && "${target}" =~ ^https://vercel\.com/alexoaraujo83-8387s-projects/iam-control-center/[a-zA-Z0-9]+$ ]]; then
+            if [[ "${state}" == "success" && "${description}" == "Deployment has completed" && "${target}" =~ ^https://vercel\.com/aoa4/iam-control-center-new/[a-zA-Z0-9]+$ ]]; then
               echo "Verified completed Vercel deployment of exact PR SHA: ${COMMIT_SHA}"
               echo "Vercel deployment: ${target}"
               exit 0
