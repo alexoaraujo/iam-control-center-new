@@ -299,7 +299,7 @@ jobs:
           const trustedHosts = new Set([deploymentOrigin.hostname, callbackHost]);
 
           if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
-          if (!/^iam-control-center-new-[a-z0-9-]+\\.vercel\\.app$/.test(callbackHost) ||
+          if (!/^iam-control-center-new-[a-z0-9-]+\.vercel\.app$/.test(callbackHost) ||
               callbackHost !== deploymentOrigin.hostname) {
             throw new Error("Callback must be the reviewed IAM Preview alias for this exact-SHA deployment.");
           }
