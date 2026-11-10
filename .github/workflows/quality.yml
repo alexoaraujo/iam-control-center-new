@@ -291,7 +291,7 @@ jobs:
           const trustedHosts = new Set([deploymentOrigin.hostname, callbackHost]);
 
           if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
-          if (callbackHost !== "iam-control-center-new-preview.vercel.app") {
+          if (callbackHost !== "iam-control-center-new-ci-preview.vercel.app") {
             throw new Error("Unexpected Auth0 callback Preview host.");
           }
           // A shared deployment/callback hostname is permitted when the exact-SHA
