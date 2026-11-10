@@ -57,13 +57,13 @@ jobs:
           const db = readFileSync('apps/web/src/lib/db.ts','utf8');
           const required = ['APP_BASE_URL','AUTH0_DOMAIN','AUTH0_CLIENT_ID','AUTH0_CLIENT_SECRET','AUTH0_SECRET','DATABASE_URL'];
           for (const key of required) {
-            if (!example.split(/\\r?\\n/).some(line => line.startsWith(key + '='))) throw new Error('Missing env documentation: ' + key);
+            if (!example.split(/\r?\n/).some(line => line.startsWith(key + '='))) throw new Error('Missing env documentation: ' + key);
           }
           for (const key of required.filter(key => key !== 'DATABASE_URL')) {
             if (!auth.includes('process.env.' + key)) throw new Error('Auth0 env contract changed: ' + key);
           }
           if (!db.includes('process.env.DATABASE_URL')) throw new Error('Neon runtime env contract changed');
-          if (/process\\.env\\.DATABASE_MIGRATION_URL/.test(auth + db)) throw new Error('Migration URL must not be used by web runtime');
+          if (/process\.env\.DATABASE_MIGRATION_URL/.test(auth + db)) throw new Error('Migration URL must not be used by web runtime');
           console.log('Environment contract verified; runtime secrets must be provisioned outside CI.');
           NODE
       - name: Install exact lockfile
