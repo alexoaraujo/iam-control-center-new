@@ -19,6 +19,7 @@ describe("GET /api/health", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(body).toEqual({
       ok: true,
       service: "iam-control-center-web",
