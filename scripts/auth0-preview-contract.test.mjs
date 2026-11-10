@@ -4,12 +4,12 @@ import { test } from "node:test";
 
 const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
 const e2e = readFileSync(".github/e2e/auth0.spec.cjs", "utf8");
-const alias = "iam-control-center-new-preview.vercel.app";
+const alias = "iam-control-center-new-ci-preview.vercel.app";
 const repository = "alexoaraujo/iam-control-center-new";
-const branch = "fix/vercel-deployment-readiness";
+const branch = "ci/optimize-pr-checks-20261110";
 
 test("Auth0 E2E and CI use the same verified branch-specific callback alias", () => {
-  assert.match(workflow, /E2E_CALLBACK_HOST:\s+iam-control-center-new-preview\.vercel\.app/);
+  assert.match(workflow, /E2E_CALLBACK_HOST:\s+iam-control-center-new-ci-preview\.vercel\.app/);
   assert.ok(e2e.includes(`callbackHost !== "${alias}"`));
   assert.ok(workflow.includes(`callbackHost !== "${alias}"`));
   assert.ok(workflow.includes(`"${repository}"`));
