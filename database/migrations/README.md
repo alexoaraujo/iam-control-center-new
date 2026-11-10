@@ -62,3 +62,13 @@ Do not run against a non-empty database, existing IAM objects, or a branch conta
 - Disposable PostgreSQL 18 schema-restore jobs exercise the migration under `SET ROLE iam_owner`, run `database/tests/0003_set_tenant_context_search_path_contract.sql`, and then run the existing tenant-context/RLS restore tests. The contract fails if *any* IAM `SECURITY DEFINER` function has a `public` search-path component or lacks a local configuration.
 - A passing disposable test proves only the DDL can be corrected on a fixture; it is **not** evidence that migration 0003 was applied to legacy Neon Production, new Neon Development, or new Neon Production.
 - Before real execution, an approved migration runner must verify a direct non-pooled migration connection, role-assumption graph, privileges, checksum/ledger, backup/rollback, and operator authorization, recording the before/after effective configuration. Avoid schema changes on Production until approved.
+
+## Disposable CI real runtime login gate
+
+The `postgres-18-source-schema-restore` and `postgres-18-source-schema-restore-manifest` GitHub jobs additionally run `database/tests/run-ci-runtime-login.sh` **after** the canonical schema restore and signed-context synthetic fixtures rollback.
+
+This test is deliberately restricted to `postgresql://postgres@localhost:5432/iam_source_restore_test` on PostgreSQL 18+. It creates a **new PostgreSQL LOGIN principal** `iam_app_runtime_login` in the disposable service, gives it only `iam_app_runtime` inheritance (not `iam_owner` or `iam_migrator`), revokes `TEMP` from `PUBLIC`, and opens an **independent authenticated network connection** as that login. The ephemeral service password is imported from the existing `PGPASSWORD` environment in memory via psql `\\getenv`; no new persistent credential or Neon connection is used.
+
+`database/tests/ci-runtime-login-gate.sql` fails closed if the direct login can bypass RLS, create schema/temp objects, inherit owner privileges, view tenant data without signed context, or insert an unscoped organization. It also checks the 23-table/41-policy/20-FORCE-RLS baseline. No successful data writes or real tenant records are created by this gate.
+
+This new CI test complements rather than replaces the existing `runtime-rls-contract.sql` signed tenant A/B tests (run using `SET ROLE`) and the verified direct runtime-login tests on the **NEW Neon Development** and isolated fixture branches. Passing CI is not evidence of Auth0 E2E, RBAC administration, or Production migration.

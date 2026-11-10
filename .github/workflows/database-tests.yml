@@ -136,6 +136,7 @@ jobs:
             bash -euo pipefail -c '
               cd /workspace
               bash database/tests/restore-source-schema.sh
+              bash database/tests/run-ci-runtime-login.sh
               psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
                 -f database/scripts/schema-manifest.sql > artifacts/schema-manifest-restored-a.json
               psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
@@ -190,5 +191,6 @@ jobs:
               bash -euo pipefail -c '
                 psql -X --no-password "$DATABASE_URL" -Atc "SHOW server_version;"
                 bash database/tests/restore-source-schema.sh
+              bash database/tests/run-ci-runtime-login.sh
               '
 
