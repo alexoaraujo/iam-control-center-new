@@ -106,10 +106,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          VERCEL_PROJECT_PATH: ${{ vars.VERCEL_PROJECT_PATH }}
         run: |
           set -euo pipefail
+          [[ "${VERCEL_PROJECT_PATH}" =~ ^[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$ ]] || {
+            echo "::error::Configure VERCEL_PROJECT_PATH for this repository before validating Preview."
+            exit 1
+          }
           for attempt in $(seq 1 36); do
-            state="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status" --jq '[.statuses[] | select(.context == "Vercel")] | first | .state // "missing"')"
+            response="$(gh api "repos/${REPOSITORY}/commits/${COMMIT_SHA}/status")"
+            row="$(jq -c '[.statuses[] | select(.context == "Vercel")] | first // {}' <<< "${response}")"
+            state="$(jq -r '.state // "missing"' <<< "${row}")"
+            description="$(jq -r '.description // ""' <<< "${row}")"
+            target="$(jq -r '.target_url // ""' <<< "${row}")"
             if [ "${state}" = "failure" ] || [ "${state}" = "error" ]; then
               echo "::error::Vercel reported ${state} for ${COMMIT_SHA}."
               exit 1
@@ -131,7 +140,7 @@ jobs:
               | if length == 1 then .[0] else empty end
             ' <<< "${checks}" 2>/dev/null || true)"
 
-            if [ "${state}" = "success" ] && [ -n "${preview_host}" ]; then
+            if [[ "${state}" == "success" && -n "${preview_host}" && "${description}" == "Deployment has completed" && "${target}" == "https://vercel.com/${VERCEL_PROJECT_PATH}/"* ]]; then
               case "${preview_host}" in
                 *.vercel.app)
                   [[ "${preview_host}" =~ ^[a-zA-Z0-9-]+\.vercel\.app$ ]] || exit 1
@@ -295,7 +304,7 @@ jobs:
           async function reachAuth0(start, label) {
             let current = new URL(start);
             for (let attempt = 0; attempt < 6; attempt += 1) {
-              if (!trustedHosts.has(current.hostname)) {
+              if (current.protocol !== "https:" || !trustedHosts.has(current.hostname)) {
                 throw new Error(`Refusing to send OIDC token to untrusted host ${current.hostname}.`);
               }
               const response = await fetch(current, {
@@ -307,14 +316,14 @@ jobs:
                 throw new Error(`${label}: expected redirect from ${current.pathname}; HTTP ${response.status}, no Location.`);
               }
               const next = new URL(location, current);
-              if (next.hostname === auth0Host) {
+              if (next.protocol === "https:" && next.hostname === auth0Host) {
                 console.log(`${label} passed: reached Auth0 after ${attempt + 1} Preview redirect(s).`);
                 return;
               }
               if (next.hostname === "vercel.com") {
                 throw new Error(`${label}: Vercel Deployment Protection intercepted a request carrying the OIDC token.`);
               }
-              if (!trustedHosts.has(next.hostname)) {
+              if (next.protocol !== "https:" || !trustedHosts.has(next.hostname)) {
                 throw new Error(`${label}: unexpected redirect host ${next.hostname}.`);
               }
               current = next;

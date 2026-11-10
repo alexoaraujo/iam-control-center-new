@@ -39,8 +39,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
         .filter(([name]) => name.toLowerCase() !== trustedHeader)
         .map(([name, value]) => ({ name, value: String(value) }));
 
-      // The exact-SHA deployment URL starts the flow; the configured branch
-      // alias receives the Auth0 callback. Trust only these two Preview hosts.
+      // The callback and the verified exact-SHA deployment share one HTTPS origin.
       const trustedHost = requestUrl.protocol === "https:" && trustedHosts.has(requestUrl.hostname);
       if (trustedHost) {
         headers.push({ name: trustedHeader, value: trustedOidcToken });
@@ -74,7 +73,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
 
   // Anonymous access must enter the Auth0 Authorization Code + PKCE flow.
   await page.goto("/protected");
-  await expect(page).toHaveURL((url) => url.hostname === auth0Domain);
+  await expect(page).toHaveURL((url) => url.protocol === "https:" && url.hostname === auth0Domain);
 
   const identifier = page.locator('input[name="username"], input[name="email"]').first();
   await expect(identifier).toBeVisible();
@@ -104,7 +103,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   // Logout returns to the app root, which is immediately redirected to
   // Auth0 by the Next.js proxy. Verify the login screen, not a transient URL.
   await page.goto("/auth/logout");
-  await expect(page).toHaveURL((url) => url.hostname === auth0Domain && url.pathname.startsWith("/u/login"), {
+  await expect(page).toHaveURL((url) => url.protocol === "https:" && url.hostname === auth0Domain && url.pathname.startsWith("/u/login"), {
     timeout: 60000,
   });
   await expect(
@@ -113,7 +112,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
 
   // A fresh protected request must still require authentication after logout.
   await page.goto("/protected");
-  await expect(page).toHaveURL((url) => url.hostname === auth0Domain && url.pathname.startsWith("/u/login"), {
+  await expect(page).toHaveURL((url) => url.protocol === "https:" && url.hostname === auth0Domain && url.pathname.startsWith("/u/login"), {
     timeout: 30000,
   });
   await expect(

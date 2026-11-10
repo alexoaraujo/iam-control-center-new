@@ -18,7 +18,7 @@ activating credential-bearing jobs. A committed policy is not branch protection.
 | Variable | Contract |
 | --- | --- |
 | `IAM_INTEGRATION_REPOSITORY` | Explicit allowlist for privileged Neon workflows; set to `alexoaraujo/iam-control-center-new` only after confirming their existing project, branch, database and endpoint allowlists and environment protection. Leaving unset keeps those operations inactive. |
-| `VERCEL_PROJECT_PATH` | Exact Vercel team/project path for the documentation deployment gate. |
+| `VERCEL_PROJECT_PATH` | Exact Vercel team/project path for both Preview deployment gates. Missing configuration fails immediately. |
 | `AUTH0_E2E_ENABLED` | `true` activates Auth0 browser tests. Disabled/skipped is not release evidence. |
 | `E2E_CALLBACK_HOST` | Preview hostname configured as APP_BASE_URL and allowed callback/logout origin in Auth0. Must equal the hostname from the successful exact-commit Vercel check. |
 | `E2E_CALLBACK_BRANCH` | Branch to which that Preview alias is bound. Other branches fail closed. |
@@ -52,3 +52,7 @@ The Vercel inspection during this refactor found project `iam-control-center`
 The returned metadata did not prove a Git link to the new repository. That
 integration remains unverified; an existing READY deployment is not evidence for
 this refactor's commit.
+
+A team-scoped project query filtered by repository ID `1451861889` returned no
+projects during this refactor. A Preview for this repository remains blocked
+until its Vercel Git integration is configured and produces exact-SHA evidence.
