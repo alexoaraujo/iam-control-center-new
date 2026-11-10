@@ -34,8 +34,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-      NEON_PROJECT_ID: twilight-fire-88497009
-      NEON_MAIN_BRANCH_ID: br-little-fire-b6adup9f
+      NEON_PROJECT_ID: tiny-rice-70320263
+      NEON_PRODUCTION_BRANCH_ID: br-muddy-snow-b63cepcv
       PR_NUMBER: ${{ inputs.pr_number }}
       PR_ACTION: ${{ inputs.operation }}
       NEON_API_ROOT: https://console.neon.tech/api/v2
@@ -60,8 +60,8 @@ jobs:
             echo "::error::Invalid PR number."
             exit 1
           }
-          [[ "${NEON_PROJECT_ID}" == "twilight-fire-88497009" &&
-             "${NEON_MAIN_BRANCH_ID}" == "br-little-fire-b6adup9f" ]] || {
+          [[ "${NEON_PROJECT_ID}" == "tiny-rice-70320263" &&
+             "${NEON_PRODUCTION_BRANCH_ID}" == "br-muddy-snow-b63cepcv" ]] || {
             echo "::error::Unexpected Neon project or main branch."
             exit 1
           }
@@ -123,10 +123,10 @@ jobs:
           BRANCHES_JSON="$(api_get_branches)"
           jq -e '.branches | type == "array"' >/dev/null <<< "${BRANCHES_JSON}"
 
-          # Resolve and validate the canonical default main branch.
-          MAIN_JSON="$(jq -ce --arg expected_id "${NEON_MAIN_BRANCH_ID}" '
-            [.branches[] | select(.default == true and .name == "main" and .id == $expected_id)] |
-            if length == 1 then .[0] else error("Expected exactly one canonical default main branch") end
+          # Resolve and validate the canonical default production branch.
+          MAIN_JSON="$(jq -ce --arg expected_id "${NEON_PRODUCTION_BRANCH_ID}" '
+            [.branches[] | select(.default == true and .name == "production" and .id == $expected_id)] |
+            if length == 1 then .[0] else error("Expected exactly one canonical default production branch") end
           ' <<< "${BRANCHES_JSON}")"
           MAIN_ID="$(jq -r '.id' <<< "${MAIN_JSON}")"
           MAIN_STATE="$(jq -r '.current_state // empty' <<< "${MAIN_JSON}")"
@@ -135,10 +135,10 @@ jobs:
             exit 1
           }
 
-          # Preserve the canonical permanent lineage: main -> development.
+          # Preserve the canonical permanent lineage: production -> development.
           DEVELOPMENT_JSON="$(jq -ce --arg parent "${MAIN_ID}" '
             [.branches[] | select(.name == "development" and .parent_id == $parent)] |
-            if length == 1 then .[0] else error("Expected exactly one development branch whose parent is canonical main") end
+            if length == 1 then .[0] else error("Expected exactly one development branch whose parent is canonical production") end
           ' <<< "${BRANCHES_JSON}")"
           DEVELOPMENT_ID="$(jq -r '.id' <<< "${DEVELOPMENT_JSON}")"
           DEVELOPMENT_STATE="$(jq -r '.current_state // empty' <<< "${DEVELOPMENT_JSON}")"
