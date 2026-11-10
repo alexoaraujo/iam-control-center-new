@@ -74,3 +74,7 @@ test("fails closed when commit metadata is missing", () => {
     true,
   );
 });
+
+test("builds Preview when integration validation scripts change", () => {
+  assert.equal(hasBuildRelevantChanges(["scripts/e2e-config.mjs"]), true);
+});

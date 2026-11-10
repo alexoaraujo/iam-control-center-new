@@ -9,6 +9,6 @@ export function GET() {
     status: "scaffold",
     ...getPublicRuntimeStatus(),
   }, {
-    headers: { "Cache-Control": "no-store" },
+    headers: { "Cache-Control": "no-store", "X-Health-Check": "liveness" },
   });
 }

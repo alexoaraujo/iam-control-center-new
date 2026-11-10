@@ -1,14 +1,15 @@
 {
   "project": "iam-control-center",
   "status": "bootstrap scaffold; not production-ready",
-  "manifest_updated_at_utc": "2026-11-09",
-  "tracked_file_count": 118,
+  "manifest_updated_at_utc": "2026-11-10",
+  "tracked_file_count": 129,
   "tracked_files": [
     ".env.example",
     ".github/e2e/README.md",
     ".github/e2e/auth0.spec.cjs",
     ".github/e2e/playwright.config.cjs",
     ".github/workflows/database-tests.yml",
+    ".github/workflows/docs-preview-gate.yml",
     ".github/workflows/iam-context-harness.yml",
     ".github/workflows/iam-tenant-context-poc.yml",
     ".github/workflows/neon-pr-branch-lifecycle.yml",
@@ -30,16 +31,22 @@
     "apps/web/src/app/api/health/route.test.ts",
     "apps/web/src/app/api/health/route.ts",
     "apps/web/src/app/api/health/route.whitespace.test.ts",
+    "apps/web/src/app/api/ready/route.test.ts",
+    "apps/web/src/app/api/ready/route.ts",
     "apps/web/src/app/globals.css",
     "apps/web/src/app/layout.tsx",
     "apps/web/src/app/page.tsx",
     "apps/web/src/app/protected/page.test.tsx",
     "apps/web/src/app/protected/page.tsx",
+    "apps/web/src/components/dashboard/presentation.tsx",
     "apps/web/src/lib/auth0.ts",
     "apps/web/src/lib/db.test.ts",
     "apps/web/src/lib/db.ts",
     "apps/web/src/lib/env.test.ts",
     "apps/web/src/lib/env.ts",
+    "apps/web/src/lib/readiness.test.ts",
+    "apps/web/src/lib/readiness.ts",
+    "apps/web/src/lib/session.ts",
     "apps/web/src/proxy.test.ts",
     "apps/web/src/proxy.ts",
     "apps/web/tsconfig.json",
@@ -83,6 +90,7 @@
     "docs/evidence/dependency-security-remediation.md",
     "docs/evidence/github-360-audit-2026-11-09.md",
     "docs/evidence/policy.md",
+    "docs/evidence/refactor-integrations-2026-11-10.md",
     "docs/evidence/repository-audit-2026-11-07.md",
     "docs/evidence/validation-2026-10-31.md",
     "docs/operations/auth0-neon-integration-readiness.md",
@@ -100,6 +108,7 @@
     "docs/operations/neon-project-identity-reconciliation.md",
     "docs/operations/neon-review-workflow-replacement-proposal.md",
     "docs/operations/neon-vercel-environment-reconciliation-proposal.md",
+    "docs/operations/repository-integration-setup.md",
     "docs/operations/vercel-preview-build-filter.md",
     "docs/security/iam-tenant-context-readiness-review.md",
     "docs/security/minimatch-override.md",
@@ -118,15 +127,14 @@
     "pnpm-workspace.yaml",
     "role-security-harness/sql/00_fixture.sql",
     "role-security-harness/sql/10_assertions.sql",
+    "scripts/e2e-config.mjs",
+    "scripts/e2e-config.test.mjs",
     "scripts/test-postgres18-role-security-harness.sh",
     "scripts/vercel-ignore-build.mjs",
     "scripts/vercel-ignore-build.test.mjs",
     "tsconfig.base.json"
   ],
-  "repository": {
-    "created": true,
-    "visibility": "public"
-  },
+  "repository": "alexoaraujo/iam-control-center-new",
   "external_integrations_not_verified": [
     "Auth0 tenant/application configuration and real OIDC login/session/logout",
     "Vercel project, Preview deployment, environment variables, and deployment protections",
@@ -227,5 +235,6 @@
     "branch_count": 5,
     "branch_limit": 10,
     "evidence": "Neon API read-only inventory 2026-11-08; provider role metadata does not prove SQL role attributes or successful authentication."
-  }
+  },
+  "integration_contract": "docs/operations/repository-integration-setup.md"
 }

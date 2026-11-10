@@ -1,14 +1,8 @@
 import React from "react";
-import { redirect } from "next/navigation";
-
-import { auth0 } from "../../lib/auth0";
+import { requireSession } from "../../lib/session";
 
 export default async function ProtectedPage() {
-  const session = await auth0.getSession();
-
-  if (!session) {
-    redirect("/auth/login?returnTo=%2Fprotected");
-  }
+  await requireSession("/protected");
 
   return (
     <main style={{ maxWidth: 960, margin: "64px auto", padding: 24 }}>

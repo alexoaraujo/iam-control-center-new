@@ -7,6 +7,7 @@ on:
       - ".github/workflows/iam-context-harness.yml"
   push:
     branches:
+      - main
       - IAM-CTX-POC-01-Harness-draft-0.1
     paths:
       - "iam-ctx-poc-01-harness/**"

@@ -62,11 +62,8 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Test Preview build filter
-        run: node --test scripts/vercel-ignore-build.test.mjs
-
-      - name: Test Auth0 Preview E2E configuration contract
-        run: node --test scripts/auth0-preview-contract.test.mjs
+      - name: Test Preview build and Auth0 configuration contracts
+        run: node --test scripts/*.test.mjs
 
       - name: Determine whether a Preview deployment is required
         id: preview-impact
