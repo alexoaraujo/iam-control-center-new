@@ -37,6 +37,38 @@ The existing Neon endpoint/project allowlists are deliberately retained: changin
 repository identity is not proof that a different database is the correct target.
 Reconcile each endpoint before activation. No production migration is automatic.
 
+## Controlled Neon PR lifecycle (December 2026 GitHub policy)
+
+The `.github/workflows/neon-pr-branch-lifecycle.yml` workflow now uses
+`workflow_dispatch` exclusively, **not** `pull_request_target`. No PR content
+is checked out or executed. This is deliberately manual: opening, synchronizing
+or closing a PR does not automatically run privileged Neon operations.
+
+An administrator must create the GitHub Actions environment
+`Neon-PR-Lifecycle`, restrict deployments to the protected `main` branch,
+require trusted reviewers (and prevent self-review where supported), and place
+`NEON_API_KEY` in that environment's secrets, not a PR-accessible context.
+Set repository variable `IAM_INTEGRATION_REPOSITORY` to exactly
+`alexoaraujo/iam-control-center-new` only after validating Neon project and
+branch identities. Environment creation and policy enforcement cannot be
+accomplished merely by committing this YAML.
+
+After the updated workflow has been merged to `main`, a reviewer may run it
+from **Actions → Neon PR branch lifecycle → Run workflow**, choosing branch
+`main`, `pr_number` (numeric), and `operation=reconcile`. The job fetches
+the PR from GitHub's API, requires a same-repository open PR targeting main,
+checks the explicit repository allowlist, and then creates or reuses only its
+owned `preview/pr-N` Neon branch with a verified 14-day expiry. A `closed`
+operation is accepted only for a closed PR; it deliberately does **not**
+delete branches without verifiable provenance. Expiration handles cleanup.
+
+The workflow is fail-closed when the environment, secret, repository allowlist,
+PR state, canonical Neon project or branch identity is missing or mismatched.
+Do not use `workflow_dispatch` from an unreviewed branch, disable required
+reviewers, or substitute `pull_request_target` to bypass a failed check.
+A successful dispatch is evidence of branch lifecycle management, **not**
+proof of Auth0 E2E or tenant authorization.
+
 ## Verification and release
 
 1. Configure main protections and privileged environment reviewers.

@@ -1,65 +1,100 @@
 name: Neon PR branch lifecycle
 
 on:
-  pull_request_target:
-    types:
-      - opened
-      - reopened
-      - synchronize
-      - closed
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Existing same-repository pull request number"
+        required: true
+        type: string
+      operation:
+        description: "Create/reuse temporary Neon branch or acknowledge closed PR"
+        required: true
+        type: choice
+        options:
+          - reconcile
+          - closed
 
-# This privileged workflow uses only the event payload and Neon Management API.
-# It intentionally does not check out, download, build, or execute PR content.
+# Manual privileged execution only; never evaluate or check out PR code.
 permissions: {}
 
 concurrency:
-  # Fork events receive unique groups and cannot replace a trusted PR's
-  # pending lifecycle run in the repository-wide serialization queue.
-  group: neon-pr-lifecycle-${{ github.repository }}-${{ github.event.pull_request.head.repo.full_name == github.repository && 'trusted' || github.run_id }}
+  group: neon-pr-lifecycle-${{ github.repository }}-${{ inputs.pr_number }}
   cancel-in-progress: false
 
 jobs:
   manage-neon-branch:
-    name: Manage isolated Neon branch
-    if: >-
-      github.repository == vars.IAM_INTEGRATION_REPOSITORY &&
-      github.event.pull_request.head.repo.full_name == github.repository
+    name: Manage isolated Neon branch (approved dispatch)
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    environment: Neon-PR-Lifecycle
     timeout-minutes: 8
+    permissions:
+      pull-requests: read
     env:
+      GH_TOKEN: ${{ github.token }}
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       NEON_PROJECT_ID: twilight-fire-88497009
       NEON_MAIN_BRANCH_ID: br-little-fire-b6adup9f
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-      PR_ACTION: ${{ github.event.action }}
+      PR_NUMBER: ${{ inputs.pr_number }}
+      PR_ACTION: ${{ inputs.operation }}
       NEON_API_ROOT: https://console.neon.tech/api/v2
 
     steps:
-      - name: Validate trusted inputs and required configuration
+      - name: Validate trusted PR metadata before using Neon credentials
         shell: bash
+        env:
+          ALLOWED_REPOSITORY: ${{ vars.IAM_INTEGRATION_REPOSITORY }}
         run: |
           set -euo pipefail
+          [[ "${GITHUB_REPOSITORY}" == "alexoaraujo/iam-control-center-new" &&
+             "${ALLOWED_REPOSITORY}" == "${GITHUB_REPOSITORY}" ]] || {
+            echo "::error::Repository is not explicitly authorized for Neon lifecycle."
+            exit 1
+          }
+          [[ "${GITHUB_REF}" == "refs/heads/main" ]] || {
+            echo "::error::Run the workflow from the protected main branch."
+            exit 1
+          }
           [[ "${PR_NUMBER}" =~ ^[1-9][0-9]*$ ]] || {
-            echo "::error::Invalid pull request number."
+            echo "::error::Invalid PR number."
             exit 1
           }
-          [[ "${NEON_PROJECT_ID}" == "twilight-fire-88497009" ]] || {
-            echo "::error::NEON_PROJECT_ID does not match the canonical IAM Control Center Neon project."
-            exit 1
-          }
-          [[ "${NEON_MAIN_BRANCH_ID}" == "br-little-fire-b6adup9f" ]] || {
-            echo "::error::NEON_MAIN_BRANCH_ID does not match the canonical main branch."
+          [[ "${NEON_PROJECT_ID}" == "twilight-fire-88497009" &&
+             "${NEON_MAIN_BRANCH_ID}" == "br-little-fire-b6adup9f" ]] || {
+            echo "::error::Unexpected Neon project or main branch."
             exit 1
           }
           [[ -n "${NEON_API_KEY:-}" ]] || {
-            echo "::error::NEON_API_KEY secret is not configured."
+            echo "::error::Protected environment NEON_API_KEY is not configured."
             exit 1
           }
-          case "${PR_ACTION}" in
-            opened|reopened|synchronize|closed) ;;
-            *) echo "::error::Unsupported pull request action."; exit 1 ;;
-          esac
-          echo "Validated same-repository PR event; credentials are not displayed."
+          case "${PR_ACTION}" in reconcile|closed) ;; *) echo "::error::Invalid operation."; exit 1 ;; esac
+
+          # Query GitHub's trusted API; never trust a user-supplied PR branch or event payload.
+          PR_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+          PR_REPOSITORY="$(jq -r '.head.repo.full_name // empty' <<< "${PR_JSON}")"
+          PR_BASE_REPOSITORY="$(jq -r '.base.repo.full_name // empty' <<< "${PR_JSON}")"
+          PR_BASE_BRANCH="$(jq -r '.base.ref // empty' <<< "${PR_JSON}")"
+          PR_STATE="$(jq -r '.state // empty' <<< "${PR_JSON}")"
+          [[ "${PR_REPOSITORY}" == "${GITHUB_REPOSITORY}" &&
+             "${PR_BASE_REPOSITORY}" == "${GITHUB_REPOSITORY}" &&
+             "${PR_BASE_BRANCH}" == "main" ]] || {
+            echo "::error::PR must originate from this repository and target main."
+            exit 1
+          }
+          if [[ "${PR_ACTION}" == "reconcile" ]]; then
+            [[ "${PR_STATE}" == "open" ]] || {
+              echo "::error::Cannot provision a branch for a closed PR."
+              exit 1
+            }
+          else
+            [[ "${PR_STATE}" == "closed" ]] || {
+              echo "::error::Closed operation requires a closed PR."
+              exit 1
+            }
+          fi
+          echo "Validated canonical repository, PR state, protected branch and Neon project."
 
       - name: Create, reuse, or clean up the PR branch
         shell: bash
