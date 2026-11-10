@@ -125,3 +125,39 @@ decision: PASS|FAIL|BLOCKED
 ## Condição de encerramento
 
 Revisão de segurança sem findings críticos/altos não tratados; P0/P1 testados; CI, Auth0 E2E e RLS reais PASS; Neon Production reconciliado com a fonte; release Vercel promovido com SHA fixo; backup/restore e rollback comprovados; observabilidade e runbooks ativos; aceite formal com evidências.
+
+## Issues criadas e rastreabilidade (Ciclo 01 / 10-11-2026)
+
+**Estado:** 27 issues abertas; nenhum critério de aceite marcado como concluído por este registro. A matriz reflete organização do trabalho, não implementação concluída.
+
+| ID | Frente | Prioridade | Issue | Status inicial |
+|---|---|---|---|---|
+| IAM-001 | W1: Governança e escopo | P0 | [#10](https://github.com/alexoaraujo/iam-control-center-new/issues/10) | Open / planejado |
+| IAM-002 | W1: Proteção main e gates | P0 | [#11](https://github.com/alexoaraujo/iam-control-center-new/issues/11) | Open / planejado |
+| IAM-003 | W1: Limpeza branches | P0 | [#12](https://github.com/alexoaraujo/iam-control-center-new/issues/12) | Open / planejado |
+| IAM-004 | W1: Matriz ambientes | P0 | [#13](https://github.com/alexoaraujo/iam-control-center-new/issues/13) | Open / planejado |
+| IAM-005 | W1: Baseline Postgres | P0 | [#14](https://github.com/alexoaraujo/iam-control-center-new/issues/14) | Open / planejado |
+| IAM-006 | W1: Ledger / migrations | P0 | [#15](https://github.com/alexoaraujo/iam-control-center-new/issues/15) | Open / planejado |
+| IAM-007 | W2: RLS e runtime | P0 | [#16](https://github.com/alexoaraujo/iam-control-center-new/issues/16) | Open / planejado |
+| IAM-008 | W2: Auth0 E2E | P0 | [#17](https://github.com/alexoaraujo/iam-control-center-new/issues/17) | Open / planejado |
+| IAM-009 | W2: Contratos domínio | P0 | [#18](https://github.com/alexoaraujo/iam-control-center-new/issues/18) | Open / planejado |
+| IAM-010 | W2: Autorização server-side | P0 | [#19](https://github.com/alexoaraujo/iam-control-center-new/issues/19) | Open / planejado |
+| IAM-011 | W2: APIs protegidas | P0 | [#20](https://github.com/alexoaraujo/iam-control-center-new/issues/20) | Open / planejado |
+| IAM-012 | W3: Tenants | P0 | [#21](https://github.com/alexoaraujo/iam-control-center-new/issues/21) | Open / planejado |
+| IAM-013 | W3: Identidades | P0 | [#22](https://github.com/alexoaraujo/iam-control-center-new/issues/22) | Open / planejado |
+| IAM-014 | W3: Memberships | P0 | [#23](https://github.com/alexoaraujo/iam-control-center-new/issues/23) | Open / planejado |
+| IAM-015 | W3: RBAC | P0 | [#24](https://github.com/alexoaraujo/iam-control-center-new/issues/24) | Open / planejado |
+| IAM-016 | W3: Políticas de recurso | P1 | [#25](https://github.com/alexoaraujo/iam-control-center-new/issues/25) | Open / planejado |
+| IAM-017 | W3: Service accounts / API keys | P1 | [#26](https://github.com/alexoaraujo/iam-control-center-new/issues/26) | Open / planejado |
+| IAM-018 | W3: Auditoria / outbox | P0 | [#27](https://github.com/alexoaraujo/iam-control-center-new/issues/27) | Open / planejado |
+| IAM-019 | W3: Dashboard | P1 | [#28](https://github.com/alexoaraujo/iam-control-center-new/issues/28) | Open / planejado |
+| IAM-020 | W4: Observabilidade | P1 | [#29](https://github.com/alexoaraujo/iam-control-center-new/issues/29) | Open / planejado |
+| IAM-021 | W4: QA e E2E | P0 | [#30](https://github.com/alexoaraujo/iam-control-center-new/issues/30) | Open / planejado |
+| IAM-022 | W4: Hardening | P0 | [#31](https://github.com/alexoaraujo/iam-control-center-new/issues/31) | Open / planejado |
+| IAM-023 | W4: Staging / backup | P0 | [#32](https://github.com/alexoaraujo/iam-control-center-new/issues/32) | Open / planejado |
+| IAM-024 | W4: Migração Neon | P0 | [#33](https://github.com/alexoaraujo/iam-control-center-new/issues/33) | Open / planejado |
+| IAM-025 | W4: Release Vercel | P0 | [#34](https://github.com/alexoaraujo/iam-control-center-new/issues/34) | Open / planejado |
+| IAM-026 | W4: Estabilização | P1 | [#35](https://github.com/alexoaraujo/iam-control-center-new/issues/35) | Open / planejado |
+| IAM-027 | W4: Encerramento | P0 | [#36](https://github.com/alexoaraujo/iam-control-center-new/issues/36) | Open / planejado |
+
+**Bloqueador transversal de Production:** [issue #5](https://github.com/alexoaraujo/iam-control-center-new/issues/5) permanece aberta. PR de documentação: [#9](https://github.com/alexoaraujo/iam-control-center-new/pull/9).
