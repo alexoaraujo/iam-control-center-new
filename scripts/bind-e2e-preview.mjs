@@ -10,7 +10,7 @@ export function verifyPreviewBinding(env, domain, alias, deployment) {
   const { PR_HEAD_BRANCH: branch, PR_HEAD_SHA: sha, PR_HEAD_REPOSITORY: repository,
     E2E_CALLBACK_HOST: callback, E2E_DEPLOYMENT_HOST: preview } = env;
   if (repository !== APPROVED_REPO) throw Error("Untrusted PR repository");
-  if (!branch || !/^[a-zA-Z0-9][a-zA-Z0-9/._-]*$/.test(branch) || /[\\r\\n]/.test(branch)) {
+  if (!branch || !/^[a-zA-Z0-9][a-zA-Z0-9/._-]*$/.test(branch) || /[\\r\n]/.test(branch)) {
     throw Error("Invalid PR branch");
   }
   if (!/^[a-f0-9]{40}$/.test(sha ?? "")) throw Error("Invalid PR SHA");
@@ -61,7 +61,7 @@ export async function bindPreview(env, fetcher = fetch) {
     `E2E_CALLBACK_BRANCH=${result.callbackBranch}`,
     `E2E_DEPLOYMENT_URL=${result.callbackUrl}`,
     `E2E_BASE_URL=${result.callbackUrl}`,
-  ].join("\\n") + "\\n");
+  ].join("\n") + "\n");
   return result;
 }
 
