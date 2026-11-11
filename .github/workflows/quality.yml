@@ -179,6 +179,8 @@ jobs:
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
+      # Matched by a branch-scoped Vercel Preview env var; no Production TTL change.
+      AUTH0_E2E_SESSION_ABSOLUTE_SECONDS: '45'
       # Reviewed PR #41 binding: the alias is branch-scoped in Vercel Preview.
       # Do not reuse stale GitHub environment variables from previous PRs.
       # Any new PR requires an independently reviewed, exact alias/branch pair.
