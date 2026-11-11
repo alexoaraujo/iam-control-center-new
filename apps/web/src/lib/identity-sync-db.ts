@@ -3,8 +3,8 @@ import { getSql } from "./db";
 import { canonicalIssuer, syncIdentity, type Auth0Identity } from "./identity-sync";
 
 /**
- * This is intentionally disabled until the real Neon runtime login is verified,
- * IAM identity write grants/RLS are reviewed, and a development-only rollout is approved.
+ * Disabled until the real Neon runtime login is verified, write RLS is reviewed,
+ * and a development-only rollout is approved.
  */
 export async function syncAuthenticatedIdentity(user: Auth0Identity) {
   if (process.env.AUTH0_NEON_SYNC_ENABLED !== "true") {
@@ -12,5 +12,16 @@ export async function syncAuthenticatedIdentity(user: Auth0Identity) {
   }
   if (!process.env.AUTH0_DOMAIN) throw new Error("AUTH0_DOMAIN is not configured");
   const issuer = canonicalIssuer(process.env.AUTH0_DOMAIN);
-  return syncIdentity(getSql(), issuer, user);
+  // Adapt the Neon query result to the narrow, testable identity writer contract.
+  const sql = getSql();
+  return syncIdentity({
+    query: async (statement, parameters) => {
+      const rows = await sql.query(statement, parameters as (string | boolean | null)[]);
+      return rows.map((row) => ({
+        id: String(row.id),
+        issuer: String(row.issuer),
+        subject: String(row.subject),
+      }));
+    },
+  }, issuer, user);
 }
