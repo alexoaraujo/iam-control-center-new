@@ -59,6 +59,52 @@ BEGIN
  END;
 END $without_context_mutations$;
 
+-- A PostgreSQL client can assign arbitrary custom GUCs. HMAC verification
+-- must reject manual tenant/identity claims even if the UUIDs are real. This is
+-- a behavioral negative test, not just a check for missing GRANT privileges.
+DO $forged_context$
+BEGIN
+ PERFORM set_config('iam.tenant_id','81111111-1111-4111-8111-111111111111',true);
+ PERFORM set_config('iam.identity_id','8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',true);
+ PERFORM set_config('iam.expires_at',(extract(epoch FROM clock_timestamp())::bigint+60)::text,true);
+ PERFORM set_config('iam.nonce','forged-guc-nonce',true);
+ PERFORM set_config('iam.signature',repeat('0',64),true);
+END $forged_context$;
+DO $reject_forged_context$
+BEGIN
+ IF app_private.current_tenant_id() IS NOT NULL
+   OR EXISTS(SELECT 1 FROM iam.tenants)
+   OR EXISTS(SELECT 1 FROM iam.effective_permissions('8aaaaaaa-1111-4111-8111-111111111111'::uuid))
+ THEN RAISE EXCEPTION 'forged GUC context bypassed HMAC or RLS'; END IF;
+END $reject_forged_context$;
+SELECT iam.clear_tenant_context();
+
+-- An expired context with a mathematically correct signature must also fail.
+-- This ensures that a captured/old signature cannot be reused indefinitely.
+DO $expired_context$
+DECLARE
+ expiry bigint := extract(epoch FROM clock_timestamp())::bigint-30;
+ nonce text := 'ci-expired-context';
+ sig text;
+ rejected boolean := false;
+BEGIN
+ sig := encode(public.hmac(convert_to(
+ '81111111-1111-4111-8111-111111111111|8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa|' ||
+ expiry::text || '|' || nonce,'UTF8'),decode(repeat('42',32),'hex'),'sha256'),'hex');
+ BEGIN
+  PERFORM iam.set_tenant_context('81111111-1111-4111-8111-111111111111',
+   '8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',expiry,nonce,sig);
+ EXCEPTION WHEN insufficient_privilege THEN rejected := true;
+ END;
+ IF NOT rejected THEN RAISE EXCEPTION 'expired signed context accepted'; END IF;
+END $expired_context$;
+DO $expired_context_cannot_read$
+BEGIN
+ IF app_private.current_tenant_id() IS NOT NULL OR EXISTS(SELECT 1 FROM iam.tenants)
+ THEN RAISE EXCEPTION 'expired signed context left readable tenant state'; END IF;
+END $expired_context_cannot_read$;
+SELECT iam.clear_tenant_context();
+
 -- Context is established in a distinct statement, as the API does via the
 -- Neon HTTP transaction array. Never set a context inside the same SELECT
 -- statement that evaluates RLS/STABLE membership predicates.
