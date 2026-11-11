@@ -102,6 +102,49 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   await page.reload();
   await expect(page.getByRole("status")).toHaveText("Acesso autenticado confirmado.");
 
+  // An authenticated Auth0 session is NOT authorization by itself. The
+  // Preview database has only synthetic identities (synthetic.invalid),
+  // so this real Auth0 account must fail closed when requesting RBAC access.
+  // No HMAC is ever accepted from the browser or exposed in the response.
+  const authzResponse = await page.evaluate(async () => {
+    const response = await fetch("/api/authorization/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        identityId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        permission: "iam.tenant.read",
+      }),
+    });
+    return {
+      status: response.status,
+      payload: await response.json(),
+      cacheControl: response.headers.get("cache-control"),
+    };
+  });
+  expect(authzResponse.status).toBe(403);
+  expect(authzResponse.payload).toEqual({ allowed: false });
+  expect(authzResponse.cacheControl).toBe("no-store");
+
+  // Even a browser-supplied valid-looking signature cannot turn into
+  // authority: the API contract rejects unexpected proof fields.
+  const injected = await page.evaluate(async () => {
+    const response = await fetch("/api/authorization/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        identityId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        permission: "iam.tenant.read",
+        signature: "f".repeat(64),
+      }),
+    });
+    return { status: response.status, body: await response.json() };
+  });
+  expect(injected).toEqual({ status: 403, body: { allowed: false } });
+
   // Logout returns to the app root, which is immediately redirected to
   // Auth0 by the Next.js proxy. Verify the login screen, not a transient URL.
   await page.goto("/auth/logout");
