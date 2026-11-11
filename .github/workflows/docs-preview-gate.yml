@@ -3,12 +3,19 @@ name: Documentation Preview gate
 on:
   pull_request:
     paths:
+      - "README.md"
       - "SCAFFOLD-MANIFEST.json"
       - "docs/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
       - ".github/workflows/docs-preview-gate.yml"
 
 permissions:
   contents: read
+
+# Only the newest PR head needs exact-SHA Preview evidence; avoid duplicate runners.
+concurrency:
+  group: docs-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   classify:
@@ -31,12 +38,29 @@ jobs:
           set -euo pipefail
           changed="$(gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" --jq '.[].filename')"
           test -n "${changed}" || { echo "::error::Empty PR file set"; exit 1; }
+          # Reviewed documentary paths only. Keep code, security and env changes
+          # in the separate code/Preview gate rather than treating them as docs.
+          is_documentation_path() {
+            case "$1" in
+              README.md|SCAFFOLD-MANIFEST.json|docs/*|.github/PULL_REQUEST_TEMPLATE.md|.github/workflows/docs-preview-gate.yml) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+          # Test the allowlist itself without checking out untrusted PR code.
+          for sample in README.md docs/operations/roadmap.md .github/PULL_REQUEST_TEMPLATE.md .github/workflows/docs-preview-gate.yml; do
+            is_documentation_path "${sample}" || { echo "::error::Documentation classifier regression: ${sample}"; exit 1; }
+          done
+          for sample in apps/web/src/app/page.tsx scripts/vercel-ignore-build.mjs .github/workflows/quality.yml .env.example SECURITY.md; do
+            if is_documentation_path "${sample}"; then
+              echo "::error::Code or security path classified as documentation: ${sample}"
+              exit 1
+            fi
+          done
           docs_only=true
           while IFS= read -r file; do
-            case "${file}" in
-              SCAFFOLD-MANIFEST.json|docs/*|.github/workflows/docs-preview-gate.yml) ;;
-              *) docs_only=false ;;
-            esac
+            if ! is_documentation_path "${file}"; then
+              docs_only=false
+            fi
           done <<< "${changed}"
           printf 'docs_only=%s\n' "${docs_only}" >> "${GITHUB_OUTPUT}"
           echo "Documentation-only Preview eligible: ${docs_only}"
