@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { query, getSql } = vi.hoisted(() => ({ query: vi.fn(), getSql: vi.fn() }));
+const { query, transaction, getSql } = vi.hoisted(() => ({ query: vi.fn(), transaction: vi.fn(), getSql: vi.fn() }));
 vi.mock("./db", () => ({ getSql }));
 import { checkPermission, validPermission, validProof } from "./authorization";
 
@@ -18,26 +18,35 @@ describe("server authorization evaluator", () => {
     vi.resetAllMocks();
     vi.stubEnv("AUTH0_DOMAIN", "example.auth0.com");
     vi.stubEnv("DATABASE_RUNTIME_ROLE", "iam_app_runtime_login");
-    getSql.mockReturnValue({ query });
-    query.mockResolvedValueOnce([runtime]).mockResolvedValueOnce([{ allowed: true }]);
+    getSql.mockReturnValue({ query, transaction });
+    query.mockResolvedValue([runtime]);
+    transaction.mockResolvedValue([[], [{ allowed: true }]]);
   });
   afterEach(() => vi.unstubAllEnvs());
 
-  it("permits only exact vetted role + HMAC signed-context query after identity binding", async () => {
+  it("uses two statements in the SAME transaction to establish context before RLS check", async () => {
     expect(await checkPermission("auth0|subject-a", proof(), "iam.tenant.read")).toBe(true);
-    expect(query).toHaveBeenCalledTimes(2);
-    const [sql, params, options] = query.mock.calls[1];
-    expect(sql).toContain("iam.set_tenant_context");
-    expect(sql).toContain("iam.effective_permissions");
-    expect(sql).toContain("app_private.current_tenant_id()");
-    expect(sql).toContain("m.status='active'");
-    expect(sql).toContain("i.subject=$7::text");
-    expect(sql).toContain("ap.enabled");
-    expect(params.slice(-3)).toEqual(["https://example.auth0.com/", "auth0|subject-a", "iam.tenant.read"]);
-    expect(options.fetchOptions.cache).toBe("no-store");
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(transaction).toHaveBeenCalledTimes(1);
+    const [build, options] = transaction.mock.calls[0];
+    const fakeTaggedSql = (strings: TemplateStringsArray, ...params: unknown[]) => ({
+      sql: strings.join("?"), params,
+    });
+    const statements = build(fakeTaggedSql);
+    expect(statements).toHaveLength(2);
+    expect(statements[0].sql).toContain("iam.set_tenant_context");
+    expect(statements[1].sql).toContain("iam.effective_permissions");
+    expect(statements[1].sql).toContain("app_private.current_tenant_id()");
+    expect(statements[1].sql).toContain("m.status='active'");
+    expect(statements[1].sql).toContain("i.subject=");
+    expect(statements[1].sql).toContain("ap.enabled");
+    expect(statements[1].params).toContain("https://example.auth0.com/");
+    expect(statements[1].params).toContain("auth0|subject-a");
+    expect(statements[1].params).toContain("iam.tenant.read");
+    expect(options.readOnly).toBe(true);
   });
 
-  it("rejects unsigned, stale, malformed or remote-future proof without querying", async () => {
+  it("rejects unsigned, expired, malformed and far-future proofs before query", async () => {
     for (const p of [
       { ...proof(), signature: "garbage" },
       { ...proof(), expires: Math.floor(Date.now() / 1000) - 1 },
@@ -51,11 +60,14 @@ describe("server authorization evaluator", () => {
     expect(getSql).not.toHaveBeenCalled();
   });
 
-  it("denies unknown permissions and unconfigured role", async () => {
+  it("denies unknown permissions, unknown issuer and unconfigured role", async () => {
     expect(validPermission("iam.tenant.read")).toBe(true);
     expect(validPermission("iam.tenant.*")).toBe(false);
     expect(await checkPermission("auth0|subject-a", proof(), "iam.tenant.*")).toBe(false);
     vi.stubEnv("DATABASE_RUNTIME_ROLE", "neondb_owner");
+    expect(await checkPermission("auth0|subject-a", proof(), "iam.tenant.read")).toBe(false);
+    vi.stubEnv("DATABASE_RUNTIME_ROLE", "iam_app_runtime_login");
+    vi.stubEnv("AUTH0_DOMAIN", "https://evil.invalid/");
     expect(await checkPermission("auth0|subject-a", proof(), "iam.tenant.read")).toBe(false);
     expect(getSql).not.toHaveBeenCalled();
   });
@@ -65,23 +77,23 @@ describe("server authorization evaluator", () => {
     { ...runtime, role: "neondb_owner" },
     { ...runtime, rolsuper: true },
     { ...runtime, rolbypassrls: true },
-  ])("denies unsafe session / role %j before running tenant SQL", async (role) => {
-    query.mockReset().mockResolvedValueOnce([role]);
+  ])("rejects unsafe role/LOGIN %j before accessing protected tables", async (role) => {
+    query.mockResolvedValueOnce([role]);
     expect(await checkPermission("auth0|subject-a", proof(), "iam.tenant.read")).toBe(false);
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(transaction).not.toHaveBeenCalled();
   });
 
-  it("denies missing grants, an enabled policy or a mismatched identity from the SQL result", async () => {
-    query.mockReset().mockResolvedValueOnce([runtime]).mockResolvedValueOnce([{ allowed: false }]);
+  it("denies missing role grants, enabled policy or a mismatched identity", async () => {
+    transaction.mockResolvedValueOnce([[], [{ allowed: false }]]);
     expect(await checkPermission("auth0|subject-b", proof(), "iam.tenant.read")).toBe(false);
   });
 
-  it("fails closed on a rejected HMAC or a Neon error without logging the exception", async () => {
-    query.mockReset().mockResolvedValueOnce([runtime]).mockRejectedValueOnce(new Error("postgresql://secret:secret@host"));
+  it("fails closed on invalid HMAC or database exceptions without leaking errors", async () => {
+    transaction.mockRejectedValueOnce(new Error("postgresql://secret:secret@host"));
     expect(await checkPermission("auth0|subject-a", proof(), "iam.tenant.read")).toBe(false);
   });
 
-  it("rejects absent or overlong identity", async () => {
+  it("rejects absent or overlong subject", async () => {
     expect(await checkPermission("", proof(), "iam.tenant.read")).toBe(false);
     expect(await checkPermission("a".repeat(513), proof(), "iam.tenant.read")).toBe(false);
     expect(getSql).not.toHaveBeenCalled();
