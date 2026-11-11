@@ -34,6 +34,31 @@ BEGIN
  THEN RAISE EXCEPTION 'permission visible without signed tenant context'; END IF;
 END $default_deny$;
 
+-- Cross-tenant mutation tests deliberately use iam.tenants: the runtime role
+-- has INSERT and UPDATE privileges there. A denied mutation must therefore
+-- be enforced by FORCE RLS, not merely by missing GRANT privileges.
+DO $without_context_mutations$
+DECLARE
+ affected integer;
+BEGIN
+ IF EXISTS (SELECT 1 FROM iam.tenants WHERE id IN
+   ('81111111-1111-4111-8111-111111111111'::uuid,
+    '82222222-2222-4222-8222-222222222222'::uuid)) THEN
+   RAISE EXCEPTION 'tenant rows visible without a signed context';
+ END IF;
+ UPDATE iam.tenants SET display_name='NO_CONTEXT_SHOULD_NOT_MUTATE'
+ WHERE id='81111111-1111-4111-8111-111111111111'::uuid;
+ GET DIAGNOSTICS affected = ROW_COUNT;
+ IF affected <> 0 THEN RAISE EXCEPTION 'tenant UPDATE possible without context'; END IF;
+ BEGIN
+   INSERT INTO iam.tenants(id,display_name)
+   VALUES ('83333333-3333-4333-8333-333333333333', 'No-context forbidden insert');
+   RAISE EXCEPTION 'tenant INSERT possible without context';
+ EXCEPTION
+   WHEN insufficient_privilege THEN NULL; -- 42501: row violates WITH CHECK RLS
+ END;
+END $without_context_mutations$;
+
 -- Context is established in a distinct statement, as the API does via the
 -- Neon HTTP transaction array. Never set a context inside the same SELECT
 -- statement that evaluates RLS/STABLE membership predicates.
@@ -54,6 +79,34 @@ BEGIN
     OR EXISTS(SELECT 1 FROM iam.effective_permissions('8aaaaaaa-1111-4111-8111-111111111111'::uuid))
  THEN RAISE EXCEPTION 'default deny or signed-context binding invalid'; END IF;
 END $before_grant$;
+-- A may change A, never B; B's existing row must remain invisible and
+-- a new foreign-tenant INSERT must be rejected by the RLS WITH CHECK clause.
+DO $tenant_a_mutations$
+DECLARE
+ affected integer;
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM iam.tenants
+   WHERE id='81111111-1111-4111-8111-111111111111'::uuid)
+   OR EXISTS(SELECT 1 FROM iam.tenants
+   WHERE id='82222222-2222-4222-8222-222222222222'::uuid) THEN
+    RAISE EXCEPTION 'A tenant read visibility is incorrect';
+ END IF;
+ UPDATE iam.tenants SET display_name='CI A authorized update'
+ WHERE id='81111111-1111-4111-8111-111111111111'::uuid;
+ GET DIAGNOSTICS affected = ROW_COUNT;
+ IF affected <> 1 THEN RAISE EXCEPTION 'A own-tenant UPDATE rejected'; END IF;
+ UPDATE iam.tenants SET display_name='CI B unauthorized update'
+ WHERE id='82222222-2222-4222-8222-222222222222'::uuid;
+ GET DIAGNOSTICS affected = ROW_COUNT;
+ IF affected <> 0 THEN RAISE EXCEPTION 'A updated tenant B'; END IF;
+ BEGIN
+   INSERT INTO iam.tenants(id,display_name)
+   VALUES ('83333333-3333-4333-8333-333333333333', 'A cross-tenant forbidden');
+   RAISE EXCEPTION 'A INSERT bypassed tenant RLS';
+ EXCEPTION
+   WHEN insufficient_privilege THEN NULL;
+ END;
+END $tenant_a_mutations$;
 SELECT iam.clear_tenant_context();
 RESET ROLE;
 SET LOCAL ROLE iam_owner;
@@ -109,6 +162,32 @@ BEGIN
                WHERE permission_key='iam.tenant.update')
  THEN RAISE EXCEPTION 'tenant B grant missing, exceeded scope or leaked tenant A'; END IF;
 END $allow_only_grant_b$;
+DO $tenant_b_mutations$
+DECLARE
+ affected integer;
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM iam.tenants
+   WHERE id='82222222-2222-4222-8222-222222222222'::uuid)
+   OR EXISTS(SELECT 1 FROM iam.tenants
+   WHERE id='81111111-1111-4111-8111-111111111111'::uuid) THEN
+   RAISE EXCEPTION 'B tenant read visibility is incorrect';
+ END IF;
+ UPDATE iam.tenants SET display_name='CI B authorized update'
+ WHERE id='82222222-2222-4222-8222-222222222222'::uuid;
+ GET DIAGNOSTICS affected = ROW_COUNT;
+ IF affected <> 1 THEN RAISE EXCEPTION 'B own-tenant UPDATE rejected'; END IF;
+ UPDATE iam.tenants SET display_name='CI A unauthorized update'
+ WHERE id='81111111-1111-4111-8111-111111111111'::uuid;
+ GET DIAGNOSTICS affected = ROW_COUNT;
+ IF affected <> 0 THEN RAISE EXCEPTION 'B updated tenant A'; END IF;
+ BEGIN
+   INSERT INTO iam.tenants(id,display_name)
+   VALUES ('84444444-4444-4444-8444-444444444444', 'B cross-tenant forbidden');
+   RAISE EXCEPTION 'B INSERT bypassed tenant RLS';
+ EXCEPTION
+   WHEN insufficient_privilege THEN NULL;
+ END;
+END $tenant_b_mutations$;
 SELECT iam.clear_tenant_context();
 RESET ROLE;
 SET LOCAL ROLE iam_owner;
@@ -163,4 +242,4 @@ BEGIN
   OR EXISTS(SELECT 1 FROM app_private.context_keys WHERE key_id='ci-api-authz-key')
  THEN RAISE EXCEPTION 'RBAC API synthetic fixture escaped rollback'; END IF;
 END $no_fixture$;
-SELECT 'PASS: signed-context A/B effective_permissions grants, cross-tenant denial, revocations and rollback' AS result;
+SELECT 'PASS: signed-context A/B grants, RLS UPDATE/INSERT cross-tenant denial, revocations and rollback' AS result;
