@@ -4,6 +4,11 @@
 BEGIN;
 SET LOCAL ROLE iam_owner;
 
+-- Schema-only restore deliberately has no permission catalog seeds; create a
+-- synthetic catalog permission in the same rolled-back test transaction.
+INSERT INTO iam.permissions(permission_key,description,resource,action,is_sensitive)
+VALUES ('iam.tenant.read','CI synthetic RBAC read','tenant','read',false);
+
 INSERT INTO iam.tenants(id,display_name) VALUES
  ('71111111-1111-4111-8111-111111111111','CI RBAC A'),
  ('72222222-2222-4222-8222-222222222222','CI RBAC B');
@@ -97,6 +102,7 @@ BEGIN
  OR EXISTS(SELECT 1 FROM iam.roles WHERE role_key='ci_validation_reader')
  OR EXISTS(SELECT 1 FROM iam.membership_roles)
  OR EXISTS(SELECT 1 FROM iam.role_permissions WHERE permission_key='iam.tenant.read')
+ OR EXISTS(SELECT 1 FROM iam.permissions WHERE permission_key='iam.tenant.read')
  THEN RAISE EXCEPTION 'RBAC CI fixture survived transaction rollback'; END IF;
 END $rbac_no_leak$;
 
