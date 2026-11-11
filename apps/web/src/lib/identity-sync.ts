@@ -47,6 +47,7 @@ export async function syncIdentity(
   sql: IdentitySql,
   issuer: string,
   user: Auth0Identity,
+  source: "login" | "import" = "login",
 ): Promise<IdentityRecord> {
   if (!issuer.startsWith("https://") || !issuer.endsWith("/")) {
     throw new Error("Invalid issuer");
@@ -54,14 +55,14 @@ export async function syncIdentity(
   const identity = normalizeIdentity(user);
   const rows = await sql.query(
     `INSERT INTO iam.identities (issuer, subject, email, email_verified, display_name, last_authenticated_at)
-     VALUES ($1, $2, $3, $4, $5, NOW())
+     VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN NOW() ELSE NULL END)
      ON CONFLICT (issuer, subject)
-     DO UPDATE SET email = EXCLUDED.email,
-                   email_verified = EXCLUDED.email_verified,
-                   display_name = EXCLUDED.display_name,
-                   last_authenticated_at = NOW()
+     DO UPDATE SET email = COALESCE(EXCLUDED.email, iam.identities.email),
+                   email_verified = CASE WHEN $7 THEN EXCLUDED.email_verified ELSE iam.identities.email_verified END,
+                   display_name = COALESCE(EXCLUDED.display_name, iam.identities.display_name),
+                   last_authenticated_at = CASE WHEN $6 THEN NOW() ELSE iam.identities.last_authenticated_at END
      RETURNING id, issuer, subject`,
-    [issuer, identity.subject, identity.email, identity.emailVerified, identity.name],
+    [issuer, identity.subject, identity.email, identity.emailVerified, identity.name, source === "login", typeof user.email_verified === "boolean"],
   );
   if (rows.length !== 1) throw new Error("Identity sync did not return a single record");
   return rows[0];
@@ -78,7 +79,7 @@ export async function syncExistingUsers(
 ): Promise<number> {
   let count = 0;
   for await (const user of users) {
-    await syncIdentity(sql, issuer, user);
+    await syncIdentity(sql, issuer, user, "import");
     count += 1;
     onProgress?.(count);
   }
