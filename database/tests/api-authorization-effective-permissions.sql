@@ -11,8 +11,8 @@ INSERT INTO iam.tenants(id,display_name)
 VALUES ('81111111-1111-4111-8111-111111111111','CI Authorize A'),
        ('82222222-2222-4222-8222-222222222222','CI Authorize B');
 INSERT INTO iam.identities(id,issuer,subject)
-VALUES ('8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','https://ci-rbac.invalid/','ci-member-a'),
-       ('8bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','https://ci-rbac.invalid/','ci-member-b');
+VALUES ('8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','https://iam-control-center.us.auth0.com/','auth0|synthetic-ci-a'),
+       ('8bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','https://iam-control-center.us.auth0.com/','auth0|synthetic-ci-b');
 INSERT INTO iam.memberships(id,tenant_id,identity_id,status)
 VALUES ('8aaaaaaa-1111-4111-8111-111111111111','81111111-1111-4111-8111-111111111111','8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','active'),
        ('8bbbbbbb-2222-4222-8222-222222222222','82222222-2222-4222-8222-222222222222','8bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','active');
@@ -182,6 +182,68 @@ BEGIN
     OR EXISTS(SELECT 1 FROM iam.effective_permissions('8bbbbbbb-2222-4222-8222-222222222222'::uuid))
  THEN RAISE EXCEPTION 'granted permission missing, excess sensitive privilege or tenant leakage'; END IF;
 END $allow_only_grant$;
+
+-- Exercise the FULL endpoint SQL predicate, not just effective_permissions:
+-- Auth0 issuer AND subject, active membership, signed tenant context, explicit
+-- grant and fail-closed ABAC handling. These identities are synthetic CI only.
+DO $http_equivalent_positive_a$
+DECLARE
+ allowed boolean;
+ wrong_subject boolean;
+ wrong_issuer boolean;
+ wrong_tenant boolean;
+ wrong_permission boolean;
+BEGIN
+ SELECT EXISTS(
+   SELECT 1 FROM iam.identities i
+   JOIN iam.memberships m ON m.identity_id=i.id
+   WHERE i.id='8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid
+    AND i.issuer='https://iam-control-center.us.auth0.com/'
+    AND i.subject='auth0|synthetic-ci-a'
+    AND m.tenant_id='81111111-1111-4111-8111-111111111111'::uuid
+    AND m.status='active'
+    AND app_private.current_tenant_id()=m.tenant_id
+    AND EXISTS (SELECT 1 FROM iam.effective_permissions(m.id) p
+     WHERE p.permission_key='iam.tenant.read')
+    AND NOT EXISTS(SELECT 1 FROM iam.access_policies ap
+      WHERE ap.tenant_id=m.tenant_id AND ap.enabled)
+ ) INTO allowed;
+ SELECT EXISTS(SELECT 1 FROM iam.identities i JOIN iam.memberships m ON m.identity_id=i.id
+   WHERE i.id='8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid
+    AND i.issuer='https://iam-control-center.us.auth0.com/'
+    AND i.subject='auth0|synthetic-ci-b'
+    AND m.tenant_id='81111111-1111-4111-8111-111111111111'::uuid
+    AND m.status='active' AND app_private.current_tenant_id()=m.tenant_id
+    AND EXISTS(SELECT 1 FROM iam.effective_permissions(m.id) p WHERE p.permission_key='iam.tenant.read')
+ ) INTO wrong_subject;
+ SELECT EXISTS(SELECT 1 FROM iam.identities i JOIN iam.memberships m ON m.identity_id=i.id
+   WHERE i.id='8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid
+    AND i.issuer='https://attacker.invalid/' AND i.subject='auth0|synthetic-ci-a'
+    AND m.tenant_id='81111111-1111-4111-8111-111111111111'::uuid
+    AND m.status='active' AND app_private.current_tenant_id()=m.tenant_id
+    AND EXISTS(SELECT 1 FROM iam.effective_permissions(m.id) p WHERE p.permission_key='iam.tenant.read')
+ ) INTO wrong_issuer;
+ SELECT EXISTS(SELECT 1 FROM iam.identities i JOIN iam.memberships m ON m.identity_id=i.id
+   WHERE i.id='8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid
+    AND i.issuer='https://iam-control-center.us.auth0.com/'
+    AND i.subject='auth0|synthetic-ci-a'
+    AND m.tenant_id='82222222-2222-4222-8222-222222222222'::uuid
+    AND m.status='active' AND app_private.current_tenant_id()=m.tenant_id
+    AND EXISTS(SELECT 1 FROM iam.effective_permissions(m.id) p WHERE p.permission_key='iam.tenant.read')
+ ) INTO wrong_tenant;
+ SELECT EXISTS(SELECT 1 FROM iam.identities i JOIN iam.memberships m ON m.identity_id=i.id
+   WHERE i.id='8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid
+    AND i.issuer='https://iam-control-center.us.auth0.com/'
+    AND i.subject='auth0|synthetic-ci-a'
+    AND m.tenant_id='81111111-1111-4111-8111-111111111111'::uuid
+    AND m.status='active' AND app_private.current_tenant_id()=m.tenant_id
+    AND EXISTS(SELECT 1 FROM iam.effective_permissions(m.id) p WHERE p.permission_key='iam.tenant.update')
+ ) INTO wrong_permission;
+ IF allowed IS DISTINCT FROM TRUE OR wrong_subject OR wrong_issuer
+    OR wrong_tenant OR wrong_permission THEN
+   RAISE EXCEPTION 'full Auth0 SQL authorization predicate violated for tenant A';
+ END IF;
+END $http_equivalent_positive_a$;
 SELECT iam.clear_tenant_context();
 
 -- Bidirectional tenant isolation: B's independently granted permission must
@@ -208,6 +270,26 @@ BEGIN
                WHERE permission_key='iam.tenant.update')
  THEN RAISE EXCEPTION 'tenant B grant missing, exceeded scope or leaked tenant A'; END IF;
 END $allow_only_grant_b$;
+DO $http_equivalent_positive_b$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM iam.identities i JOIN iam.memberships m ON m.identity_id=i.id
+    WHERE i.id='8bbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid
+      AND i.issuer='https://iam-control-center.us.auth0.com/'
+      AND i.subject='auth0|synthetic-ci-b'
+      AND m.tenant_id='82222222-2222-4222-8222-222222222222'::uuid
+      AND m.status='active' AND app_private.current_tenant_id()=m.tenant_id
+      AND EXISTS(SELECT 1 FROM iam.effective_permissions(m.id) p WHERE p.permission_key='iam.tenant.read')
+      AND NOT EXISTS(SELECT 1 FROM iam.access_policies ap WHERE ap.tenant_id=m.tenant_id AND ap.enabled))
+  OR EXISTS(SELECT 1 FROM iam.identities i JOIN iam.memberships m ON m.identity_id=i.id
+    WHERE i.id='8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid
+      AND i.issuer='https://iam-control-center.us.auth0.com/'
+      AND i.subject='auth0|synthetic-ci-a'
+      AND m.tenant_id='81111111-1111-4111-8111-111111111111'::uuid
+      AND m.status='active' AND app_private.current_tenant_id()=m.tenant_id
+      AND EXISTS(SELECT 1 FROM iam.effective_permissions(m.id) p WHERE p.permission_key='iam.tenant.read'))
+ THEN RAISE EXCEPTION 'tenant B full Auth0 SQL predicate denied its grant or leaked A';
+ END IF;
+END $http_equivalent_positive_b$;
 DO $tenant_b_mutations$
 DECLARE
  affected integer;
@@ -260,6 +342,18 @@ BEGIN
  IF EXISTS(SELECT 1 FROM iam.effective_permissions('8aaaaaaa-1111-4111-8111-111111111111'::uuid))
  THEN RAISE EXCEPTION 'revoked permission still effective'; END IF;
 END $deny_revocation$;
+DO $http_equivalent_revoked_a$
+BEGIN
+ IF EXISTS(SELECT 1 FROM iam.identities i JOIN iam.memberships m ON m.identity_id=i.id
+   WHERE i.id='8aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid
+     AND i.issuer='https://iam-control-center.us.auth0.com/'
+     AND i.subject='auth0|synthetic-ci-a'
+     AND m.tenant_id='81111111-1111-4111-8111-111111111111'::uuid
+     AND m.status='active' AND app_private.current_tenant_id()=m.tenant_id
+     AND EXISTS(SELECT 1 FROM iam.effective_permissions(m.id) p WHERE p.permission_key='iam.tenant.read'))
+ THEN RAISE EXCEPTION 'full SQL authorization predicate still permits revoked A';
+ END IF;
+END $http_equivalent_revoked_a$;
 SELECT iam.clear_tenant_context();
 DO $set_revoked_b$
 DECLARE
@@ -288,4 +382,4 @@ BEGIN
   OR EXISTS(SELECT 1 FROM app_private.context_keys WHERE key_id='ci-api-authz-key')
  THEN RAISE EXCEPTION 'RBAC API synthetic fixture escaped rollback'; END IF;
 END $no_fixture$;
-SELECT 'PASS: signed-context A/B grants, RLS UPDATE/INSERT cross-tenant denial, revocations and rollback' AS result;
+SELECT 'PASS: signed-context Auth0 SQL A/B grant/revoke, RLS mutation denial and rollback' AS result;
