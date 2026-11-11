@@ -121,6 +121,28 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   await page.reload();
   await expect(page.getByRole("status")).toHaveText("Acesso autenticado confirmado.");
 
+  // The same Auth0 account selected for the positive RBAC gate must be
+  // authenticated here. Check its subject using a reviewed SHA-256 digest;
+  // never commit/log the raw user_id or user email.
+  const expectedSubHash = process.env.AUTH0_E2E_EXPECTED_SUB_SHA256;
+  if (!/^[a-f0-9]{64}$/.test(expectedSubHash || "")) {
+    throw new Error("Missing reviewed E2E Auth0 subject digest");
+  }
+  const profile = await page.evaluate(async () => {
+    const response = await fetch("/auth/profile", {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) return { status: response.status, sub: null };
+    const user = await response.json();
+    return { status: response.status, sub: user?.sub };
+  });
+  expect(profile.status, "Auth0 profile must be available for the signed-in session").toBe(200);
+  expect(typeof profile.sub).toBe("string");
+  const actualHash = require("node:crypto").createHash("sha256")
+    .update(profile.sub, "utf8").digest("hex");
+  expect(actualHash, "Auth0 E2E login is not the reviewed test account").toBe(expectedSubHash);
+
   // An authenticated Auth0 session is NOT authorization by itself. The
   // Preview database has only synthetic identities (synthetic.invalid),
   // so this real Auth0 account must fail closed when requesting RBAC access.
