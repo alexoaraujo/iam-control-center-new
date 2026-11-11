@@ -1,6 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { getReleaseSnapshot } from "./github-release";
-vi.mock("server-only", () => ({}));
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it("returns live SHA-bound CI and public PR count without treating CI as release approval", async () => {
