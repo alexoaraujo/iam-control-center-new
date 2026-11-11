@@ -179,11 +179,12 @@ jobs:
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
-      # Exact callback host and branch are approved by the protected Preview environment.
-      # Defaults retain the current reviewed PR fixture; future PRs override BOTH vars.
-      # Auth0 must explicitly allowlist each exact callback origin; no wildcard.
-      E2E_CALLBACK_HOST: ${{ vars.AUTH0_E2E_CALLBACK_HOST || 'iam-control-center-new-ci-preview.vercel.app' }}
-      E2E_CALLBACK_BRANCH: ${{ vars.AUTH0_E2E_CALLBACK_BRANCH || 'ci/optimize-pr-checks-20261110' }}
+      # Fixed user-approved callback alias. Branch is derived from the verified
+      # Vercel project-domain binding for each run, never from a stale fallback.
+      E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
+      VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+      VERCEL_TEAM_SLUG: aoa4
+      VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
@@ -199,33 +200,14 @@ jobs:
           E2E_DEPLOYMENT_HOST: ${{ needs.preview-deployment.outputs.preview_host }}
           PR_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-        shell: bash
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # The callback domain is currently bound to this branch in Vercel.
-          # Fail closed rather than testing a different PR through that alias.
-          if [[ "${PR_HEAD_REPOSITORY}" != "alexoaraujo/iam-control-center-new" || "${PR_HEAD_BRANCH}" != "${E2E_CALLBACK_BRANCH}" ]]; then
-            echo "::error::Auth0 callback alias is not bound to this PR branch. Configure a branch-specific callback before enabling E2E."
-            exit 1
-          fi
-          # Reject unexpected callback domains and newline/config injection.
-          [[ "${E2E_CALLBACK_HOST}" =~ ^iam-control-center-new-[a-z0-9-]+\.vercel\.app$ ]] || {
-            echo "::error::Callback host must be an explicitly authorized IAM Preview alias."
-            exit 1
-          }
-          # Credentials must be configured in the protected Preview environment.
           if [[ -z "${AUTH0_E2E_USERNAME:-}" || -z "${AUTH0_E2E_PASSWORD:-}" ]]; then
             echo "::error::AUTH0_E2E_USERNAME and AUTH0_E2E_PASSWORD must be set in the protected Preview environment."
             exit 1
           fi
-          [[ "${E2E_DEPLOYMENT_HOST}" =~ ^[a-zA-Z0-9-]+\.vercel\.app$ ]] || {
-            echo "::error::Verified exact-SHA deployment hostname is missing or invalid."
-            exit 1
-          }
-          # The exact-SHA Vercel Preview may itself use the canonical callback alias.
-          # Same-origin is valid and required for Auth0 transaction cookies.
-          printf 'E2E_DEPLOYMENT_URL=https://%s\n' "${E2E_DEPLOYMENT_HOST}" >> "$GITHUB_ENV"
-          printf 'E2E_BASE_URL=https://%s\n' "${E2E_CALLBACK_HOST}" >> "$GITHUB_ENV"
+          node scripts/bind-e2e-preview.mjs
 
       - name: Install isolated Playwright runner
         run: |
