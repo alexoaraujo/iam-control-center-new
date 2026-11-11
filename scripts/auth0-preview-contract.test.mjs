@@ -21,7 +21,9 @@ test("E2E enforces exact browser origin and restricts trusted OIDC header to Pre
   assert.ok(e2e.includes("previewHost !== callbackHost"));
   assert.ok(e2e.includes("trustedHosts.has(requestUrl.hostname)"));
   assert.ok(e2e.includes('requestUrl.hostname === "iam-control-center.us.auth0.com"'));
-  assert.ok(workflow.includes("callbackHost !== deploymentOrigin.hostname"));
+  assert.ok(workflow.includes("node scripts/verify-preview-alias.mjs"), "Both aliases must prove the same Vercel deployment identity before E2E");
+  assert.ok(workflow.includes("PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}"), "Deployment identity must be tied to exact GitHub PR SHA");
+  assert.ok(!workflow.includes("callbackHost !== deploymentOrigin.hostname"), "Do not confuse alias equality with deployment identity");
   assert.ok(workflow.includes("Callback must be the reviewed IAM Preview alias"));
   assert.ok(workflow.includes("E2E_DEPLOYMENT_HOST"));
 });
