@@ -20,8 +20,8 @@ activating credential-bearing jobs. A committed policy is not branch protection.
 | `IAM_INTEGRATION_REPOSITORY` | Explicit allowlist for privileged Neon workflows; set to `alexoaraujo/iam-control-center-new` only after confirming their existing project, branch, database and endpoint allowlists and environment protection. Leaving unset keeps those operations inactive. |
 | `VERCEL_PROJECT_PATH` | Exact Vercel team/project path for both Preview deployment gates. Missing configuration fails immediately. |
 | `AUTH0_E2E_ENABLED` | `true` activates Auth0 browser tests. Disabled/skipped is not release evidence. |
-| `E2E_CALLBACK_HOST` | Preview hostname configured as APP_BASE_URL and allowed callback/logout origin in Auth0. Must equal the hostname from the successful exact-commit Vercel check. |
-| `E2E_CALLBACK_BRANCH` | Branch to which that Preview alias is bound. Other branches fail closed. |
+| `E2E_CALLBACK_HOST` | Generated per CI run from the exact-SHA verified Vercel Preview hostname; not a global GitHub variable. The same hostname must be configured as branch-specific APP_BASE_URL and allowlisted explicitly in Auth0. |
+| `E2E_CALLBACK_BRANCH` | Generated per CI run from `github.event.pull_request.head.ref`; no stale branch fallback. |
 | `E2E_AUTH0_DOMAIN` | Exact Auth0 or custom login hostname, no scheme or path. |
 | `E2E_OIDC_AUDIENCE` | HTTPS audience configured in Vercel Trusted Sources. |
 | `E2E_OIDC_SUBJECT` | Exact configured GitHub OIDC subject ending in `:environment:Preview`; use the new repository identity. No wildcard trust. |
@@ -88,3 +88,24 @@ this refactor's commit.
 A team-scoped project query filtered by repository ID `1451861889` returned no
 projects during this refactor. A Preview for this repository remains blocked
 until its Vercel Git integration is configured and produces exact-SHA evidence.
+
+
+## Dynamic branch-specific Auth0 Preview callback (2026-11-11)
+
+The E2E job now derives `E2E_CALLBACK_BRANCH`, `E2E_CALLBACK_HOST`,
+`E2E_BASE_URL`, and `E2E_DEPLOYMENT_URL` from the current PR and its
+exact-SHA verified Vercel Preview. It writes these as *job-scoped* values using
+`GITHUB_ENV`/`GITHUB_OUTPUT`, so concurrent PRs do not overwrite shared GitHub
+repository variables. Remove obsolete repository/environment variables
+`AUTH0_E2E_CALLBACK_HOST` and `AUTH0_E2E_CALLBACK_BRANCH` after review; the
+workflow no longer reads them.
+
+**The GitHub job cannot, by itself, register a callback URL in Auth0 or adjust
+Vercel APP_BASE_URL.** In the Auth0 Preview application, explicitly allowlist
+`https://<resolved-preview-host>/auth/callback`, its logout origin and web origin.
+Configure the same exact origin as the Preview branch's `APP_BASE_URL` in
+Vercel. Never use wildcard callback URLs and never overwrite Production.
+The preflight now validates the Auth0 authorization redirect's `redirect_uri`
+against that exact callback before running Playwright; mismatches fail with a
+specific branch APP_BASE_URL / Auth0 allowlist diagnostic. A new PR remains
+blocked until the corresponding Auth0 Preview callback is genuinely authorized.
