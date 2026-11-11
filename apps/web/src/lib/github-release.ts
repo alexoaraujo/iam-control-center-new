@@ -3,7 +3,6 @@
  * This is NOT a release authorization or proof of a Production deployment.
  * Never use a browser token or expose GitHub credentials to the dashboard.
  */
-import "server-only";
 
 const api = "https://api.github.com/repos/alexoaraujo/iam-control-center-new";
 type GithubRun = { id?: unknown; name?: unknown; head_sha?: unknown; conclusion?: unknown; status?: unknown; html_url?: unknown; created_at?: unknown };
