@@ -179,11 +179,12 @@ jobs:
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
-      # Exact callback host and branch are approved by the protected Preview environment.
-      # Defaults retain the current reviewed PR fixture; future PRs override BOTH vars.
-      # Auth0 must explicitly allowlist each exact callback origin; no wildcard.
-      E2E_CALLBACK_HOST: ${{ vars.AUTH0_E2E_CALLBACK_HOST || 'iam-control-center-new-ci-preview.vercel.app' }}
-      E2E_CALLBACK_BRANCH: ${{ vars.AUTH0_E2E_CALLBACK_BRANCH || 'ci/optimize-pr-checks-20261110' }}
+      # Reviewed PR #41 binding: the alias is branch-scoped in Vercel Preview.
+      # Do not reuse stale GitHub environment variables from previous PRs.
+      # Any new PR requires an independently reviewed, exact alias/branch pair.
+      # Keep branch mismatch, exact-SHA and Auth0/OIDC controls fail-closed.
+      E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
+      E2E_CALLBACK_BRANCH: feat/iam-api-rbac-lineage-20261110
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
