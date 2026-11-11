@@ -179,6 +179,10 @@ jobs:
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
+      # SHA-256 of the reviewed real Auth0 test user's subject. This is not
+      # an Auth0 credential, email, token, or raw user_id. The Preview E2E
+      # fails closed if its protected login secret selects a different user.
+      AUTH0_E2E_EXPECTED_SUB_SHA256: e8cd8b1bf515f595a4531fb01ed6ae3d42c8929d28a50416759789376423a9f0
       # Matched by a branch-scoped Vercel Preview env var; no Production TTL change.
       AUTH0_E2E_SESSION_ABSOLUTE_SECONDS: '45'
       # Reviewed PR #41 binding: the alias is branch-scoped in Vercel Preview.
