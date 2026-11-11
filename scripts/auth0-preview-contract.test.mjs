@@ -5,16 +5,15 @@ import { test } from "node:test";
 const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
 const e2e = readFileSync(".github/e2e/auth0.spec.cjs", "utf8");
 const repository = "alexoaraujo/iam-control-center-new";
-const currentAlias = "iam-control-center-new-ci-preview.vercel.app";
-const currentBranch = "ci/optimize-pr-checks-20261110";
 
-test("Auth0 Preview callback and branch are configurable via reviewed environment variables", () => {
-  assert.ok(workflow.includes("vars.AUTH0_E2E_CALLBACK_HOST"));
-  assert.ok(workflow.includes("vars.AUTH0_E2E_CALLBACK_BRANCH"));
-  assert.ok(workflow.includes(currentAlias), "Existing reviewed Preview alias remains as fallback");
-  assert.ok(workflow.includes(currentBranch), "Existing reviewed PR remains as fallback");
-  assert.ok(workflow.includes('PR_HEAD_BRANCH}" != "${E2E_CALLBACK_BRANCH}'));
-  assert.ok(workflow.includes('PR_HEAD_REPOSITORY}" != "' + repository));
+test("Auth0 callback and PR branch are resolved from the exact-SHA Preview per run", () => {
+  assert.ok(workflow.includes("node scripts/e2e-preview-binding.mjs"));
+  assert.ok(workflow.includes("needs.preview-deployment.outputs.preview_host"));
+  assert.ok(workflow.includes("github.event.pull_request.head.ref"));
+  assert.ok(workflow.includes("github.event.pull_request.head.repo.full_name"));
+  assert.ok(!workflow.includes("vars.AUTH0_E2E_CALLBACK_HOST"));
+  assert.ok(!workflow.includes("vars.AUTH0_E2E_CALLBACK_BRANCH"));
+  assert.ok(!workflow.includes("ci/optimize-pr-checks-20261110"));
 });
 
 test("E2E enforces exact browser origin and restricts trusted OIDC header to Preview", () => {
