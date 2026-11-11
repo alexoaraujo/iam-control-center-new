@@ -73,6 +73,25 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
     }
   });
 
+  // Runtime API must reject anonymous callers even when Vercel's
+  // infrastructure protection is satisfied with the job-scoped OIDC token.
+  // This token authenticates the CI runner to Vercel, never the app user.
+  const anonymousAuthz = await fetch(new URL("/api/authorization/check", baseURL), {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "x-vercel-trusted-oidc-idp-token": trustedOidcToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      identityId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      permission: "iam.tenant.read",
+    }),
+  });
+  expect(anonymousAuthz.status, "Vercel OIDC must not substitute for an Auth0 user session").toBe(401);
+  expect(await anonymousAuthz.json()).toEqual({ error: "unauthorized" });
+
   // Anonymous access must enter the Auth0 Authorization Code + PKCE flow.
   await page.goto("/protected");
   await expect(page).toHaveURL(/auth0\.com/);
@@ -144,6 +163,39 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
     return { status: response.status, body: await response.json() };
   });
   expect(injected).toEqual({ status: 403, body: { allowed: false } });
+
+  // Authenticated identity is not sufficient for tenant-scoped authorization.
+  // These cases validate cross-tenant/identity denial and malformed inputs
+  // with the real Auth0 session, Vercel Preview runtime and Neon RLS.
+  const deniedCases = await page.evaluate(async () => {
+    const base = {
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      identityId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      permission: "iam.tenant.read",
+    };
+    const variants = [
+      ["cross-tenant", { ...base, tenantId: "22222222-2222-4222-8222-222222222222" }],
+      ["cross-identity", { ...base, identityId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" }],
+      ["wrong-permission", { ...base, permission: "iam.tenant.admin" }],
+      ["extra-context", { ...base, nonce: "f".repeat(32), expires: 9999999999 }],
+      ["invalid-selector", { ...base, tenantId: "../tenant-b" }],
+      ["oversized-body", { ...base, junk: "x".repeat(5000) }],
+    ];
+    return await Promise.all(variants.map(async ([name, body]) => {
+      const response = await fetch("/api/authorization/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(body),
+      });
+      return { name, status: response.status, payload: await response.json() };
+    }));
+  });
+  expect(deniedCases).toHaveLength(6);
+  for (const result of deniedCases) {
+    expect(result.status, result.name).toBe(403);
+    expect(result.payload, result.name).toEqual({ allowed: false });
+  }
 
   // Logout returns to the app root, which is immediately redirected to
   // Auth0 by the Next.js proxy. Verify the login screen, not a transient URL.
