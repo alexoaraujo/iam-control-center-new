@@ -1,5 +1,3 @@
-import "server-only";
-
 import { getSql } from "./db";
 
 /**
