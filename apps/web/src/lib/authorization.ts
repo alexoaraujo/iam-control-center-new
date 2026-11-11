@@ -56,36 +56,37 @@ export async function checkPermission(subject: string, proof: SignedTenantProof,
     if (!role || role.role !== expectedRuntime || role.login !== expectedRuntime
         || role.rolsuper !== false || role.rolbypassrls !== false) return false;
 
-    // One SQL statement: the signed context is LOCAL to this query's transaction.
-    // Materialized CTE enforces evaluation before reading the RLS-protected rows.
-    // Unknown enabled access_policies cause deny until a separately reviewed
-    // rule grammar/evaluator supports them. Role and group grants never bypass
-    // an enabled policy by accident.
-    const results = await db.query(
-      `WITH signed_context AS MATERIALIZED (
-         SELECT iam.set_tenant_context($1::uuid, $2::uuid, $3::bigint, $4::text, $5::text) AS proof
-       ),
-       checked_identity AS MATERIALIZED (
-         SELECT m.id AS membership_id
-         FROM signed_context c
-         JOIN iam.identities i ON i.id=$2::uuid AND i.issuer=$6::text AND i.subject=$7::text
-         JOIN iam.memberships m ON m.identity_id=i.id AND m.tenant_id=$1::uuid
-         WHERE m.status='active' AND app_private.current_tenant_id()=$1::uuid
-       )
-       SELECT EXISTS(
-         SELECT 1 FROM checked_identity m
-         WHERE EXISTS(
-           SELECT 1 FROM iam.effective_permissions(m.membership_id) p
-           WHERE p.permission_key=$8::text
-         )
-         AND NOT EXISTS(
-           SELECT 1 FROM iam.access_policies ap
-           WHERE ap.tenant_id=$1::uuid AND ap.enabled
-         )
+    // RLS evaluates STABLE functions and policy expressions against statement
+    // snapshots. A single writable CTE does NOT establish a context reliably:
+    // the signed context must be set in a separate statement of the SAME
+    // non-interactive PostgreSQL transaction (Neon HTTP transaction API).
+    const [, results] = await db.transaction((tx) => [
+      tx`SELECT iam.set_tenant_context(
+        ${proof.tenantId}::uuid, ${proof.identityId}::uuid,
+        ${proof.expires}::bigint, ${proof.nonce}::text, ${proof.signature}::text
+      )`,
+      tx`SELECT EXISTS(
+         SELECT 1
+         FROM iam.identities i
+         JOIN iam.memberships m ON m.identity_id=i.id
+         WHERE i.id=${proof.identityId}::uuid
+           AND i.issuer=${issuer}::text
+           AND i.subject=${subject}::text
+           AND m.tenant_id=${proof.tenantId}::uuid
+           AND m.status='active'
+           AND app_private.current_tenant_id()=${proof.tenantId}::uuid
+           AND EXISTS (
+             SELECT 1 FROM iam.effective_permissions(m.id) p
+             WHERE p.permission_key=${permission}::text
+           )
+           -- Policy grammar is not yet frozen. An enabled ABAC policy denies
+           -- ALL permissions rather than being silently ignored.
+           AND NOT EXISTS(
+             SELECT 1 FROM iam.access_policies ap
+             WHERE ap.tenant_id=m.tenant_id AND ap.enabled
+           )
        ) AS allowed`,
-      [proof.tenantId, proof.identityId, proof.expires, proof.nonce, proof.signature, issuer, subject, permission],
-      { fetchOptions: { signal: AbortSignal.timeout(3000), cache: "no-store" } },
-    );
+    ], { readOnly: true });
     return results.length === 1 && results[0]?.allowed === true;
   } catch {
     // Failed HMAC, expired context, wrong identity, missing schema or database
