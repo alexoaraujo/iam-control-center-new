@@ -287,6 +287,19 @@ jobs:
           if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
           NODE
 
+      - name: Verify callback alias resolves to the exact-SHA Vercel deployment
+        # The Vercel GitHub check identifies one Preview URL, while Auth0 may
+        # use another reviewed alias. Both must independently report the SAME
+        # unique Vercel deployment URL and exact PR SHA/branch/repository.
+        # The OIDC header is only sent to those two pinned Vercel origins.
+        env:
+          E2E_DEPLOYMENT_HOST: ${{ needs.preview-deployment.outputs.preview_host }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/verify-preview-alias.mjs
+
       - name: Preflight Vercel Deployment Protection (negative and positive controls)
         shell: bash
         run: |
@@ -300,22 +313,25 @@ jobs:
           const trustedHosts = new Set([deploymentOrigin.hostname, callbackHost]);
 
           if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
-          if (!/^iam-control-center-new-[a-z0-9-]+\.vercel\.app$/.test(callbackHost) ||
-              callbackHost !== deploymentOrigin.hostname) {
+          if (!/^iam-control-center-new-[a-z0-9-]+\.vercel\.app$/.test(callbackHost)) {
             throw new Error("Callback must be the reviewed IAM Preview alias for this exact-SHA deployment.");
           }
-          // A shared deployment/callback hostname is permitted when the exact-SHA
-          // Preview gate already verified that hostname for this PR commit.
+          // The immediately preceding step has attested each alias against the
+          // same unique Vercel deployment hostname and exact PR SHA, branch and
+          // repository. Never infer equivalence from hostname similarity alone.
 
-          // Negative control: deployment hostname must be protected without OIDC.
-          const anonymous = await fetch(new URL("/protected", deploymentOrigin), { redirect: "manual" });
-          const anonymousLocation = anonymous.headers.get("location");
-          const intercepted = anonymous.status === 401 || anonymous.status === 403 ||
-            (anonymousLocation && new URL(anonymousLocation, deploymentOrigin).hostname === "vercel.com");
-          if (!intercepted) {
-            throw new Error(`Negative control failed: HTTP ${anonymous.status}, Location ${anonymousLocation ?? "none"}.`);
+          // Negative control: BOTH aliases must enforce Deployment Protection
+          // before any trusted OIDC token is provided.
+          for (const host of trustedHosts) {
+            const anonymous = await fetch(new URL("/protected", `https://${host}`), { redirect: "manual" });
+            const anonymousLocation = anonymous.headers.get("location");
+            const intercepted = anonymous.status === 401 || anonymous.status === 403 ||
+              (anonymousLocation && new URL(anonymousLocation, `https://${host}`).hostname === "vercel.com");
+            if (!intercepted) {
+              throw new Error(`Negative control failed for ${host}: HTTP ${anonymous.status}, Location ${anonymousLocation ?? "none"}.`);
+            }
+            console.log(`Negative control passed: ${host} blocks access without OIDC.`);
           }
-          console.log(`Negative control passed: ${deploymentOrigin.hostname} blocks access without OIDC.`);
 
           // Follow only same-Preview-host redirects until Auth0. Attach the
           // trusted token only to the two explicit Preview hosts, never Auth0.
