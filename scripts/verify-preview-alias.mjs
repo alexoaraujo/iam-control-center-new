@@ -27,8 +27,8 @@ export function assertPreviewDeploymentPair(evidence, expected) {
         item.repository !== expected.repository || item.environment !== "preview") {
       throw new Error(`Wrong SHA, branch, repository or environment on Preview origin ${index + 1}`);
     }
-    if (item.pullRequestId && String(item.pullRequestId) !== expected.pullRequestId) {
-      throw new Error(`Wrong PR number on Preview origin ${index + 1}`);
+    if (String(item.pullRequestId || "") !== expected.pullRequestId) {
+      throw new Error(`Missing or wrong PR number on Preview origin ${index + 1}`);
     }
   }
 
@@ -75,8 +75,8 @@ export async function verifyPreviewAliases(env) {
   const expected = { branch, repository, pullRequestId, commitSha };
   // Validate the immutable PR identity BEFORE making any network request.
   assertPreviewDeploymentPair([
-    { ok: true, deploymentHost: "identity-check.vercel.app", commitSha, branch, repository, environment: "preview" },
-    { ok: true, deploymentHost: "identity-check.vercel.app", commitSha, branch, repository, environment: "preview" },
+    { ok: true, deploymentHost: "identity-check.vercel.app", commitSha, branch, repository, environment: "preview", pullRequestId },
+    { ok: true, deploymentHost: "identity-check.vercel.app", commitSha, branch, repository, environment: "preview", pullRequestId },
   ], expected);
   const evidence = await Promise.all([previewHost, callbackHost].map(host => fetchOriginProof(host, token)));
   const deploymentHost = assertPreviewDeploymentPair(evidence, expected);
