@@ -316,7 +316,12 @@ jobs:
               }
               const next = new URL(location, current);
               if (next.hostname === auth0Host) {
-                console.log(`${label} passed: reached Auth0 after ${attempt + 1} Preview redirect(s).`);
+                const redirectUri = next.searchParams.get("redirect_uri");
+                const expectedCallback = `https://${callbackHost}/auth/callback`;
+                if (redirectUri !== expectedCallback) {
+                  throw new Error(`${label}: Auth0 redirect_uri is not bound to this PR callback. Expected ${expectedCallback}, got ${redirectUri ?? "missing"}. Check branch-specific APP_BASE_URL and Auth0 Allowed Callback URLs.`);
+                }
+                console.log(`${label} passed: Auth0 redirect_uri is bound to the verified PR Preview after ${attempt + 1} redirect(s).`);
                 return;
               }
               if (next.hostname === "vercel.com") {
