@@ -29,7 +29,7 @@ Neon `br-muddy-bar-b63ksdy7` already holds two synthetic active tenant/membershi
 
 Post-test: A/B memberships remain active; `iam.membership_roles=0`, `iam.roles=1`, `iam.role_permissions=1`, `iam.organizations=0`, `iam.schema_migrations=0`; schema diff vs Development `""`. **This is a relational authorization model contract, not application API enforcement, UI RBAC or Auth0 E2E.**
 
-The regression is versioned as `database/tests/rbac-grant-revoke-rollback.sql`; the PostgreSQL 18 source-restore CI job invokes this script to prevent future model regressions. Record job ID and SHA when complete. Do not assert CI PASS until execution completes.
+The regression is versioned as `database/tests/rbac-grant-revoke-rollback.sql`; the PostgreSQL 18 source-restore CI job invokes this script to prevent future model regressions. [database-schema-tests #42948555110](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/42948555110) on Git HEAD `2653725c246e04ed2ce7d51227b505596dd57ef8` **PASS** in all three jobs. [PostgreSQL 18 source-restore job #130287186592](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/42948555110/job/130287186592) logs `PASS: disposable PostgreSQL 18 RBAC grant/revoke/deny/suspend/cross-tenant FK and full fixture rollback` and `PASS: independent PostgreSQL 18 sessions serialize migration lock; release after commit; ledger unchanged`. The first CI attempt failed because a schema-only restore has no seeded permission catalog; the regression fixture was corrected to seed `iam.tenant.read` transactionally and verify its rollback before this PASS.
 
 ## 2. Recovery experiment: copy-on-write branch, not snapshot/PITR
 
@@ -43,6 +43,8 @@ Verified on clone:
 - **PASS** live `iam_app_runtime_login` is non-BYPASSRLS and sees zero tenants/memberships without signed context.
 
 **Limit:** clone consistency/parity is **not** evidence of restoring a prior point in time, full disaster recovery, PITR or recovery time objective. That gate remains **BLOCKED**.
+
+A synthetic recovery failure was also injected **on the recovery clone itself**: acquire the transaction advisory lock, CREATE a probe table, INSERT one synthetic row, write a synthetic ledger entry, then throw and catch a controlled sentinel exception. After rollback: probe table absent, ledger still 0 rows, 2 tenants / 2 memberships preserved and branch-to-parent schema diff still empty. **PASS** transactional rollback on clone; still **BLOCKED** true snapshot/PITR restore.
 
 ## 3. Migration readiness and rehearsal checklist
 
