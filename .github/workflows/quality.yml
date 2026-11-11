@@ -1,17 +1,21 @@
 name: CI
 
+# Run exactly once for each PR head plus every main push. Other branches can
+# opt in via workflow_dispatch without duplicating PR CI on every branch push.
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-# Serialize CI per ref without interrupting an active run.
-# Note: GitHub concurrency keeps at most one pending run per group.
+# Newer PR commits supersede stale PR tests; a main push is never canceled.
+# This avoids duplicate jobs and keeps the required check bound to the latest SHA.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
@@ -175,8 +179,11 @@ jobs:
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
-      # The Auth0 redirect_uri uses this branch-bound Preview alias.
-      E2E_CALLBACK_HOST: iam-control-center-new-preview.vercel.app
+      # Exact callback host and branch are approved by the protected Preview environment.
+      # Defaults retain the current reviewed PR fixture; future PRs override BOTH vars.
+      # Auth0 must explicitly allowlist each exact callback origin; no wildcard.
+      E2E_CALLBACK_HOST: ${{ vars.AUTH0_E2E_CALLBACK_HOST || 'iam-control-center-new-ci-preview.vercel.app' }}
+      E2E_CALLBACK_BRANCH: ${{ vars.AUTH0_E2E_CALLBACK_BRANCH || 'ci/optimize-pr-checks-20261110' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
@@ -197,8 +204,18 @@ jobs:
           set -euo pipefail
           # The callback domain is currently bound to this branch in Vercel.
           # Fail closed rather than testing a different PR through that alias.
-          if [[ "${PR_HEAD_REPOSITORY}" != "alexoaraujo/iam-control-center-new" || "${PR_HEAD_BRANCH}" != "fix/vercel-deployment-readiness" ]]; then
+          if [[ "${PR_HEAD_REPOSITORY}" != "alexoaraujo/iam-control-center-new" || "${PR_HEAD_BRANCH}" != "${E2E_CALLBACK_BRANCH}" ]]; then
             echo "::error::Auth0 callback alias is not bound to this PR branch. Configure a branch-specific callback before enabling E2E."
+            exit 1
+          fi
+          # Reject unexpected callback domains and newline/config injection.
+          [[ "${E2E_CALLBACK_HOST}" =~ ^iam-control-center-new-[a-z0-9-]+\.vercel\.app$ ]] || {
+            echo "::error::Callback host must be an explicitly authorized IAM Preview alias."
+            exit 1
+          }
+          # Credentials must be configured in the protected Preview environment.
+          if [[ -z "${AUTH0_E2E_USERNAME:-}" || -z "${AUTH0_E2E_PASSWORD:-}" ]]; then
+            echo "::error::AUTH0_E2E_USERNAME and AUTH0_E2E_PASSWORD must be set in the protected Preview environment."
             exit 1
           fi
           [[ "${E2E_DEPLOYMENT_HOST}" =~ ^[a-zA-Z0-9-]+\.vercel\.app$ ]] || {
@@ -282,8 +299,9 @@ jobs:
           const trustedHosts = new Set([deploymentOrigin.hostname, callbackHost]);
 
           if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
-          if (callbackHost !== "iam-control-center-new-preview.vercel.app") {
-            throw new Error("Unexpected Auth0 callback Preview host.");
+          if (!/^iam-control-center-new-[a-z0-9-]+\.vercel\.app$/.test(callbackHost) ||
+              callbackHost !== deploymentOrigin.hostname) {
+            throw new Error("Callback must be the reviewed IAM Preview alias for this exact-SHA deployment.");
           }
           // A shared deployment/callback hostname is permitted when the exact-SHA
           // Preview gate already verified that hostname for this PR commit.
