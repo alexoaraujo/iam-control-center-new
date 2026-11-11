@@ -4,13 +4,13 @@ import { pathToFileURL } from "node:url";
 const APPROVED_ALIAS = "iam-control-center-new-ci-preview.vercel.app";
 const APPROVED_PROJECT = "prj_OnuwD1iarOsXh6FFGkSpK4A5mj80";
 const APPROVED_REPO = "alexoaraujo/iam-control-center-new";
-const hostname = /^[a-zA-Z0-9-]+\\.vercel\\.app$/;
+const hostname = /^[a-zA-Z0-9-]+\.vercel\.app$/;
 
 export function verifyPreviewBinding(env, domain, alias, deployment) {
   const { PR_HEAD_BRANCH: branch, PR_HEAD_SHA: sha, PR_HEAD_REPOSITORY: repository,
     E2E_CALLBACK_HOST: callback, E2E_DEPLOYMENT_HOST: preview } = env;
   if (repository !== APPROVED_REPO) throw Error("Untrusted PR repository");
-  if (!branch || !/^[a-zA-Z0-9][a-zA-Z0-9/._-]*$/.test(branch) || /[\\r\n]/.test(branch)) {
+  if (!branch || !/^[a-zA-Z0-9][a-zA-Z0-9/._-]*$/.test(branch) || /[\r\n]/.test(branch)) {
     throw Error("Invalid PR branch");
   }
   if (!/^[a-f0-9]{40}$/.test(sha ?? "")) throw Error("Invalid PR SHA");
