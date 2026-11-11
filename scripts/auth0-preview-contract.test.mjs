@@ -6,13 +6,13 @@ const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
 const e2e = readFileSync(".github/e2e/auth0.spec.cjs", "utf8");
 const repository = "alexoaraujo/iam-control-center-new";
 const currentAlias = "iam-control-center-new-ci-preview.vercel.app";
-const currentBranch = "ci/optimize-pr-checks-20261110";
+const currentBranch = "feat/iam-api-rbac-lineage-20261110";
 
-test("Auth0 Preview callback and branch are configurable via reviewed environment variables", () => {
-  assert.ok(workflow.includes("vars.AUTH0_E2E_CALLBACK_HOST"));
-  assert.ok(workflow.includes("vars.AUTH0_E2E_CALLBACK_BRANCH"));
-  assert.ok(workflow.includes(currentAlias), "Existing reviewed Preview alias remains as fallback");
-  assert.ok(workflow.includes(currentBranch), "Existing reviewed PR remains as fallback");
+test("Auth0 E2E is pinned to the reviewed PR #41 branch and matching Preview alias", () => {
+  assert.ok(workflow.includes("E2E_CALLBACK_HOST: " + currentAlias), "E2E host must be the reviewed Preview alias");
+  assert.ok(workflow.includes("E2E_CALLBACK_BRANCH: " + currentBranch), "E2E branch must be the current PR branch");
+  assert.ok(!workflow.includes("vars.AUTH0_E2E_CALLBACK_BRANCH"), "Stale protected-environment branch variable must not override the reviewed binding");
+  assert.ok(!workflow.includes("vars.AUTH0_E2E_CALLBACK_HOST"), "Callback host must not drift from reviewed PR alias");
   assert.ok(workflow.includes('PR_HEAD_BRANCH}" != "${E2E_CALLBACK_BRANCH}'));
   assert.ok(workflow.includes('PR_HEAD_REPOSITORY}" != "' + repository));
 });
