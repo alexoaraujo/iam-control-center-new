@@ -43,6 +43,8 @@ for (const [name, value] of Object.entries({
 }
 
 test("rejects missing or malformed identity evidence", () => {
+  assert.throws(() => assertPreviewDeploymentPair([proof(), proof({ pullRequestId: undefined })], expected), /Missing or wrong PR number/);
+  assert.throws(() => assertPreviewDeploymentPair([proof(), proof({ pullRequestId: null })], expected), /Missing or wrong PR number/);
   assert.throws(() => assertPreviewDeploymentPair([proof()], expected), /Exactly two/);
   assert.throws(() => assertPreviewDeploymentPair([proof(), {}], expected));
   assert.throws(() => assertPreviewDeploymentPair([proof(), proof({ pullRequestId: "" })], { ...expected, branch: "unexpected" }));
