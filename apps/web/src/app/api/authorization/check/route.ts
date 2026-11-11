@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import { auth0 } from "../../../../lib/auth0";
-import { checkPermission, validPermission, validProof } from "../../../../lib/authorization";
+import { checkPermission, validPermission, validSelector } from "../../../../lib/authorization";
 
 export const dynamic = "force-dynamic";
-
 const headers = { "Cache-Control": "no-store" };
 const deny = () => NextResponse.json({ allowed: false }, { status: 403, headers });
 
 /**
  * POST /api/authorization/check
- * The client cannot mint a valid tenant proof. A trusted issuance mechanism
- * must be built and approved before this endpoint can return 200 in Preview.
- * Never infer authorization from Auth0 authentication alone.
+ *
+ * Auth0 session is required. The client provides ONLY tenant/identity
+ * selectors and a permission name — never a signature, nonce or expiry.
+ * The server mints a private, one-request HMAC bound to the supplied IDs,
+ * then the database RLS + Auth0 issuer/subject binding decide access.
+ * No signed proof ever crosses the browser/API boundary.
  */
 export async function POST(request: Request) {
   const session = await auth0.getSession();
@@ -21,17 +23,24 @@ export async function POST(request: Request) {
   }
   if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return deny();
   const length = Number(request.headers.get("content-length") || "0");
-  if (length > 4096) return deny();
+  if (!Number.isFinite(length) || length > 4096) return deny();
+
   let body: unknown;
   try {
-    body = await request.json();
+    const payload = await request.text();
+    if (payload.length > 4096) return deny();
+    body = JSON.parse(payload);
   } catch {
     return deny();
   }
-  if (!body || typeof body !== "object") return deny();
+  if (!body || typeof body !== "object" || Array.isArray(body)) return deny();
   const input = body as Record<string, unknown>;
-  if (!validPermission(input.permission) || !validProof(input.context)) return deny();
-  const allowed = await checkPermission(subject, input.context, input.permission);
+  const keys = Object.keys(input).sort();
+  if (keys.length !== 3 || keys.join(",") !== "identityId,permission,tenantId"
+    || !validPermission(input.permission)
+    || !validSelector(input.tenantId) || !validSelector(input.identityId)) return deny();
+
+  const allowed = await checkPermission(subject, input.tenantId, input.identityId, input.permission);
   return allowed
     ? NextResponse.json({ allowed: true }, { status: 200, headers })
     : deny();
