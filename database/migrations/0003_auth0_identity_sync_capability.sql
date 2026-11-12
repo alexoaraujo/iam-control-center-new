@@ -19,6 +19,14 @@ BEGIN
   IF NOT FOUND OR NOT v_rls OR NOT v_force THEN
     RAISE EXCEPTION 'iam.identities must have FORCE RLS';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname='iam' AND tablename='identities'
+      AND policyname='iam_owner_access' AND cmd='ALL'
+      AND 'iam_owner' = ANY(roles) AND qual='true' AND with_check='true'
+  ) THEN
+    RAISE EXCEPTION '0003 requires a reviewed FORCE-RLS identity owner policy';
+  END IF;
   IF to_regprocedure('iam.sync_auth0_identity(text,text,text,boolean,text,boolean,boolean)') IS NOT NULL THEN
     RAISE EXCEPTION 'sync_auth0_identity already exists; review lineage before altering';
   END IF;
