@@ -93,15 +93,15 @@ CREATE POLICY iam_owner_access ON iam.identities
 SQL
 } | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
 
-echo "Applying 0003 identity-sync SECURITY DEFINER capability under migration role..."
+echo "Applying 0004 identity-sync SECURITY DEFINER capability under migration role..."
 {
   printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
-  cat database/migrations/0003_auth0_identity_sync_capability.sql
+  cat database/migrations/0004_auth0_identity_sync_capability.sql
 } | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
 
-echo "Testing 0003 identity sync, replay, RLS and rollback with runtime LOGIN..."
+echo "Testing 0004 identity sync, replay, RLS and rollback with runtime LOGIN..."
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -f database/tests/0003_auth0_identity_sync_contract.sql
+  -f database/tests/0004_auth0_identity_sync_contract.sql
 
-echo "PASS: role bootstrap, role assumption, migrations 0001-0003, identity sync RLS,
+echo "PASS: role bootstrap, role assumption, migrations 0001/0002 plus reviewed Auth0 0004 fixture, identity sync RLS,
 transactions and rollback, and session touch regression checks"
