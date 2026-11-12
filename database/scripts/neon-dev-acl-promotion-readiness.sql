@@ -2,7 +2,7 @@
 -- This is NOT a migration or authorization to apply any persistent Neon DDL.
 -- Target identity (project_id / branch_id) MUST be verified by the caller using
 -- the Neon control plane; PostgreSQL cannot independently prove Neon branch ID.
--- Expected fingerprint is intentionally pinned to the reviewed 2026-11-12
+-- Expected fingerprint is intentionally pinned to the reverified 2026-11-12
 -- NEW Development snapshot. Any drift blocks the proposed ACL change.
 WITH RECURSIVE expected(kind, privilege) AS (
  VALUES ('r'::"char", 'SELECT'::text),
@@ -146,7 +146,7 @@ SELECT jsonb_build_object(
  'privileged_reachable_roles',privileged_reachable_roles,
  'indirect_future_acl_risks',indirect_future_acl_risks,
  'verdict', CASE
-   WHEN db<>'iam_database' OR session_role<>'neondb_owner' OR pg_version<>180006
+   WHEN db<>'iam_database' OR session_role<>'neondb_owner' OR pg_version<>180007
        THEN 'BLOCKED_WRONG_CONTEXT'
    WHEN runtime_login IS DISTINCT FROM TRUE
       OR runtime_inherit IS DISTINCT FROM TRUE
