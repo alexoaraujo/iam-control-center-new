@@ -1,0 +1,16 @@
+# IAM Control Center NEW — review routing only; enforcement requires an active ruleset.
+# Both handles were verified as repository collaborators on 2026-11-12.
+* @alexoaraujo @alexoaraujo83
+
+# High-risk authentication, authorization, database, CI and deployment boundaries.
+/.github/CODEOWNERS @alexoaraujo83
+/.github/workflows/ @alexoaraujo83
+/.github/e2e/ @alexoaraujo83
+/database/ @alexoaraujo83
+/apps/web/src/app/api/ @alexoaraujo83
+/apps/web/src/lib/auth0* @alexoaraujo83
+/apps/web/src/lib/authorization* @alexoaraujo83
+/apps/web/src/lib/db* @alexoaraujo83
+/scripts/ @alexoaraujo83
+/docs/architecture/ @alexoaraujo83
+/docs/operations/ @alexoaraujo83
