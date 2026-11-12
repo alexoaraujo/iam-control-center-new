@@ -25,14 +25,14 @@ export async function* readExistingAuth0Users(
   // Auth0 /users search pagination is capped at 1000 results.
   // Never silently treat the cap as a complete full-tenant import.
   for (let page = 0; page < 10; page++) {
-    const url = `https://${domain}/api/v2/users?page=${page}&per_page=${perPage}&include_totals=false`;
+    const url = `https://${domain}/api/v2/users?page=${page}&per_page=${perPage}&include_totals=false&fields=user_id,email,email_verified,name&include_fields=true`;
     const response = await fetcher(url, {
       headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
       cache: "no-store",
     });
     if (!response.ok) throw new Error(`Auth0 Management API request failed (${response.status})`);
     const users: unknown = await response.json();
-    if (!Array.isArray(users)) throw new Error("Invalid Auth0 users response");
+    if (!Array.isArray(users) || users.length > perPage) throw new Error("Invalid Auth0 users response");
     for (const item of users as UserResponse[]) {
       if (!item || typeof item.user_id !== "string") throw new Error("Missing Auth0 user_id");
       yield {
