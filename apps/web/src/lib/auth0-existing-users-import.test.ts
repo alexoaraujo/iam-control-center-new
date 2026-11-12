@@ -70,6 +70,23 @@ describe("reviewed Auth0 existing-user backfill", () => {
     expect(sql.query).not.toHaveBeenCalled();
   });
 
+  it("rejects changed user attributes even if the subject set matches", async () => {
+    const opts = { domain, expectedIssuer, accessToken: "synthetic-token" };
+    const dry = await importExistingAuth0Users({ ...opts, fetcher: source(fixtures) });
+    const sql = { query: vi.fn() };
+    await expect(importExistingAuth0Users({
+      ...opts,
+      fetcher: source([
+        { user_id: "auth0|existing-one", email: "changed@example.test", email_verified: true },
+        fixtures[1],
+      ]),
+      mode: "apply", sql, approval: "reviewed-preview-import",
+      targetBranchId: "br-disposable", approvedBranchId: "br-disposable",
+      expectedCount: dry.scanned, expectedFingerprint: dry.sourceFingerprint,
+    })).rejects.toThrow("source changed");
+    expect(sql.query).not.toHaveBeenCalled();
+  });
+
   it("rejects duplicated Auth0 subjects without writing", async () => {
     const sql = { query: vi.fn() };
     await expect(importExistingAuth0Users({
