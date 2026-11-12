@@ -54,14 +54,10 @@ export async function syncIdentity(
   }
   const identity = normalizeIdentity(user);
   const rows = await sql.query(
-    `INSERT INTO iam.identities (issuer, subject, email, email_verified, display_name, last_authenticated_at)
-     VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN NOW() ELSE NULL END)
-     ON CONFLICT (issuer, subject)
-     DO UPDATE SET email = COALESCE(EXCLUDED.email, iam.identities.email),
-                   email_verified = CASE WHEN $7 THEN EXCLUDED.email_verified ELSE iam.identities.email_verified END,
-                   display_name = COALESCE(EXCLUDED.display_name, iam.identities.display_name),
-                   last_authenticated_at = CASE WHEN $6 THEN NOW() ELSE iam.identities.last_authenticated_at END
-     RETURNING id, issuer, subject`,
+    // Narrow SECURITY DEFINER capability; runtime retains no direct table INSERT/UPDATE.
+    // Migration 0003 must be reviewed and applied on the target branch before enabling.
+    `SELECT id, issuer, subject
+       FROM iam.sync_auth0_identity($1, $2, $3, $4, $5, $6, $7)`,
     [issuer, identity.subject, identity.email, identity.emailVerified, identity.name, source === "login", typeof user.email_verified === "boolean"],
   );
   if (rows.length !== 1) throw new Error("Identity sync did not return a single record");
