@@ -68,7 +68,7 @@ BEGIN
   VALUES
     (p_issuer,p_subject,p_email,COALESCE(p_email_verified,FALSE),p_display_name,
      CASE WHEN p_is_login THEN clock_timestamp() ELSE NULL END)
-  ON CONFLICT (issuer,subject)
+  ON CONFLICT ON CONSTRAINT identities_issuer_subject_key
   DO UPDATE SET
     email = COALESCE(EXCLUDED.email,dest.email),
     email_verified = CASE WHEN p_verified_present
