@@ -191,6 +191,8 @@ jobs:
               bash -euo pipefail -c '
                 psql -X --no-password "$DATABASE_URL" -Atc "SHOW server_version;"
                 bash database/tests/restore-source-schema.sh
-              bash database/tests/run-ci-runtime-login.sh
+                bash database/tests/run-ci-runtime-login.sh
+                psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f database/tests/rbac-grant-revoke-rollback.sql
+                bash database/tests/test-migration-lock-concurrency.sh
               '
 
