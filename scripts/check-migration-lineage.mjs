@@ -18,13 +18,13 @@ export function verifyMigrationPolicy(policy, sqlFiles) {
     throw new Error("historical migration provenance changed");
   }
   const declared = policy.candidates;
-  if (!Array.isArray(declared) || declared.length !== 3) throw new Error("unexpected migration candidate count");
+  if (!Array.isArray(declared) || declared.length !== 4) throw new Error("unexpected migration candidate count");
   const candidates = new Set(declared.map((entry) => entry.file));
   const seenLineages = new Set(declared.map((entry) => entry.lineage));
   if (candidates.size !== declared.length || seenLineages.size !== declared.length) {
     throw new Error("duplicate migration candidate or incompatible lineage identifier");
   }
-  const expected = new Set(["0001_initial_iam_schema.sql", "0002_sessions_touch_contract.sql", "0003_set_tenant_context_search_path.sql"]);
+  const expected = new Set(["0001_initial_iam_schema.sql", "0002_sessions_touch_contract.sql", "0003_set_tenant_context_search_path.sql", "0004_auth0_identity_sync_capability.sql"]);
   if (candidates.size !== expected.size || [...candidates].some((file) => !expected.has(file))
     || sqlFiles.length !== expected.size || sqlFiles.some((name) => !candidates.has(name))) {
     throw new Error("unregistered, missing or unexpected migration SQL file");
