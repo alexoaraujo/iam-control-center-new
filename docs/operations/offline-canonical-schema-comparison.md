@@ -29,3 +29,9 @@ Exit 0 means **METADATA_MATCH_ONLY**, not that a migration is safe to replay. Ex
 The exporter now records `definition_sha256` (the SHA-256 of `pg_get_functiondef`, not the function source) for each function/procedure/window routine. Aggregates are recorded by their separate aggregate contract; any function/procedure with a missing, malformed or forged-length SHA is rejected as **invalid input** (exit 2), even when function name, owner and `search_path` match. A different body hash is **DRIFT** (exit 1) and reveals only the routine identity.
 
 See the sanitized [live catalog drift inventory](../evidence/neon-canonical-drift-inventory-2026-11-12.md). On 2026-11-12, read-only catalog comparison across the **actual** source/Development branches found **58 full-manifest differences across seven categories** (including provider role/ownership differences), despite equal application object counts. This is **BLOCKED** for canonical migration and cutover until reviewed disposition of every material difference. Do not weaken the target's SECURITY DEFINER search_path to imitate the legacy source.
+
+## Ordered PostgreSQL semantics — regression corrected 2026-11-12
+
+The comparator now **preserves nested array order**. In particular, the ordered `enum_labels` array is derived from PostgreSQL `pg_enum.enumsortorder`; sorting it alphabetically would incorrectly mark two ENUMs with different comparison semantics as equal. Only the top-level collections keyed by stable object identity are order-insensitive. New regression tests cover swapped enum labels, nested column-order drift and shuffled top-level object collections.
+
+Evidence: PostgreSQL18 and `quality` checks on PR #44 HEAD `2bbc0503cc5472073356515b9865738dac60f9b4` succeeded. This is a **comparator correctness test**, not authorization for historical ledger insertion, DDL apply or Production cutover.
