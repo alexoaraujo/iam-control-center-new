@@ -84,6 +84,15 @@ echo "Applying corrective migration 0002 and executing its rollback-only contrac
   cat database/tests/0002_sessions_touch_contract.sql
 } | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
 
+echo "Preparing CI-only FORCE RLS iam_owner policy fixture for migration 0003..."
+{
+  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  cat <<'SQL'
+CREATE POLICY iam_owner_access ON iam.identities
+  FOR ALL TO iam_owner USING (true) WITH CHECK (true);
+SQL
+} | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
+
 echo "Applying 0003 identity-sync SECURITY DEFINER capability under migration role..."
 {
   printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
