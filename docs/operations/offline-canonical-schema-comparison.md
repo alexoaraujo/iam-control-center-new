@@ -12,3 +12,14 @@ Exit codes: 0 = exact manifest parity, 1 = drift, 2 = malformed input. The outpu
 The comparison deliberately detects differences in database metadata and server version; reconcile environmental differences with explicit reviewed evidence rather than silently suppressing them. A result of PASS is limited to fields included in the manifest v1 contract. `pg_dump --schema-only`, source-owned migration checksums, effective ACL grants, backup/restore, PITR/RPO/RTO, production authorization and data parity are separate gates.
 
 **Read-only baseline evidence (2026-11-12):** legacy source and NEW Development share 182 columns, 244 constraints, 41 policies, 63 indexes, 12 triggers and 24 enum labels with identical catalog fingerprints. Their routine set differs on `iam.set_tenant_context`'s SECURITY DEFINER `search_path` and `app_private.context_keys` has an explicit owner relacl on legacy but NULL relacl on NEW Development. The legacy ledger has 1 historical entry, while NEW Development has 0; NEW Production has no IAM schema. These are findings, **not** approval to fabricate a ledger or execute migration.
+
+## Legacy migration ledger reconciliation (read-only)
+
+`database/offline/compare-migration-ledgers.mjs` validates two **sanitized** `iam-ledger-provenance/v1` JSON documents. Each document needs `branch_id` and `rows` from `iam.schema_migrations`; each row carries `migration_id`, `checksum_sha256`, `source_sha`, `execution_role` and `applied_at`. Store originals in protected temporary storage, never commit a live connection string or any identity.
+
+```bash
+node database/offline/compare-migration-ledgers.mjs source-ledger.json destination-ledger.json
+node --test database/offline/compare-migration-ledgers.test.mjs
+```
+
+Exit 0 means **METADATA_MATCH_ONLY**, not that a migration is safe to replay. Exit 1 means **BLOCKED** (missing/unexpected ID, mismatch of immutable checksum, source commit or execution role). Exit 2 means malformed input. The tool never writes to either database, copies ledger rows, or derives an execution plan. A destination ledger with zero rows against an origin with one verified migration is **BLOCKED**, even if schema manifests otherwise match. Full DDL, migration file bytes, database history, owner privileges, PITR/restore and approved cutover remain separate gates.
