@@ -48,3 +48,23 @@ test('collection and property ordering do not induce false drift',()=>{
  b.schemas=[{owner:'iam_owner',name:'audit'},{owner:'iam_owner',name:'iam'}];
  assert.equal(compareManifests(a,b).equal,true);
 });
+
+test('enum ordering is semantically relevant even when labels and counts match',()=>{
+ const a=base(),b=base();
+ a.types=[{schema:'iam',name:'order_status',kind:'e',enum_labels:['new','approved','cancelled']}];
+ b.types=[{...a.types[0],enum_labels:['approved','new','cancelled']}];
+ assert.deepEqual(compareManifests(a,b).differences,['types.iam.order_status [changed]']);
+ assert.doesNotMatch(report(a,b),/approved|cancelled/);
+});
+test('nested array ordering drift is not hidden by canonicalization',()=>{
+ const a=base(),b=base();
+ a.relations=[{schema:'iam',name:'sample',columns:[{ordinal:1,name:'first'},{ordinal:2,name:'second'}]}];
+ b.relations=[{...a.relations[0],columns:a.relations[0].columns.toReversed()}];
+ assert.equal(compareManifests(a,b).equal,false);
+});
+test('top-level collection order is ignored while nested order is preserved',()=>{
+ const a=base(),b=base();
+ a.types=[{schema:'iam',name:'first',kind:'e',enum_labels:['one','two']},{schema:'iam',name:'second',kind:'e',enum_labels:['a','b']}];
+ b.types=[structuredClone(a.types[1]),structuredClone(a.types[0])];
+ assert.equal(compareManifests(a,b).equal,true);
+});
