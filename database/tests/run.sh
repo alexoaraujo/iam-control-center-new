@@ -116,3 +116,7 @@ if [[ "$acl_readiness" != *'"verdict": "BLOCKED_WRONG_CONTEXT"'* ]]; then
   exit 1
 fi
 echo "PASS: ACL promotion gate refuses unapproved CI database and execution identity"
+
+echo "Testing that PUBLIC, global and inherited-group ACLs cannot evade schema-local revocation..."
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+  -f database/tests/future-default-acl-shadow-fixture.sql
