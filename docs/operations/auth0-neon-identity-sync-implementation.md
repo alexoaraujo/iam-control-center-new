@@ -75,3 +75,10 @@ The list-users Management API only supports offset retrieval up to 1,000 users. 
 Both Neon Development and PR42 disposable ledgers were empty at inspection; the actual Neon columns are `migration_id, checksum_sha256, source_sha, applied_at, execution_role`, which differ from the clean-install schema's ledger. Never infer historic migration application from a matching schema; wait for a checksum-based, reviewed lineage baseline.
 
 **Outstanding gates:** audited source count from the actual Auth0 tenant; explicit M2M credential and operator approval; real dry-run and apply only on a fresh disposable branch; baseline/ledger reconciliation, secure runner with atomic checksum registration, backup/restore rehearsal, and independent Development/Production authorization.
+
+## Security review follow-up — M2M scope and snapshot fingerprint (2026-11-11)
+
+- The operational CLI now emits the same **canonical normalized-field order** as the TypeScript importer: `subject, email, emailVerified, name, verifiedPresent`. This avoids false mismatches between independently produced dry-run fingerprints. Tests assert the SHA-256 digest against the documented normalized representation.
+- Both token consumers **reject extra OAuth scopes**, including `read:users read:clients`, even when `read:users` is present. The approved scope must be exactly `read:users`.
+- A SHA-256 source fingerprint is an integrity/comparison marker, **not a cryptographic authorization token**. The import library accepts operator-provided `approvedBranchId` and `approval`; these MUST come from an independently reviewed privileged operator environment, verified against the actual Neon connection branch and intended database role. Equality of two caller-provided branch IDs does not independently prove the target database.
+- The real Management API population dry-run remains BLOCKED until the protected GitHub environment has approved M2M credentials, safe workflow dispatch, and authorization to query that tenant. No Auth0 bulk user export or Neon backfill has been executed by these changes.
