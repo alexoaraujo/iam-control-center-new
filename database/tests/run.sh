@@ -105,3 +105,9 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 
 echo "PASS: role bootstrap, role assumption, migrations 0001/0002 plus reviewed Auth0 0004 fixture, identity sync RLS,
 transactions and rollback, and session touch regression checks"
+
+# Advisory candidate tested with synthetic default ACLs on ephemeral PostgreSQL 18.
+# SQL has BEGIN/ROLLBACK; never applies to Neon Development or Production.
+echo "Testing rollback-only future default ACL least-privilege remediation..."
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+  -f database/tests/default-acl-runtime-hardening-fixture.sql
