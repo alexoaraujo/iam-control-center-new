@@ -37,6 +37,13 @@ function validate(manifest, side) {
       if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error(side + ': malformed object in ' + section);
       const id=key(item);
       if (!id || id.includes('undefined') || seen.has(id)) throw new Error(side + ': missing/duplicate identity in ' + section);
+      // A manifest without a routine body hash cannot prove canonical function parity.
+      // Older/incomplete exports must be rejected rather than silently compared.
+      if (section === 'routines' && item.kind !== 'a' &&
+          (typeof item.definition_sha256 !== 'string' ||
+           !/^[a-f0-9]{64}$/i.test(item.definition_sha256))) {
+        throw new Error(side + ': missing/invalid routine definition SHA-256');
+      }
       seen.add(id);
     }
   }
