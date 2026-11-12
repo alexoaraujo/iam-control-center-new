@@ -179,6 +179,8 @@ jobs:
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
+      # Positive write E2E is limited to isolated PR42 Preview.
+      E2E_IDENTITY_SYNC: ${{ github.event.pull_request.head.ref == 'feat/auth0-neon-identity-sync-20261111' && 'true' || 'false' }}
       # Fixed user-approved callback alias. Branch is derived from the verified
       # Vercel project-domain binding for each run, never from a stale fallback.
       E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
