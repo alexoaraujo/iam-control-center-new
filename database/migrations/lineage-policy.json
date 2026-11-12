@@ -32,6 +32,12 @@
       "lineage": "canonical-source-corrective",
       "status": "REVIEW_ONLY",
       "precondition": "existing SECURITY DEFINER function at original approved search_path and owner"
+    },
+    {
+      "file": "0004_auth0_identity_sync_capability.sql",
+      "lineage": "auth0-identity-sync-proposal",
+      "status": "REVIEW_ONLY",
+      "precondition": "pre-existing canonical IAM schema and FORCE RLS identity owner policy; isolated reviewed migrator, approved schema lineage, no Production execution"
     }
   ]
 }
