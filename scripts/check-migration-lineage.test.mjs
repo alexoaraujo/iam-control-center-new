@@ -8,12 +8,12 @@ const root = resolve(import.meta.dirname, "..");
 const policy = JSON.parse(readFileSync(resolve(root, "database/migrations/lineage-policy.json"), "utf8"));
 const files = policy.candidates.map((candidate) => candidate.file);
 
-test("inventory exactly three distinct, review-only lineages with SHA256 of exact bytes", () => {
+test("inventory exactly four distinct, review-only lineages with SHA256 of exact bytes", () => {
   const report = collectLineage(root);
   assert.equal(report.execution_authorized, false);
   assert.equal(report.canonical_baseline, "BLOCKED");
-  assert.equal(report.candidates.length, 3);
-  assert.equal(new Set(report.candidates.map(({ lineage }) => lineage)).size, 3);
+  assert.equal(report.candidates.length, 4);
+  assert.equal(new Set(report.candidates.map(({ lineage }) => lineage)).size, 4);
   for (const candidate of report.candidates) {
     assert.match(candidate.sha256, /^[a-f0-9]{64}$/);
     assert.equal(candidate.sha256, sha256(readFileSync(resolve(root, "database/migrations", candidate.file))));
