@@ -188,6 +188,11 @@ jobs:
       # Fixed user-approved callback alias. Branch is derived from the verified
       # Vercel project-domain binding for each run, never from a stale fallback.
       E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
+      # Protected Preview-only Neon API key; never committed or sent to browser.
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      E2E_RBAC_HTTP_ENABLED: ${{ github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && 'true' || 'false' }}
+      E2E_RBAC_PROJECT_ID: tiny-rice-70320263
+      E2E_RBAC_BRANCH_ID: br-shy-scene-b67zm2v7
       VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
       VERCEL_TEAM_SLUG: aoa4
       VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
@@ -220,7 +225,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/playwright"
           cd "$RUNNER_TEMP/playwright"
           npm init -y >/dev/null
-          npm install --save-exact --no-audit --no-fund @playwright/test@1.64.1
+          npm install --save-exact --no-audit --no-fund @playwright/test@1.64.1 @neondatabase/serverless@1.2.0
           npm audit --audit-level=high
 
       - name: Install Chromium
