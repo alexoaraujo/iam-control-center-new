@@ -34,6 +34,15 @@ The isolated [PR #45 rehearsal](https://github.com/alexoaraujo/iam-control-cente
 8. **Rehearsal:** revalidate that a disposal-only clone test on a recent parent LSN matches the reviewed proposed two statements. The previous clone result is proof of behavior for its snapshot only.
 
 
+### Recovery constraints revalidated against official Neon documentation (2026-11-12)
+
+- **Manual snapshots can only be created from root branches**, not from the `development` child branch used for the ACL remediation. The project's root/default is `production`; do not snapshot, restore, swap, reset, or otherwise operate on it as a shortcut for a Development-only change.
+- Neon Free allows **one manual snapshot**, and snapshot storage is [priced by retained bytes](https://neon.com/docs/guides/backup-restore). Automated schedules are on paid plans. This project's free-only constraint forbids silently enabling a paid backup feature or incurring unapproved snapshot charges.
+- Neon reports a **6-hour history window**, but historical retention alone is not a demonstrated PITR restoration or persistent backup. The currently disposable `validation/iam-runtime-acl-peos-20261112` branch expires 2026-11-13T13:00:00Z.
+- **Live logical consistency proof:** exact `COUNT(*)` checks across all 23 IAM/app_private/audit tables matched between Development and the Development-derived clone: **18 total rows in each** (2 identities, 16 permissions, all other tables empty). Separately computed SHA-256 of canonicalized full row JSON for every one of the 23 tables also matched in all sections. No row contents, identity subjects, keys, or individual hashes were exported into the repository. This is a point-in-time equivalence check between branches, **not** an executed restore, data backup integrity attestation, durability guarantee or RTO/RPO measurement.
+
+**Safe next recovery exercise (not yet executed):** obtain independent approval for a direct-TLS, least-privilege logical `pg_dump` of Development and a `pg_restore` into an exclusively disposable, non-production destination, or use a provider-supported isolated restore path that does not mutate `production`. Before execution check the Free plan limits, backup size, credentials, secret storage, expiry, and source/target identifiers. The restoration gate passes only with actual restored table/row/schema consistency, tested role/ACL/RLS semantics, audit provenance, and independently recorded RPO/RTO. The backup contents must not be uploaded as a public GitHub artifact. Until such proof exists: **RECOVERY BLOCKED / PERSISTENT DDL BLOCKED**.
+
 ## Live recovery readiness check — 2026-11-12
 
 Read-only Neon control-plane inspection of project `tiny-rice-70320263` found **no listed snapshots** and **no automatic snapshot schedule** for Development or the temporary clone. The project's configured historical retention is `21600` seconds (**6 hours**). This does not establish whether other backup processes exist, nor does it prove a usable PITR recovery point. The disposable ACL rehearsal branch `br-calm-mud-b6x10uvf` has an expiry; it must **not** be treated as the long-term rollback copy.
