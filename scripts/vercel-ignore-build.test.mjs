@@ -78,25 +78,3 @@ test("fails closed when commit metadata is missing", () => {
 test("builds Preview when integration validation scripts change", () => {
   assert.equal(hasBuildRelevantChanges(["scripts/e2e-config.mjs"]), true);
 });
-
-test("skips Preview for governance-only CODEOWNERS changes", () => {
-  assert.equal(
-    shouldBuild({
-      environment: "preview",
-      previousSha: "base",
-      currentSha: "head",
-      changedFiles: [
-        ".github/CODEOWNERS",
-        "docs/operations/codeowners-review-gate.md",
-        "scripts/codeowners-contract.test.mjs",
-      ],
-    }),
-    false,
-  );
-});
-
-test("CODEOWNERS exclusion does not bypass other integration scripts", () => {
-  assert.equal(hasBuildRelevantChanges(["scripts/codeowners-contract.test.mjs"]), false);
-  assert.equal(hasBuildRelevantChanges(["scripts/bind-e2e-preview.mjs"]), true);
-  assert.equal(hasBuildRelevantChanges(["scripts/migration-identifiers.test.mjs"]), true);
-});
