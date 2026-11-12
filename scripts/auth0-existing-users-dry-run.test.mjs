@@ -54,6 +54,18 @@ test("same population reorders deterministically and changed profiles change fin
   assert.notEqual(first.sourceFingerprint,changed.sourceFingerprint);
 });
 
+test("CLI fingerprint agrees with normalized backfill import schema", async()=>{
+  const {createHash}=await import("node:crypto");
+  const user={user_id:"auth0|aligned",email:"  aligned@example.test  ",name:"Aligned",email_verified:true};
+  const result=await executeDryRun(env,mock([user]).fetcher);
+  const expected=createHash("sha256").update(JSON.stringify({
+    issuer:"https://iam-control-center.us.auth0.com/",
+    snapshot:[{subject:"auth0|aligned",email:"aligned@example.test",emailVerified:true,
+      name:"Aligned",verifiedPresent:true}],
+  }),"utf8").digest("hex");
+  assert.equal(result.sourceFingerprint,expected);
+});
+
 test("pagination repeats in pages of 100 and stops at last page",async()=>{
   const seen=[];
   const fetcher=async(url)=>{
@@ -86,6 +98,10 @@ test("fails closed at 1,000-user API cap instead of silently truncating",async()
 test("fails on invalid token scope, wrong bearer type and API rejection without leaking tokens",async()=>{
   const bad=async()=>response({access_token:"sensitive-token",token_type:"Bearer",scope:"read:clients"});
   await assert.rejects(getReadUsersToken(config,bad),/insufficient read:users scope/);
+  await assert.rejects(getReadUsersToken(config,async()=>response({
+    access_token:"overprivileged",token_type:"Bearer",scope:"read:users read:clients",
+  })),/insufficient read:users scope/);
+
   await assert.rejects(getReadUsersToken(config,async()=>response({access_token:"token",token_type:"MAC",scope:"read:users"})),/invalid type/);
   await assert.rejects(getReadUsersToken(config,async()=>response({secret:"private"},401)),/HTTP 401/);
   await assert.rejects(scanUsers(config,"synthetic-token",async()=>response({secret:"private"},429)),/HTTP 429/);
