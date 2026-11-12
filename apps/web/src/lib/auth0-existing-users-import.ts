@@ -8,7 +8,7 @@ import {
 /**
  * Server-side, two-step Auth0 backfill. Never exposed as a public HTTP route.
  * Scans the COMPLETE Management API population before the first database write.
- * Counts and fingerprint do not include email or name; never log individual users.
+ * Only aggregate counts and a digest are returned; never log individual users.
  */
 export type ImportPlan = {
   mode: "dry-run" | "apply";
@@ -69,10 +69,15 @@ export async function importExistingAuth0Users(options: ImportOptions): Promise<
     users.push(user);
   }
 
-  // Non-secret content fingerprint used only to verify both runs saw the
-  // same user_id set, never as authorization, user credential, or account ID.
+  // Hash the entire normalized source snapshot (including verified-presence),
+  // not just user IDs; different profiles require another operator dry-run.
+  // Only the digest leaves the process. This is a consistency check, NOT auth.
+  const snapshot = users.map((user) => ({
+    ...normalizeIdentity(user),
+    verifiedPresent: typeof user.email_verified === "boolean",
+  })).sort((a, b) => a.subject.localeCompare(b.subject));
   const sourceFingerprint = createHash("sha256")
-    .update(issuer + "\u0000" + [...subjects].sort().join("\u0000"), "utf8")
+    .update(JSON.stringify({ issuer, snapshot }), "utf8")
     .digest("hex");
   const scanned = users.length;
 
