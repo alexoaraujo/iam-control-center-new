@@ -6,24 +6,24 @@ const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
 const e2e = readFileSync(".github/e2e/auth0.spec.cjs", "utf8");
 const repository = "alexoaraujo/iam-control-center-new";
 const currentAlias = "iam-control-center-new-ci-preview.vercel.app";
-const currentBranch = "feat/iam-api-rbac-lineage-20261110";
-
-test("Auth0 E2E is pinned to the reviewed PR #41 branch and matching Preview alias", () => {
-  assert.ok(workflow.includes("E2E_CALLBACK_HOST: " + currentAlias), "E2E host must be the reviewed Preview alias");
-  assert.ok(workflow.includes("E2E_CALLBACK_BRANCH: " + currentBranch), "E2E branch must be the current PR branch");
-  assert.ok(!workflow.includes("vars.AUTH0_E2E_CALLBACK_BRANCH"), "Stale protected-environment branch variable must not override the reviewed binding");
-  assert.ok(!workflow.includes("vars.AUTH0_E2E_CALLBACK_HOST"), "Callback host must not drift from reviewed PR alias");
-  assert.ok(workflow.includes('PR_HEAD_BRANCH}" != "${E2E_CALLBACK_BRANCH}'));
-  assert.ok(workflow.includes('PR_HEAD_REPOSITORY}" != "' + repository));
+test("Auth0 Preview callback is resolved from live Vercel binding for every PR", () => {
+  assert.ok(workflow.includes("iam-control-center-new-ci-preview.vercel.app"));
+  assert.ok(workflow.includes("VERCEL_API_TOKEN"));
+  assert.ok(workflow.includes("node scripts/bind-e2e-preview.mjs"));
+  assert.ok(workflow.includes("node scripts/verify-preview-alias.mjs"));
+  assert.ok(workflow.includes("AUTH0_E2E_EXPECTED_SUB_SHA256:"));
+  assert.ok(workflow.includes("AUTH0_E2E_SESSION_ABSOLUTE_SECONDS:"));
+  assert.ok(!workflow.includes("E2E_CALLBACK_BRANCH: feat/iam-api-rbac-lineage-20261110"));
+  assert.ok(workflow.includes("PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}"));
+  assert.ok(!workflow.includes("ci/optimize-pr-checks-20261110"));
 });
+
 
 test("E2E enforces exact browser origin and restricts trusted OIDC header to Preview", () => {
   assert.ok(e2e.includes("previewHost !== callbackHost"));
   assert.ok(e2e.includes("trustedHosts.has(requestUrl.hostname)"));
   assert.ok(e2e.includes('requestUrl.hostname === "iam-control-center.us.auth0.com"'));
-  assert.ok(workflow.includes("node scripts/verify-preview-alias.mjs"), "Both aliases must prove the same Vercel deployment identity before E2E");
-  assert.ok(workflow.includes("PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}"), "Deployment identity must be tied to exact GitHub PR SHA");
-  assert.ok(!workflow.includes("callbackHost !== deploymentOrigin.hostname"), "Do not confuse alias equality with deployment identity");
+  assert.ok(workflow.includes("callbackHost !== deploymentOrigin.hostname"));
   assert.ok(workflow.includes("Callback must be the reviewed IAM Preview alias"));
   assert.ok(workflow.includes("E2E_DEPLOYMENT_HOST"));
 });

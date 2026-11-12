@@ -15,7 +15,8 @@ export function assertPreviewDeploymentPair(evidence, expected) {
   }
   if (!exactSha.test(expected.commitSha) || !/^[1-9][0-9]*$/.test(expected.pullRequestId) ||
       expected.repository !== "alexoaraujo/iam-control-center-new" ||
-      expected.branch !== "feat/iam-api-rbac-lineage-20261110") {
+      !expected.branch || expected.branch.length > 250 ||
+      !/^[a-zA-Z0-9][a-zA-Z0-9/._-]*$/.test(expected.branch)) {
     throw new Error("Expected PR identity or commit SHA is invalid");
   }
 

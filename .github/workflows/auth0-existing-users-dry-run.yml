@@ -1,0 +1,98 @@
+name: Auth0 Management existing users dry-run (read-only)
+
+# Explicitly restricted to the reviewed PR #42 branch and protected environment.
+# No pull_request, schedule, user exports, artifacts or database operations.
+on:
+  push:
+    branches:
+      - feat/auth0-neon-identity-sync-20261111
+    paths:
+      - .github/workflows/auth0-existing-users-dry-run.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auth0-existing-users-readonly-audit
+  cancel-in-progress: false
+
+jobs:
+  scan-auth0-users:
+    name: Read-only Auth0 population fingerprint (no SQL)
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/feat/auth0-neon-identity-sync-20261111'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: IAM-Audit-Development
+    env:
+      AUTH0_DOMAIN: ${{ vars.AUTH0_DOMAIN }}
+      AUTH0_MGMT_CLIENT_ID: ${{ secrets.AUTH0_MGMT_CLIENT_ID }}
+      AUTH0_MGMT_CLIENT_SECRET: ${{ secrets.AUTH0_MGMT_CLIENT_SECRET }}
+    steps:
+      - name: Checkout reviewed PR #42 branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Verify synthetic dry-run contract before tenant API access
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test scripts/auth0-existing-users-dry-run.test.mjs
+
+      - name: Audit real Auth0 population twice and reconcile provider total (no SQL)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {
+            executeDryRun, getReadUsersToken, validateInput
+          } from './scripts/auth0-existing-users-dry-run.mjs';
+
+          // Each pass retrieves the tenant's user list read-only; no identity
+          // is emitted and the source fingerprint is never used as approval.
+          const first = await executeDryRun(process.env);
+          const second = await executeDryRun(process.env);
+          if (first.mode !== 'dry-run' || first.written !== 0 ||
+              second.written !== 0 || first.scanned !== second.scanned ||
+              first.sourceFingerprint !== second.sourceFingerprint) {
+            throw new Error('BLOCKED: Auth0 source changed between scans');
+          }
+
+          const config = validateInput(process.env);
+          const bearer = await getReadUsersToken(config);
+          const url = new URL('https://' + config.domain + '/api/v2/users');
+          url.searchParams.set('page','0');
+          url.searchParams.set('per_page','1');
+          url.searchParams.set('include_totals','true');
+          url.searchParams.set('fields','user_id');
+          url.searchParams.set('include_fields','true');
+          const response = await fetch(url, {
+            headers: { Authorization:'Bearer ' + bearer, Accept:'application/json' },
+            cache:'no-store',
+          });
+          if (!response.ok) {
+            throw new Error('BLOCKED: Auth0 count endpoint returned HTTP ' + response.status);
+          }
+          const countPayload = await response.json();
+          const providerTotal = countPayload?.total;
+          if (!Number.isSafeInteger(providerTotal) || providerTotal !== first.scanned) {
+            throw new Error('BLOCKED: Auth0 provider total differs from scanned population');
+          }
+          console.log(JSON.stringify({
+            ...first, providerTotal, stableAcrossTwoReads:true,
+            branch:process.env.GITHUB_REF_NAME, sha:process.env.GITHUB_SHA,
+            environment:'IAM-Audit-Development', databaseWrites:0,
+          }));
+          NODE
+
+      - name: Record immutable run context without revealing subjects
+        if: success()
+        shell: bash
+        run: |
+          echo "PASS: read-only Auth0 snapshot; run=${GITHUB_RUN_ID}; sha=${GITHUB_SHA}; environment=IAM-Audit-Development; no Neon writes"

@@ -179,18 +179,18 @@ jobs:
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
-      # SHA-256 of the reviewed real Auth0 test user's subject. This is not
-      # an Auth0 credential, email, token, or raw user_id. The Preview E2E
-      # fails closed if its protected login secret selects a different user.
+      # Reviewed Auth0 user digest; never store the raw subject in the workflow.
       AUTH0_E2E_EXPECTED_SUB_SHA256: e8cd8b1bf515f595a4531fb01ed6ae3d42c8929d28a50416759789376423a9f0
-      # Matched by a branch-scoped Vercel Preview env var; no Production TTL change.
+      # Preview-only session-expiry regression control.
       AUTH0_E2E_SESSION_ABSOLUTE_SECONDS: '45'
-      # Reviewed PR #41 binding: the alias is branch-scoped in Vercel Preview.
-      # Do not reuse stale GitHub environment variables from previous PRs.
-      # Any new PR requires an independently reviewed, exact alias/branch pair.
-      # Keep branch mismatch, exact-SHA and Auth0/OIDC controls fail-closed.
+      # Positive write E2E is limited to isolated PR42 Preview.
+      E2E_IDENTITY_SYNC: ${{ github.event.pull_request.head.ref == 'feat/auth0-neon-identity-sync-20261111' && 'true' || 'false' }}
+      # Fixed user-approved callback alias. Branch is derived from the verified
+      # Vercel project-domain binding for each run, never from a stale fallback.
       E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
-      E2E_CALLBACK_BRANCH: feat/iam-api-rbac-lineage-20261110
+      VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+      VERCEL_TEAM_SLUG: aoa4
+      VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
     steps:
       - name: Checkout repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
@@ -206,33 +206,14 @@ jobs:
           E2E_DEPLOYMENT_HOST: ${{ needs.preview-deployment.outputs.preview_host }}
           PR_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-        shell: bash
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # The callback domain is currently bound to this branch in Vercel.
-          # Fail closed rather than testing a different PR through that alias.
-          if [[ "${PR_HEAD_REPOSITORY}" != "alexoaraujo/iam-control-center-new" || "${PR_HEAD_BRANCH}" != "${E2E_CALLBACK_BRANCH}" ]]; then
-            echo "::error::Auth0 callback alias is not bound to this PR branch. Configure a branch-specific callback before enabling E2E."
-            exit 1
-          fi
-          # Reject unexpected callback domains and newline/config injection.
-          [[ "${E2E_CALLBACK_HOST}" =~ ^iam-control-center-new-[a-z0-9-]+\.vercel\.app$ ]] || {
-            echo "::error::Callback host must be an explicitly authorized IAM Preview alias."
-            exit 1
-          }
-          # Credentials must be configured in the protected Preview environment.
           if [[ -z "${AUTH0_E2E_USERNAME:-}" || -z "${AUTH0_E2E_PASSWORD:-}" ]]; then
             echo "::error::AUTH0_E2E_USERNAME and AUTH0_E2E_PASSWORD must be set in the protected Preview environment."
             exit 1
           fi
-          [[ "${E2E_DEPLOYMENT_HOST}" =~ ^[a-zA-Z0-9-]+\.vercel\.app$ ]] || {
-            echo "::error::Verified exact-SHA deployment hostname is missing or invalid."
-            exit 1
-          }
-          # The exact-SHA Vercel Preview may itself use the canonical callback alias.
-          # Same-origin is valid and required for Auth0 transaction cookies.
-          printf 'E2E_DEPLOYMENT_URL=https://%s\n' "${E2E_DEPLOYMENT_HOST}" >> "$GITHUB_ENV"
-          printf 'E2E_BASE_URL=https://%s\n' "${E2E_CALLBACK_HOST}" >> "$GITHUB_ENV"
+          node scripts/bind-e2e-preview.mjs
 
       - name: Install isolated Playwright runner
         run: |
@@ -293,11 +274,7 @@ jobs:
           if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
           NODE
 
-      - name: Verify callback alias resolves to the exact-SHA Vercel deployment
-        # The Vercel GitHub check identifies one Preview URL, while Auth0 may
-        # use another reviewed alias. Both must independently report the SAME
-        # unique Vercel deployment URL and exact PR SHA/branch/repository.
-        # The OIDC header is only sent to those two pinned Vercel origins.
+      - name: Verify callback and Preview are the same exact-SHA deployment
         env:
           E2E_DEPLOYMENT_HOST: ${{ needs.preview-deployment.outputs.preview_host }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -319,25 +296,22 @@ jobs:
           const trustedHosts = new Set([deploymentOrigin.hostname, callbackHost]);
 
           if (!token) throw new Error("Vercel Trusted Sources OIDC token is missing.");
-          if (!/^iam-control-center-new-[a-z0-9-]+\.vercel\.app$/.test(callbackHost)) {
+          if (!/^iam-control-center-new-[a-z0-9-]+\.vercel\.app$/.test(callbackHost) ||
+              callbackHost !== deploymentOrigin.hostname) {
             throw new Error("Callback must be the reviewed IAM Preview alias for this exact-SHA deployment.");
           }
-          // The immediately preceding step has attested each alias against the
-          // same unique Vercel deployment hostname and exact PR SHA, branch and
-          // repository. Never infer equivalence from hostname similarity alone.
+          // A shared deployment/callback hostname is permitted when the exact-SHA
+          // Preview gate already verified that hostname for this PR commit.
 
-          // Negative control: BOTH aliases must enforce Deployment Protection
-          // before any trusted OIDC token is provided.
-          for (const host of trustedHosts) {
-            const anonymous = await fetch(new URL("/protected", `https://${host}`), { redirect: "manual" });
-            const anonymousLocation = anonymous.headers.get("location");
-            const intercepted = anonymous.status === 401 || anonymous.status === 403 ||
-              (anonymousLocation && new URL(anonymousLocation, `https://${host}`).hostname === "vercel.com");
-            if (!intercepted) {
-              throw new Error(`Negative control failed for ${host}: HTTP ${anonymous.status}, Location ${anonymousLocation ?? "none"}.`);
-            }
-            console.log(`Negative control passed: ${host} blocks access without OIDC.`);
+          // Negative control: deployment hostname must be protected without OIDC.
+          const anonymous = await fetch(new URL("/protected", deploymentOrigin), { redirect: "manual" });
+          const anonymousLocation = anonymous.headers.get("location");
+          const intercepted = anonymous.status === 401 || anonymous.status === 403 ||
+            (anonymousLocation && new URL(anonymousLocation, deploymentOrigin).hostname === "vercel.com");
+          if (!intercepted) {
+            throw new Error(`Negative control failed: HTTP ${anonymous.status}, Location ${anonymousLocation ?? "none"}.`);
           }
+          console.log(`Negative control passed: ${deploymentOrigin.hostname} blocks access without OIDC.`);
 
           // Follow only same-Preview-host redirects until Auth0. Attach the
           // trusted token only to the two explicit Preview hosts, never Auth0.
