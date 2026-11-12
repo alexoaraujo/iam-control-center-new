@@ -105,3 +105,7 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 
 echo "PASS: role bootstrap, role assumption, migrations 0001/0002 plus reviewed Auth0 0004 fixture, identity sync RLS,
 transactions and rollback, and session touch regression checks"
+
+# Offline-only schema parity checks: no Vercel Preview, Auth0 callback, Neon credentials or DDL.
+# Executed by PostgreSQL 18 CI against synthetic manifests; failures block the job.
+node --test database/offline/compare-schema-manifests.test.mjs

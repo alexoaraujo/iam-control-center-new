@@ -3,8 +3,8 @@
 This tool compares **two previously exported** JSON files produced by `database/scripts/schema-manifest.sql`. It does not connect to Neon, run SQL, accept credentials, create ledger rows, change schema, or claim source-database parity by itself.
 
 ```bash
-node scripts/compare-schema-manifests.mjs source-manifest.json target-manifest.json
-node --test scripts/compare-schema-manifests.test.mjs
+node database/offline/compare-schema-manifests.mjs source-manifest.json target-manifest.json
+node --test database/offline/compare-schema-manifests.test.mjs
 ```
 
 Exit codes: 0 = exact manifest parity, 1 = drift, 2 = malformed input. The output prints changed **object identities only**, not function bodies, policy expressions, ACL values, user data or secrets. Manifest files should remain in protected artifacts; do **not** commit real organizational role inventories to the repository.
