@@ -35,6 +35,10 @@ describe("least-privilege Auth0 Management API token request", () => {
       }),
     });
     await expect(getAuth0ReadUsersToken("tenant.auth0.com","id","secret",response as unknown as typeof fetch)).rejects.toThrow("read:users");
+    response.mockResolvedValue({ok:true,json:async()=>({
+      access_token:"token",token_type:"Bearer",scope:"read:users read:clients",
+    })});
+    await expect(getAuth0ReadUsersToken("tenant.auth0.com","id","secret",response as unknown as typeof fetch)).rejects.toThrow("exactly read:users");
     response.mockResolvedValue({ok:true,json:async()=>({access_token:"token",token_type:"mac"})});
     await expect(getAuth0ReadUsersToken("tenant.auth0.com","id","secret",response as unknown as typeof fetch)).rejects.toThrow("Invalid");
     expect(fetcher).not.toHaveBeenCalled();
