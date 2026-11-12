@@ -26,14 +26,6 @@ const countsQuery = "SELECT (SELECT count(*)::int FROM iam.tenants WHERE id=$1::
 const countKeys = ["tenants", "identities", "memberships", "roles", "membership_roles", "role_permissions"];
 const counts = async (sql) => (await sql.query(countsQuery, [ID.tenant, ID.identity, ID.membership, ID.role]))[0];
 const zero = (result) => countKeys.every((key) => result[key] === 0);
-async function api(path) {
-  const response = await fetch("https://console.neon.tech/api/v2" + path, {
-    headers: { Authorization: "Bearer " + process.env.NEON_API_KEY, Accept: "application/json" },
-    redirect: "error", signal: AbortSignal.timeout(12000),
-  });
-  check(response.ok, "Neon protected API lookup failed: HTTP " + response.status);
-  return response.json();
-}
 async function connect() {
   check(process.env.GITHUB_REPOSITORY === "alexoaraujo/iam-control-center-new" &&
     process.env.GITHUB_EVENT_NAME === "pull_request" &&
@@ -46,25 +38,17 @@ async function connect() {
     "Callback/Preview origin does not match reviewed PR #41 alias");
   check(process.env.AUTH0_E2E_USERNAME && process.env.AUTH0_E2E_PASSWORD &&
     process.env.VERCEL_TRUSTED_OIDC_TOKEN, "Auth0 or Vercel protected E2E secrets missing");
-  check(process.env.NEON_API_KEY,
-    "RBAC HTTP BLOCKED: NEON_API_KEY must be configured as protected Preview environment secret");
-  const response = await api("/projects/" + ID.project + "/branches/" + ID.branch);
-  const branch = response.branch;
-  check(branch?.id === ID.branch && branch.project_id === ID.project &&
-    branch.name === ID.name && branch.parent_id === ID.parent &&
-    !branch.default && !branch.primary && !branch.protected &&
-    branch.current_state === "ready" && branch.expires_at &&
-    new Date(branch.expires_at).getTime() > Date.now(), "Neon branch identity/TTL rejected");
-  const params = new URLSearchParams({
-    branch_id: ID.branch, database_name: "iam_database", role_name: "neondb_owner", pooled: "false",
-  });
-  const conn = await api("/projects/" + ID.project + "/connection_uri?" + params);
-  check(typeof conn.uri === "string", "Neon branch-scoped connection URI unavailable");
-  const uri = new URL(conn.uri);
+  // Least privilege: never expose the project-wide NEON_API_KEY to PR code.
+  // This protected Preview secret is restricted to the expiring disposable
+  // database branch and MUST NOT be a permanent/prod connection.
+  const connection = process.env.NEON_RBAC_TEST_OWNER_DATABASE_URL;
+  check(typeof connection === "string" && connection.startsWith("postgresql://"),
+    "RBAC HTTP BLOCKED: protected Preview secret NEON_RBAC_TEST_OWNER_DATABASE_URL is missing");
+  const uri = new URL(connection);
   check(uri.protocol === "postgresql:" && uri.hostname === ID.host &&
     uri.pathname === "/iam_database" && decodeURIComponent(uri.username) === "neondb_owner" &&
     uri.password && uri.searchParams.get("sslmode") === "require", "Connection URI allowlist rejected");
-  const sql = neon(conn.uri);
+  const sql = neon(connection);
   const rows = await sql.query("SELECT current_database() db, current_setting('neon.branch_id',true) branch, current_user principal");
   check(rows.length === 1 && rows[0].db === "iam_database" &&
     rows[0].branch === ID.branch && rows[0].principal === "neondb_owner",

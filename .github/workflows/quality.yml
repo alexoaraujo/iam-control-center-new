@@ -188,8 +188,7 @@ jobs:
       # Fixed user-approved callback alias. Branch is derived from the verified
       # Vercel project-domain binding for each run, never from a stale fallback.
       E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
-      # Protected Preview-only Neon API key; never committed or sent to browser.
-      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      # Preview-only branch-scoped SQL connection is injected solely in E2E step.
       E2E_RBAC_HTTP_ENABLED: ${{ github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && 'true' || 'false' }}
       E2E_RBAC_PROJECT_ID: tiny-rice-70320263
       E2E_RBAC_BRANCH_ID: br-shy-scene-b67zm2v7
@@ -355,6 +354,9 @@ jobs:
           NODE
 
       - name: Run Auth0 end-to-end flow
+        env:
+          # Branch-scoped credential (never Neon API key); only this step can read it.
+          NEON_RBAC_TEST_OWNER_DATABASE_URL: ${{ secrets.NEON_RBAC_TEST_OWNER_DATABASE_URL }}
         run: |
           NODE_PATH="$RUNNER_TEMP/playwright/node_modules" \
             "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" test \
