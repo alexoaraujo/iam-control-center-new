@@ -41,7 +41,7 @@ export async function getReadUsersToken(config, fetcher = fetch) {
   if (!body || typeof body.access_token !== "string" || !body.access_token ||
       body.token_type !== "Bearer" ||
       typeof body.scope !== "string" ||
-      !body.scope.split(/\\s+/).includes("read:users")) {
+      !body.scope.split(/\s+/).includes("read:users")) {
     throw new Error("Management token has invalid type or insufficient read:users scope");
   }
   return body.access_token;
@@ -104,15 +104,15 @@ export async function executeDryRun(env, fetcher = fetch) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   if (process.argv.length !== 3 || process.argv[2] !== "--dry-run") {
-    process.stderr.write("Usage: node scripts/auth0-existing-users-dry-run.mjs --dry-run\\n");
+    process.stderr.write("Usage: node scripts/auth0-existing-users-dry-run.mjs --dry-run\n");
     process.exitCode = 2;
   } else {
     try {
       const summary = await executeDryRun(process.env);
-      process.stdout.write(JSON.stringify(summary) + "\\n");
+      process.stdout.write(JSON.stringify(summary) + "\n");
     } catch {
       // Errors may contain provider URLs, bodies or PII. Print no secret-bearing detail.
-      process.stderr.write("Auth0 read-only dry-run failed; see approved operator diagnostics.\\n");
+      process.stderr.write("Auth0 read-only dry-run failed; see approved operator diagnostics.\n");
       process.exitCode = 1;
     }
   }
