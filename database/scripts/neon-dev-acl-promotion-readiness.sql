@@ -126,7 +126,7 @@ SELECT jsonb_build_object(
  'unexpected_reachable_roles',unexpected_reachable_roles,
  'privileged_reachable_roles',privileged_reachable_roles,
  'verdict', CASE
-   WHEN db<>'iam_database' OR session_role<>'neondb_owner' OR pg_version<180000
+   WHEN db<>'iam_database' OR session_role<>'neondb_owner' OR pg_version<>180006
        THEN 'BLOCKED_WRONG_CONTEXT'
    WHEN runtime_login IS DISTINCT FROM TRUE
       OR runtime_inherit IS DISTINCT FROM TRUE
