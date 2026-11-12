@@ -46,3 +46,18 @@ PEOS gate: **CI fixture may PASS independently**, while Production/Neon default-
 `METADATA_ONLY` is **not** authorization to migrate, and all `BLOCKED_*` outcomes prevent promotion. The revised PostgreSQL18 fixture tests the actual `ALTER DEFAULT PRIVILEGES FOR ROLE <owner>` syntax, checks existing objects retain their already granted rights, confirms future objects are denied and verifies transactional cleanup. Existing object grants require separate inspection: future-default ACL revocation is **not retroactive**. As before, the fixture is not an approved Neon DDL rehearsal.
 
 The complete [schema/role/ACL drift report on PR #44](https://github.com/alexoaraujo/iam-control-center-new/blob/test/canonical-manifest-diff-gate-20261112/docs/evidence/neon-canonical-drift-inventory-2026-11-12.md) is on PR #44; until that PR is integrated, use its branch path as the evidence location. No persistent Neon SQL, role change, ledger backfill or Production update was made by this preflight.
+
+## SECURITY DEFINER access / search_path gate — 2026-11-12
+
+New single-SELECT, read-only script: `database/scripts/neon-security-definer-preflight.sql`. It checks function ownership, `EXECUTE` granted to PUBLIC, `USAGE` granted to PUBLIC on the containing schema, runtime `EXECUTE`, and whether `search_path` includes `public`. It never executes these routines or prints their bodies. The preflight was executed on the legacy source, NEW Development and disposable NEW clone.
+
+| Control | Legacy source | NEW Development | NEW clone |
+| --- | ---: | ---: | ---: |
+| SECURITY DEFINER routines | 6 | 6 | 6 |
+| Routines with PUBLIC EXECUTE | 1 | 1 | 1 |
+| PUBLIC EXECUTE **and** PUBLIC schema USAGE | 0 | 0 | 0 |
+| Routines with `public` in `search_path` | 1 | 0 | 0 |
+
+The one PUBLIC-executable function is `iam.clear_tenant_context()`. The schema `iam` does not grant PUBLIC USAGE in the three tested environments, so the two prerequisites for an unprivileged PUBLIC invocation are not currently both satisfied; this is **not** proof of no vulnerability under every role or future permission change. The origin `iam.set_tenant_context(...)` includes `public` in the SECURITY DEFINER search_path; the target removes it. Do **not** weaken the target to match the origin.
+
+The result is **REVIEW**, not PASS: the policy must explicitly decide whether to revoke PUBLIC EXECUTE on `clear_tenant_context()`, keep schema USAGE restricted, and inspect effective EXECUTE grants and the reviewed function bodies. Changes to persistent ACLs or functions require separately authorized DDL with rollback and tests in a disposable Neon clone. No DDL was applied in this verification.
