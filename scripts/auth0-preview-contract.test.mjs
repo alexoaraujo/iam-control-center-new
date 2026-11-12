@@ -6,16 +6,14 @@ const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
 const e2e = readFileSync(".github/e2e/auth0.spec.cjs", "utf8");
 const repository = "alexoaraujo/iam-control-center-new";
 const currentAlias = "iam-control-center-new-ci-preview.vercel.app";
-const currentBranch = "ci/optimize-pr-checks-20261110";
-
-test("Auth0 Preview callback and branch are configurable via reviewed environment variables", () => {
-  assert.ok(workflow.includes("vars.AUTH0_E2E_CALLBACK_HOST"));
-  assert.ok(workflow.includes("vars.AUTH0_E2E_CALLBACK_BRANCH"));
-  assert.ok(workflow.includes(currentAlias), "Existing reviewed Preview alias remains as fallback");
-  assert.ok(workflow.includes(currentBranch), "Existing reviewed PR remains as fallback");
-  assert.ok(workflow.includes('PR_HEAD_BRANCH}" != "${E2E_CALLBACK_BRANCH}'));
-  assert.ok(workflow.includes('PR_HEAD_REPOSITORY}" != "' + repository));
+test("Auth0 Preview callback is resolved from live Vercel binding for every PR", () => {
+  assert.ok(workflow.includes("iam-control-center-new-ci-preview.vercel.app"));
+  assert.ok(workflow.includes("VERCEL_API_TOKEN"));
+  assert.ok(workflow.includes("node scripts/bind-e2e-preview.mjs"));
+  assert.ok(workflow.includes("PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}"));
+  assert.ok(!workflow.includes("ci/optimize-pr-checks-20261110"));
 });
+
 
 test("E2E enforces exact browser origin and restricts trusted OIDC header to Preview", () => {
   assert.ok(e2e.includes("previewHost !== callbackHost"));

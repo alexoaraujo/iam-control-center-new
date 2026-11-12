@@ -102,6 +102,22 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   await page.reload();
   await expect(page.getByRole("status")).toHaveText("Acesso autenticado confirmado.");
 
+  // PR #42: positive Auth0 -> Neon sync runs only on the isolated Preview.
+  if (process.env.E2E_IDENTITY_SYNC === "true") {
+    const postSync = () => page.evaluate(async () => {
+      const response = await fetch("/api/identity/sync", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+      });
+      return { status: response.status, payload: await response.json() };
+    });
+    const first = await postSync();
+    expect(first.status).toBe(200);
+    expect(first.payload.synchronized).toBe(true);
+    expect(first.payload.id).toMatch(/^[0-9a-f-]{36}$/i);
+    const replay = await postSync();
+    expect(replay.status).toBe(200);
+    expect(replay.payload.id).toBe(first.payload.id);
+  }
   // Logout returns to the app root, which is immediately redirected to
   // Auth0 by the Next.js proxy. Verify the login screen, not a transient URL.
   await page.goto("/auth/logout");

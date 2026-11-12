@@ -64,6 +64,10 @@ echo "Running migration over an authenticated non-privileged LOGIN session..."
 # because they inspect ownership and exercise test-only grants/RLS behavior.
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/effective-privileges-contract.sql
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/0001_schema_contract.sql
+echo "Testing Auth0 identity sync, duplicates, RLS, default-deny and rollback on PostgreSQL 18..."
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f database/tests/identity-sync-contract.sql
+
 echo "Preparing the Development-derived sessions fixture for corrective migration 0002..."
 {
   printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
@@ -80,4 +84,24 @@ echo "Applying corrective migration 0002 and executing its rollback-only contrac
   cat database/tests/0002_sessions_touch_contract.sql
 } | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
 
-echo "PASS: role bootstrap, role-assumption contract, rollback, migration 0001, schema contract, migration 0002, sessions touch behavior, and shared updated_at regression tests"
+echo "Preparing CI-only FORCE RLS iam_owner policy fixture for migration 0003..."
+{
+  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  cat <<'SQL'
+CREATE POLICY iam_owner_access ON iam.identities
+  FOR ALL TO iam_owner USING (true) WITH CHECK (true);
+SQL
+} | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
+
+echo "Applying 0004 identity-sync SECURITY DEFINER capability under migration role..."
+{
+  printf '%s\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  cat database/migrations/0004_auth0_identity_sync_capability.sql
+} | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
+
+echo "Testing 0004 identity sync, replay, RLS and rollback with runtime LOGIN..."
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f database/tests/0004_auth0_identity_sync_contract.sql
+
+echo "PASS: role bootstrap, role assumption, migrations 0001/0002 plus reviewed Auth0 0004 fixture, identity sync RLS,
+transactions and rollback, and session touch regression checks"
