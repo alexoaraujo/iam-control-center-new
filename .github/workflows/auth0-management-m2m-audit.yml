@@ -1,0 +1,75 @@
+name: Auth0 Management M2M audit (read-only)
+
+# Restricted to the PR #42 branch and to changes to this workflow.
+# Never run this credentialed job on pull_request or forks.
+on:
+  push:
+    branches:
+      - feat/auth0-neon-identity-sync-20261111
+    paths:
+      - .github/workflows/auth0-management-m2m-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auth0-management-m2m-audit
+  cancel-in-progress: false
+
+jobs:
+  validate-client-credentials:
+    name: Validate OAuth2 client_credentials (no user export)
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/feat/auth0-neon-identity-sync-20261111'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: IAM-Audit-Development
+    env:
+      AUTH0_DOMAIN: ${{ vars.AUTH0_DOMAIN }}
+      AUTH0_MGMT_CLIENT_ID: ${{ secrets.AUTH0_MGMT_CLIENT_ID }}
+      AUTH0_MGMT_CLIENT_SECRET: ${{ secrets.AUTH0_MGMT_CLIENT_SECRET }}
+    steps:
+      - name: Validate approved domain, secrets, and Auth0 OAuth2 token scope
+        shell: bash
+        run: |
+          node <<'NODE'
+          (async () => {
+            const domain = process.env.AUTH0_DOMAIN;
+            if (domain !== 'iam-control-center.us.auth0.com') {
+              throw new Error('BLOCKED: AUTH0_DOMAIN does not match the approved audit tenant');
+            }
+            const clientId = process.env.AUTH0_MGMT_CLIENT_ID;
+            const clientSecret = process.env.AUTH0_MGMT_CLIENT_SECRET;
+            if (!clientId || !clientSecret) {
+              throw new Error('BLOCKED: GitHub environment M2M secrets are missing');
+            }
+            const url = 'https://iam-control-center.us.auth0.com/oauth/token';
+            const audience = 'https://iam-control-center.us.auth0.com/api/v2/';
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', accept: 'application/json' },
+              body: JSON.stringify({
+                grant_type: 'client_credentials',
+                client_id: clientId,
+                client_secret: clientSecret,
+                audience,
+                scope: 'read:users',
+              }),
+              signal: AbortSignal.timeout(20000),
+            });
+            if (!response.ok) {
+              throw new Error('BLOCKED: Auth0 OAuth2 returned HTTP ' + response.status);
+            }
+            // Parse in memory only. Never log the access token, HTTP body or user data.
+            const result = await response.json();
+            const scopes = typeof result.scope === 'string' ? result.scope.trim().split(/\\s+/).filter(Boolean) : [];
+            if (!result.access_token || result.token_type !== 'Bearer' ||
+                scopes.length !== 1 || scopes[0] !== 'read:users') {
+              throw new Error('BLOCKED: invalid token type or unexpected/missing scope');
+            }
+            console.log('PASS: OAuth2 client_credentials; audience Auth0 Management API; scope read:users only; token withheld; no users read; no Neon writes.');
+          })().catch((error) => {
+            console.error(error.message);
+            process.exitCode = 1;
+          });
+          NODE
