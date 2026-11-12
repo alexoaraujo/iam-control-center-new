@@ -33,6 +33,13 @@ The isolated [PR #45 rehearsal](https://github.com/alexoaraujo/iam-control-cente
 7. **Change isolation:** halt migrations and other writers while owner-default ACL operations are in progress. Confirm no concurrent DDL. Locking, latency, and conflicting migrations are STOP conditions.
 8. **Rehearsal:** revalidate that a disposal-only clone test on a recent parent LSN matches the reviewed proposed two statements. The previous clone result is proof of behavior for its snapshot only.
 
+
+## Live recovery readiness check — 2026-11-12
+
+Read-only Neon control-plane inspection of project `tiny-rice-70320263` found **no listed snapshots** and **no automatic snapshot schedule** for Development or the temporary clone. The project's configured historical retention is `21600` seconds (**6 hours**). This does not establish whether other backup processes exist, nor does it prove a usable PITR recovery point. The disposable ACL rehearsal branch `br-calm-mud-b6x10uvf` has an expiry; it must **not** be treated as the long-term rollback copy.
+
+**Recovery readiness verdict: BLOCKED.** Before any persistent Development ACL change, the operator must obtain an approved recovery path: a verified snapshot or validated time-based branch restore with suitable RPO/RTO, exact baseline/project/branch mapping, and an independently witnessed restore rehearsal. Record evidence in the existing backup/restore issue and identify a fallback for when the six-hour history window expires. No snapshot was created, no automatic schedule was changed, and no restore was invoked in this assessment. Resource use must remain within the project's permitted free-tier limits.
+
 ## Candidate change — for human-reviewed manual execution only
 
 **Do not feed this section to an automated migration runner.** The repo intentionally contains no automatically executed persistent ACL migration for this operation. The operator must perform the identity, environment and security gates above, use direct authenticated SQL with `ON_ERROR_STOP`, and review the transaction outcome **before COMMIT**.
