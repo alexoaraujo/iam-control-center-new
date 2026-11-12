@@ -5,7 +5,8 @@ const BUILD_RELEVANT = [
   /^\.github\/workflows\/quality\.yml$/,
   // E2E harness changes require a fresh exact-SHA Preview deployment.
   /^\.github\/e2e\//,
-  /^scripts\//,
+  // Governance-only CODEOWNERS contract tests have no runtime or Auth0 callback impact.
+  /^scripts\/(?!codeowners-contract\.test\.mjs$)/,
   /^apps\/web\//,
   /^packages\//,
   /^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|vercel\.json|turbo\.json|pnpmfile\.cjs)$/,
