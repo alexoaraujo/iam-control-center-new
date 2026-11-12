@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 test("migration identifiers are unique even across different schema lineages", () => {
   const folder = join(process.cwd(), "database", "migrations");
-  const files = readdirSync(folder).filter((name) => /^\\d{4}_.+\\.sql$/.test(name));
+  const files = readdirSync(folder).filter((name) => /^\d{4}_.+\.sql$/.test(name));
   assert.ok(files.length > 0, "Expected reviewed migration files");
   const versions = new Map();
   for (const name of files) {
