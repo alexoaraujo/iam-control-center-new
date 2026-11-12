@@ -4,7 +4,7 @@
 -- the Neon control plane; PostgreSQL cannot independently prove Neon branch ID.
 -- Expected fingerprint is intentionally pinned to the reviewed 2026-11-12
 -- NEW Development snapshot. Any drift blocks the proposed ACL change.
-WITH expected(kind, privilege) AS (
+WITH RECURSIVE expected(kind, privilege) AS (
  VALUES ('r'::"char", 'SELECT'::text),
         ('r'::"char", 'INSERT'),
         ('r'::"char", 'UPDATE'),
@@ -62,11 +62,25 @@ policies AS (
 ),
 ledger AS (SELECT count(*) AS count FROM iam.schema_migrations),
 membership AS (
- SELECT count(*) AS count
+ SELECT count(*) AS direct_count,
+        count(*) FILTER (WHERE parent.rolname='iam_app_runtime'
+            AND m.inherit_option AND NOT m.set_option AND NOT m.admin_option) AS expected_count
  FROM pg_auth_members m
  JOIN pg_roles parent ON parent.oid=m.roleid
  JOIN runtime rt ON rt.oid=m.member
- WHERE parent.rolname='iam_app_runtime' AND m.inherit_option AND NOT m.set_option AND NOT m.admin_option
+),
+runtime_reachable(role_oid,path) AS (
+ SELECT rt.oid, ARRAY[rt.oid]::oid[] FROM runtime rt
+ UNION ALL
+ SELECT m.roleid, rr.path || m.roleid
+ FROM runtime_reachable rr JOIN pg_auth_members m ON m.member=rr.role_oid
+ WHERE NOT m.roleid = ANY(rr.path)
+),
+reachable_summary AS (
+ SELECT count(*) FILTER (WHERE r.rolname NOT IN ('iam_app_runtime_login','iam_app_runtime')) AS unexpected_roles,
+        count(*) FILTER (WHERE r.rolsuper OR r.rolbypassrls OR r.rolcreatedb
+                                OR r.rolcreaterole OR r.rolreplication) AS privileged_roles
+ FROM runtime_reachable rr JOIN pg_roles r ON r.oid=rr.role_oid
 ),
 details AS (
  SELECT current_database() AS db, current_user AS session_role,
@@ -87,8 +101,11 @@ details AS (
  application_objects.force_rls AS force_rls_count,
  policies.count AS policy_count,
  ledger.count AS ledger_rows,
- membership.count AS expected_runtime_memberships
- FROM acl_counts,public_other_owner,public_objects,application_objects,policies,ledger,membership
+ membership.direct_count AS total_runtime_memberships,
+ membership.expected_count AS expected_runtime_memberships,
+ reachable_summary.unexpected_roles AS unexpected_reachable_roles,
+ reachable_summary.privileged_roles AS privileged_reachable_roles
+ FROM acl_counts,public_other_owner,public_objects,application_objects,policies,ledger,membership,reachable_summary
 )
 SELECT jsonb_build_object(
  'format','iam-neon-dev-acl-preflight/v1',
@@ -105,6 +122,9 @@ SELECT jsonb_build_object(
  'force_rls_count',force_rls_count,'policy_count',policy_count,
  'ledger_rows',ledger_rows,
  'expected_runtime_memberships',expected_runtime_memberships,
+ 'total_runtime_memberships',total_runtime_memberships,
+ 'unexpected_reachable_roles',unexpected_reachable_roles,
+ 'privileged_reachable_roles',privileged_reachable_roles,
  'verdict', CASE
    WHEN db<>'iam_database' OR session_role<>'neondb_owner' OR pg_version<180000
        THEN 'BLOCKED_WRONG_CONTEXT'
@@ -114,7 +134,8 @@ SELECT jsonb_build_object(
       OR runtime_database_create IS DISTINCT FROM FALSE
       OR runtime_temp IS DISTINCT FROM FALSE
       OR runtime_public_create IS DISTINCT FROM FALSE
-      OR expected_runtime_memberships<>1
+      OR expected_runtime_memberships<>1 OR total_runtime_memberships<>1
+      OR unexpected_reachable_roles<>0 OR privileged_reachable_roles<>0
        THEN 'BLOCKED_UNSAFE_RUNTIME_ROLE'
    WHEN future_acl_count<>6 OR expected_acl_count<>6 OR unexpected_acl_count<>0
       OR other_owner_public_acl<>0
