@@ -20,7 +20,9 @@ const collections = {
   role_memberships: x => JSON.stringify(x),
 };
 const canonical = value => {
-  if (Array.isArray(value)) return JSON.stringify(value.map(x => JSON.parse(canonical(x))).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))));
+  // Preserve nested PostgreSQL array order (notably pg_enum.enumsortorder).
+  // Only top-level object collections are unordered, via identity Maps below.
+  if (Array.isArray(value)) return JSON.stringify(value.map(x => JSON.parse(canonical(x))));
   if (value !== null && typeof value === 'object') {
     return JSON.stringify(Object.fromEntries(Object.keys(value).sort().map(k=>[k,JSON.parse(canonical(value[k]))])));
   }
