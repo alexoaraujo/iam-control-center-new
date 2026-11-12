@@ -17,8 +17,25 @@ test('ACL mismatch reports only relation name',()=>{
  assert.doesNotMatch(report(a,b),/secret source|secret target/);
 });
 test('SECURITY DEFINER configuration mismatch is visible',()=>{
- const a=base(),b=base();a.routines=[{schema:'iam',name:'set_tenant_context',identity_arguments:'uuid',configuration:['pg_catalog,iam,public']}];b.routines=[{...a.routines[0],configuration:['pg_catalog,iam']}];
+ const a=base(),b=base();a.routines=[{schema:'iam',name:'set_tenant_context',identity_arguments:'uuid',kind:'f',definition_sha256:'a'.repeat(64),configuration:['pg_catalog,iam,public']}];b.routines=[{...a.routines[0],configuration:['pg_catalog,iam']}];
  assert.equal(compareManifests(a,b).count,1);
+});
+test('function body drift fails even when name, owner and search_path match',()=>{
+ const a=base(),b=base();
+ a.routines=[{schema:'iam',name:'set_tenant_context',identity_arguments:'uuid',kind:'f',definition_sha256:'a'.repeat(64),security_definer:true}];
+ b.routines=[{...a.routines[0],definition_sha256:'b'.repeat(64)}];
+ assert.equal(compareManifests(a,b).count,1);
+ assert.match(report(a,b),/routines.iam.set_tenant_context/);
+ assert.doesNotMatch(report(a,b),/[a-f0-9]{64}/i);
+});
+test('rejects unverified function bodies from incomplete or tampered manifests',()=>{
+ const a=base(),b=base();
+ a.routines=[{schema:'iam',name:'safe',identity_arguments:'',kind:'f',definition_sha256:'a'.repeat(64)}];
+ b.routines=[{...a.routines[0]}];
+ delete b.routines[0].definition_sha256;
+ assert.throws(()=>compareManifests(a,b),/routine definition SHA-256/);
+ b.routines[0].definition_sha256='forged';
+ assert.throws(()=>compareManifests(a,b),/routine definition SHA-256/);
 });
 test('missing sections, duplicate object keys, unknown fields and metadata mismatch fail',()=>{
  const a=base();delete a.policies;assert.throws(()=>compareManifests(a,base()),/section policies/);
