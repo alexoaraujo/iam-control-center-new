@@ -56,3 +56,22 @@ Until the gates pass: `AUTH0_NEON_SYNC_ENABLED` must be absent or false.
 - Neon Development (`tiny-rice-70320263` / `iam_database`) has ledger columns `(migration_id, checksum_sha256, source_sha, applied_at, execution_role)`; both Development and the isolated PR42 child returned **zero rows** in `iam.schema_migrations` at inspection. The clean-install repository migration defines different ledger columns `(version, name, checksum, applied_at, applied_by)`.
 - No automatic migration runner exists. Until source lineage and the actual checksum-backed ledger are reconciled, apply **no changes** to Development/Production and do not mark the historic migrations applied retroactively.
 - Existing-user import: keep Management API dry-run and synthetic fixtures separate from a real backfill; aggregate counts only and require an independently reviewed operator gate before real mutations.
+
+## Existing Auth0 users — operator-only dry-run / backfill contract (PR #42)
+
+The repository now includes:
+
+- `apps/web/src/lib/auth0-management-token.ts`: server-only M2M token request with the **read:users** scope, for the configured Auth0 Management API audience. The tenant must explicitly authorize that scope.
+- `apps/web/src/lib/auth0-existing-users.ts`: paginated reader that requests **only** `user_id,email,email_verified,name` and fails closed on provider errors.
+- `apps/web/src/lib/auth0-existing-users-import.ts`: coordinator with **dry-run as the default**, duplicate detection, a 999-user maximum, an SHA-256 fingerprint of the fully normalized source snapshot, and a separate reviewed apply gate tied to the expected disposable branch ID.
+- `apps/web/src/lib/auth0-existing-users-import.test.ts` and `auth0-management-token.test.ts`: synthetic-only contract tests for dry-run, approval, idempotent function parameters, changed source population/profile, duplicate IDs, wrong issuer, M2M token scope, token failures and write failure handling.
+
+**No public HTTP endpoint and no unattended job runs this import.** These are reusable operator-side building blocks, not proof of a deployed backfill service. `AUTH0_NEON_SYNC_ENABLED` controls the authenticated login sync endpoint **only**; it is not a substitute for the independent existing-user import approval.
+
+A reviewed operator workflow must first obtain an M2M token using tenant-scoped credentials, run the pure **dry-run** (no SQL writer), review the aggregate count and opaque snapshot fingerprint without exporting PII to logs, then re-read the source using **apply** with a separate authorization, verified isolated Neon branch ID, exact expected count and fingerprint, and the runtime function contract. The entire dataset is checked before any write. Auth0 `read:users` access and an operator environment must be separately provisioned; **no actual tenant users were exported or bulk-imported as part of this PR**.
+
+The list-users Management API only supports offset retrieval up to 1,000 users. The current in-memory operator contract is limited to **999 users** and fails closed otherwise. For larger populations, use a reviewed Auth0 user-export job and a separately designed importer. An interrupted approved import might have partial writes; replay is idempotent on `(issuer,subject)`, but a formal reconciliation of counts, audit evidence, and isolation is still mandatory.
+
+Both Neon Development and PR42 disposable ledgers were empty at inspection; the actual Neon columns are `migration_id, checksum_sha256, source_sha, applied_at, execution_role`, which differ from the clean-install schema's ledger. Never infer historic migration application from a matching schema; wait for a checksum-based, reviewed lineage baseline.
+
+**Outstanding gates:** audited source count from the actual Auth0 tenant; explicit M2M credential and operator approval; real dry-run and apply only on a fresh disposable branch; baseline/ledger reconciliation, secure runner with atomic checksum registration, backup/restore rehearsal, and independent Development/Production authorization.
