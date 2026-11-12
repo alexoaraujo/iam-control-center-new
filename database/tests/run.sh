@@ -105,3 +105,14 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 
 echo "PASS: role bootstrap, role assumption, migrations 0001/0002 plus reviewed Auth0 0004 fixture, identity sync RLS,
 transactions and rollback, and session touch regression checks"
+
+# Refusal is the intended positive test: portable CI fixture != reviewed Neon
+# Development project/branch/role. Never infer a persistent DDL approval here.
+echo "Verifying the Neon ACL promotion gate fails closed on unrelated PostgreSQL 18 CI..."
+acl_readiness="$(PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
+  -f database/scripts/neon-dev-acl-promotion-readiness.sql)"
+if [[ "$acl_readiness" != *'"verdict": "BLOCKED_WRONG_CONTEXT"'* ]]; then
+  echo "ERROR: expected fail-closed BLOCKED_WRONG_CONTEXT for CI, not promotion readiness" >&2
+  exit 1
+fi
+echo "PASS: ACL promotion gate refuses unapproved CI database and execution identity"
