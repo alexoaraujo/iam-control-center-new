@@ -76,6 +76,24 @@ runtime_reachable(role_oid,path) AS (
  FROM runtime_reachable rr JOIN pg_auth_members m ON m.member=rr.role_oid
  WHERE NOT m.roleid = ANY(rr.path)
 ),
+-- Schema-local REVOKE cannot cancel defaults granted GLOBALLY by an owner,
+-- and a grant to PUBLIC / an inherited runtime group still reaches the login.
+-- Check these independently of the six direct, schema-local grants above.
+indirect_future_acl_risks AS (
+ SELECT count(*) AS unsafe_count
+ FROM pg_default_acl d
+ LEFT JOIN pg_namespace ns ON ns.oid=d.defaclnamespace
+ CROSS JOIN LATERAL aclexplode(d.defaclacl) a
+ WHERE d.defaclobjtype IN ('r'::"char",'S'::"char")
+   AND (d.defaclnamespace=0 OR ns.nspname='public')
+   AND (
+      a.grantee=0
+      OR (a.grantee IN (SELECT rr.role_oid FROM runtime_reachable rr)
+          AND NOT (ns.nspname='public'
+               AND pg_get_userbyid(d.defaclrole)='neondb_owner'
+               AND a.grantee IN (SELECT rt.oid FROM runtime rt)))
+   )
+),
 reachable_summary AS (
  SELECT count(*) FILTER (WHERE r.rolname NOT IN ('iam_app_runtime_login','iam_app_runtime')) AS unexpected_roles,
         count(*) FILTER (WHERE r.rolsuper OR r.rolbypassrls OR r.rolcreatedb
@@ -104,8 +122,9 @@ details AS (
  membership.direct_count AS total_runtime_memberships,
  membership.expected_count AS expected_runtime_memberships,
  reachable_summary.unexpected_roles AS unexpected_reachable_roles,
- reachable_summary.privileged_roles AS privileged_reachable_roles
- FROM acl_counts,public_other_owner,public_objects,application_objects,policies,ledger,membership,reachable_summary
+ reachable_summary.privileged_roles AS privileged_reachable_roles,
+ indirect_future_acl_risks.unsafe_count AS indirect_future_acl_risks
+ FROM acl_counts,public_other_owner,public_objects,application_objects,policies,ledger,membership,reachable_summary,indirect_future_acl_risks
 )
 SELECT jsonb_build_object(
  'format','iam-neon-dev-acl-preflight/v1',
@@ -125,6 +144,7 @@ SELECT jsonb_build_object(
  'total_runtime_memberships',total_runtime_memberships,
  'unexpected_reachable_roles',unexpected_reachable_roles,
  'privileged_reachable_roles',privileged_reachable_roles,
+ 'indirect_future_acl_risks',indirect_future_acl_risks,
  'verdict', CASE
    WHEN db<>'iam_database' OR session_role<>'neondb_owner' OR pg_version<>180006
        THEN 'BLOCKED_WRONG_CONTEXT'
@@ -138,7 +158,7 @@ SELECT jsonb_build_object(
       OR unexpected_reachable_roles<>0 OR privileged_reachable_roles<>0
        THEN 'BLOCKED_UNSAFE_RUNTIME_ROLE'
    WHEN future_acl_count<>6 OR expected_acl_count<>6 OR unexpected_acl_count<>0
-      OR other_owner_public_acl<>0
+      OR other_owner_public_acl<>0 OR indirect_future_acl_risks<>0
        THEN 'BLOCKED_UNEXPECTED_FUTURE_ACLS'
    WHEN public_object_count<>0 OR application_object_count<>27
       OR foreign_owned_application_objects<>0 OR force_rls_count<>20
