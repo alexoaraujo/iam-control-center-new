@@ -62,7 +62,7 @@ jobs:
             }
             // Parse in memory only. Never log the access token, HTTP body or user data.
             const result = await response.json();
-            const scopes = typeof result.scope === 'string' ? result.scope.trim().split(/\\s+/).filter(Boolean) : [];
+            const scopes = typeof result.scope === 'string' ? result.scope.trim().split(/\s+/).filter(Boolean) : [];
             if (!result.access_token || result.token_type !== 'Bearer' ||
                 scopes.length !== 1 || scopes[0] !== 'read:users') {
               throw new Error('BLOCKED: invalid token type or unexpected/missing scope');
