@@ -84,4 +84,15 @@ echo "Applying corrective migration 0002 and executing its rollback-only contrac
   cat database/tests/0002_sessions_touch_contract.sql
 } | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
 
-echo "PASS: role bootstrap, role-assumption contract, rollback, migration 0001, schema contract, migration 0002, sessions touch behavior, and shared updated_at regression tests"
+echo "Applying 0003 identity-sync SECURITY DEFINER capability under migration role..."
+{
+  printf '%s\\n' 'SET ROLE iam_migrator;' 'SET ROLE iam_owner;'
+  cat database/migrations/0003_auth0_identity_sync_capability.sql
+} | PGPASSWORD="$MIGRATOR_TEST_PASSWORD" psql "$MIGRATOR_DATABASE_URL" -v ON_ERROR_STOP=1
+
+echo "Testing 0003 identity sync, replay, RLS and rollback with runtime LOGIN..."
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \\
+  -f database/tests/0003_auth0_identity_sync_contract.sql
+
+echo "PASS: role bootstrap, role assumption, migrations 0001-0003, identity sync RLS,
+transactions and rollback, and session touch regression checks"
