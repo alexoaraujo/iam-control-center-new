@@ -47,7 +47,7 @@
 - [x] Neon Development e clone consultados read-only: ledger de migrations vazio, esquema do ledger divergente da migração clean-install; histórico **não fabricado**.
 - [x] Implementado dry-run operator-only com M2M `read:users`, paginação de dados mínimos, validação de sujeitos e checksum da fonte, sem nenhuma operação SQL.
 - [x] Checklists das 17 issues diretamente afetadas receberam checkpoint específico com evidências. Demais 11 mantêm seu escopo/estado, pois esta PR não comprova seus critérios.
-- [ ] Confirmar CI do **SHA posterior** desta rodada e registrar 4 workflows, sem assumir PASS.
+- [x] CI do SHA `a89f0607c29cde793be8889536b87249f8f20a44` confirmado: 4/4 workflows SUCCESS ([CI #43130444866](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/43130444866), [PostgreSQL18 #43130444877](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/43130444877), [Vercel #43130444865](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/43130444865), [Docs #43130445003](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/43130445003)); 58 Vitest, seis testes novos de dry-run CLI Node, 1 E2E Auth0 real PASS.
 - [ ] Provisionar credenciais M2M autorizadas `read:users` fora do código, executar dry-run real e salvar apenas contagem/checksum sem PII.
 - [ ] Comparar snapshot com Neon isolado, aprovar apply em novo branch descartável e registrar rollback/reconciliação.
 - [ ] Reconciliar ledger por checksum com a baseline canônica, lock de concorrência e restore.
