@@ -13,7 +13,7 @@ WITH functions AS (
                   WHERE x.grantee=0),false) AS public_schema_usage,
         has_function_privilege('iam_app_runtime_login',p.oid,'EXECUTE') AS runtime_execute,
         EXISTS (SELECT 1 FROM unnest(COALESCE(p.proconfig,ARRAY[]::text[])) cfg
-                WHERE cfg ~* '^search_path\\s*=' AND cfg ~* '(^|[, =])public([, ]|$)') AS search_path_includes_public
+                WHERE cfg ~* '^search_path\s*=' AND cfg ~* '(^|[, =])public([, ]|$)') AS search_path_includes_public
  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
  WHERE n.nspname IN ('iam','audit','app_private') AND p.prosecdef
 )
