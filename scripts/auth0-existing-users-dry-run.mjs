@@ -41,7 +41,7 @@ export async function getReadUsersToken(config, fetcher = fetch) {
   if (!body || typeof body.access_token !== "string" || !body.access_token ||
       body.token_type !== "Bearer" ||
       typeof body.scope !== "string" ||
-      !body.scope.split(/\s+/).includes("read:users")) {
+      body.scope.trim().split(/\s+/).filter(Boolean).join(" ") !== "read:users") {
     throw new Error("Management token has invalid type or insufficient read:users scope");
   }
   return body.access_token;
@@ -78,9 +78,9 @@ export async function scanUsers(config, token, fetcher = fetch) {
         email: typeof item.email === "string" && item.email.trim()
           ? item.email.trim().slice(0, 320) : null,
         emailVerified: item.email_verified === true,
-        verifiedPresent: typeof item.email_verified === "boolean",
         name: typeof item.name === "string" && item.name.trim()
           ? item.name.trim().slice(0, 255) : null,
+        verifiedPresent: typeof item.email_verified === "boolean",
       });
     }
     if (body.length < PAGE_SIZE) {
