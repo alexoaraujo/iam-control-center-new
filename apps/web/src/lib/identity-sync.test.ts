@@ -21,12 +21,12 @@ describe("Auth0 identity synchronization", () => {
     const profile = { sub: "auth0|123", email: " user@example.com ", name: "Test User", email_verified: true };
     await syncIdentity({ query }, issuer, profile);
     const [statement, params] = query.mock.calls[0];
-    expect(statement).toContain("ON CONFLICT (issuer, subject)");
+    expect(statement).toContain("iam.sync_auth0_identity($1, $2, $3, $4, $5, $6, $7)");
+    expect(statement).not.toContain("INSERT INTO");
     expect(statement).not.toContain("membership");
     expect(statement).not.toContain("role");
     expect(params).toEqual([issuer, "auth0|123", "user@example.com", true, "Test User", true, true]);
-    expect(statement).toContain("COALESCE(EXCLUDED.email");
-    expect(statement).toContain("last_authenticated_at = CASE WHEN $6");
+    expect(statement).toContain("SELECT id, issuer, subject");
   });
   it("synchronizes existing users one at a time without duplicating memberships", async () => {
     const query = vi.fn().mockResolvedValue([{ id: "test-id", issuer, subject: "auth0|123" }]);
