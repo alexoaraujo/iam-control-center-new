@@ -38,3 +38,14 @@ No automatic Management API credential provisioning, bulk export, or database mu
 6. Separate Production approval, backup/restore and rollback evidence.
 
 Until the gates pass: `AUTH0_NEON_SYNC_ENABLED` must be absent or false.
+
+## PR #42 — isolated Preview rollout and verified evidence (2026-11-11)
+
+- Vercel project `iam-control-center-new` (`aoa4`): `AUTH0_NEON_SYNC_ENABLED=true` **only** for Preview branch `feat/auth0-neon-identity-sync-20261111`; Development has `false`; Production environment was **not modified**.
+- Preview-only `DATABASE_URL` secret points to Neon project `tiny-rice-70320263`, database `iam_database`, disposable child branch `br-floral-lab-b63xaw3z`, runtime role `iam_app_runtime_login`, SSL required. Connection password is never committed or logged. Expiry: `2026-11-13T00:00:00Z`.
+- Reviewed PostgreSQL 18 function migration `0003_auth0_identity_sync_capability.sql` is installed on the disposable Neon child only. It is `SECURITY DEFINER`, owned by `iam_owner`, restricted to the configured Auth0 issuer, callable by `iam_app_runtime`. No direct identity INSERT/UPDATE grants to runtime; no memberships or roles created.
+- Live Neon child runtime tests: role is LOGIN, NOBYPASSRLS, NOSUPERUSER; direct INSERT and UPDATE denied; zero tenant-context SELECT; two synthetic identities, import replay idempotent; wrong issuer denied; rollback confirmed zero fixtures and zero memberships. A real Auth0 browser E2E is separately required.
+- PostgreSQL 18 CI: [database-schema-tests run #70](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/43125660391) — all three jobs passed, including the new migration and fixture contract.
+- Post-rollout E2E job tests authenticated POST `/api/identity/sync` twice and requires the same UUID; this is **not** proof of a real login until its latest exact-SHA run passes.
+- Rollback: set the branch-specific Preview flag to `false`, trigger a new Preview deployment, and stop all writes; let the disposable Neon child expire. Do not reuse its credentials or promote this function or policy to Production without separate approval.
+- Existing-user Auth0 bulk import and canonical ledger reconciliation remain blocked until independent authorization and evidence; no external users exported or imported by this change.
