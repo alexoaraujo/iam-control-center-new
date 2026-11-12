@@ -10,7 +10,7 @@ This is an operational proposal for the **six** future grants of `iam_app_runtim
 | --- | --- |
 | Neon project | `tiny-rice-70320263` |
 | Environment | `development` — branch ID `br-ancient-term-b6mmx5ol` |
-| Database | `iam_database`, PostgreSQL 18.6 |
+| Database | `iam_database`, PostgreSQL 18.7 |
 | Administrative execution identity | `neondb_owner`, direct TLS connection, never an app/runtime credential |
 | Runtime principal | `iam_app_runtime_login`, LOGIN, NOBYPASSRLS, no database CREATE/TEMP |
 | Expected future `public` default ACL | 6, four table + two sequence grants, from `neondb_owner` |
@@ -27,7 +27,7 @@ The isolated [PR #45 rehearsal](https://github.com/alexoaraujo/iam-control-cente
 1. **Control-plane identity:** independently verify the exact project ID, branch ID, and database via Neon. A `SELECT current_database()` does **not** prove the Neon branch. Forbid default `production` (`br-muddy-snow-b63cepcv`) and any Preview/E2E branch. Never use a pooled/multiplexed endpoint for operational DDL.
 2. **Independent reviews:** obtain a new approval on **this proposal's exact final SHA**, separate from the approval of the tested PR #45. Operator explicitly approves **persistent ACL-only remediations on Development**, after confirming off-peak impact and any maintenance/change ticket. No blanket approval for roles, migrations, audit policies, data, flags, Vercel, or Production.
 3. **Recovery checkpoint:** verify direct TLS connectivity; capture independent pre-change catalog manifest with protected storage and an approved backup/PITR or a rollback alternative. Use the actual role and owner from the preflight. Record last-known-good SHA, timestamp, branch, and output checksum. Secrets must remain in protected environments.
-4. **Role graph:** reject any direct membership beyond the single reviewed `iam_app_runtime` grant, or any recursively reachable role outside `iam_app_runtime_login` / `iam_app_runtime` (including elevated provider roles). Version `18.6` is pinned to the reviewed snapshot; a patch upgrade requires a fresh preflight and review.
+4. **Role graph:** reject any direct membership beyond the single reviewed `iam_app_runtime` grant, or any recursively reachable role outside `iam_app_runtime_login` / `iam_app_runtime` (including elevated provider roles). Version `18.7` is pinned to the reviewed snapshot; a patch upgrade requires a fresh preflight and review.
 5. **Snapshot/invariant:** execute `database/scripts/neon-dev-acl-promotion-readiness.sql` as `neondb_owner` directly in the exact target branch. Require `PRECHECK_MATCH_REVIEW_REQUIRED` **AND operator approval**. Any BLOCKED error, missing object, new grant, unexpected owner, changed policy/ledger, or altered runtime attribute stops work. Re-run immediately before execution; do not reuse an old snapshot.
 6. **Review `SECURITY DEFINER`** with `database/scripts/neon-security-definer-preflight.sql` from PR #45. Its `REVIEW_PUBLIC_EXECUTE_WITHOUT_SCHEMA_USAGE` is a separate reviewer decision. Do not broaden privileges in order to make this report green.
 7. **Change isolation:** halt migrations and other writers while owner-default ACL operations are in progress. Confirm no concurrent DDL. Locking, latency, and conflicting migrations are STOP conditions.
@@ -42,6 +42,13 @@ The isolated [PR #45 rehearsal](https://github.com/alexoaraujo/iam-control-cente
 - **Live logical consistency proof:** exact `COUNT(*)` checks across all 23 IAM/app_private/audit tables matched between Development and the Development-derived clone: **18 total rows in each** (2 identities, 16 permissions, all other tables empty). Separately computed SHA-256 of canonicalized full row JSON for every one of the 23 tables also matched in all sections. No row contents, identity subjects, keys, or individual hashes were exported into the repository. This is a point-in-time equivalence check between branches, **not** an executed restore, data backup integrity attestation, durability guarantee or RTO/RPO measurement.
 
 **Safe next recovery exercise (not yet executed):** obtain independent approval for a direct-TLS, least-privilege logical `pg_dump` of Development and a `pg_restore` into an exclusively disposable, non-production destination, or use a provider-supported isolated restore path that does not mutate `production`. Before execution check the Free plan limits, backup size, credentials, secret storage, expiry, and source/target identifiers. The restoration gate passes only with actual restored table/row/schema consistency, tested role/ACL/RLS semantics, audit provenance, and independently recorded RPO/RTO. The backup contents must not be uploaded as a public GitHub artifact. Until such proof exists: **RECOVERY BLOCKED / PERSISTENT DDL BLOCKED**.
+
+
+### Revalidation after automatic Neon patch update — 2026-11-12
+
+A read-only SQL verification observed **PostgreSQL 18.7** (`server_version_num=180007`) in the legacy source, NEW Development and the existing NEW clone. The previous hard-coded version `18.6` correctly produced `BLOCKED_WRONG_CONTEXT` after the provider version changed. The preflight was updated to require **exactly 18.7**, and rerun against Development and clone. Both returned `PRECHECK_MATCH_REVIEW_REQUIRED`, with 6/6 expected schema-local default ACL entries, 27 IAM application relations, 41 policies, 20 FORCE RLS, ledger=0, one runtime membership and zero unexpected/privileged reachable roles. Clone-vs-Development schema diff was empty. **The reviewed SHA changes after this revalidation and requires new independent approval.**
+
+The revised preflight also rejects three indirect future-privilege paths not fixed by the proposed schema-local revoke: **global** owner-default grants, grants to **PUBLIC**, and grants to any **directly/transitively reachable runtime group**. Read-only NEW Development and clone checks found `indirect_future_acl_risks=0`. `database/tests/future-default-acl-shadow-fixture.sql` creates all three in a disposable PostgreSQL 18 CI transaction, verifies that a schema-local REVOKE does not eliminate them, and rolls everything back. A fixture that passes does not establish any Neon production readiness.
 
 ## Live recovery readiness check — 2026-11-12
 
