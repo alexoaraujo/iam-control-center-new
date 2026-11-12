@@ -36,8 +36,8 @@ export async function getAuth0ReadUsersToken(
     throw new Error("Invalid Auth0 token response");
   }
   // Fail closed when provider declares an inadequate scope.
-  if (typeof data.scope === "string" && !data.scope.split(/\s+/).includes("read:users")) {
-    throw new Error("Auth0 token missing read:users permission");
+  if (typeof data.scope === "string" && data.scope.trim().split(/\s+/).filter(Boolean).join(" ") !== "read:users") {
+    throw new Error("Auth0 token must have exactly read:users scope");
   }
   return data.access_token;
 }
