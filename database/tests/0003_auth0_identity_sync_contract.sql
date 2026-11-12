@@ -43,10 +43,15 @@ SELECT id FROM iam.sync_auth0_identity(
 -- No tenant context and no membership: SELECT must remain empty.
 DO $deny_reads$
 BEGIN
-  IF EXISTS (SELECT 1 FROM iam.identities
-     WHERE subject IN ('auth0|pr42-synthetic-a','auth0|pr42-synthetic-b')) THEN
-    RAISE EXCEPTION 'FAIL: cross-tenant identity visibility';
-  END IF;
+  -- Clean-install 0001 has no SELECT grant at all (42501). Canonical
+  -- Development may grant SELECT but RLS still must return zero.
+  BEGIN
+    IF EXISTS (SELECT 1 FROM iam.identities
+       WHERE subject IN ('auth0|pr42-synthetic-a','auth0|pr42-synthetic-b')) THEN
+      RAISE EXCEPTION 'FAIL: cross-tenant identity visibility';
+    END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
   BEGIN
     PERFORM id FROM iam.sync_auth0_identity(
       'https://wrong-issuer.example/','auth0|pr42-synthetic-c',
