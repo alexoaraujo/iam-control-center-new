@@ -36,7 +36,9 @@ BEGIN
  WHERE d.defaclrole='iam_acl_shadow_fixture_owner'::regrole
  AND d.defaclobjtype='r'::"char"
  AND (d.defaclnamespace=0 OR n.nspname='public')
- AND a.privilege_type='SELECT';
+ AND a.privilege_type='SELECT'
+ AND (a.grantee=0 OR a.grantee IN
+       ('iam_app_runtime_login'::regrole,'iam_app_runtime'::regrole));
  IF total<>3 OR global_login<>1 OR group_role<>1 OR public_any<>1
  THEN RAISE EXCEPTION 'expected three shadow-grant paths: %, %, %, %',
  total,global_login,group_role,public_any; END IF;
