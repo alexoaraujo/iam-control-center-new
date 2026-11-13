@@ -202,6 +202,26 @@ def check_runtime_role_contract(source_creds: dict[str, str],
         )
 
 
+    # Compare every outbound membership and PostgreSQL 16+ SET / INHERIT
+    # option; equal LOGIN attributes do not establish authorization parity.
+    membership_sql = """SELECT member.rolname, granted.rolname,
+      m.admin_option, m.inherit_option, m.set_option
+      FROM pg_auth_members m
+      JOIN pg_roles member ON member.oid=m.member
+      JOIN pg_roles granted ON granted.oid=m.roleid
+      WHERE member.rolname IN
+        ('iam_app_runtime_login','iam_migrator_login','iam_worker_login')
+      ORDER BY member.rolname, granted.rolname"""
+    source_memberships = scalar(membership_sql, source_creds, workspace).strip()
+    target_memberships = scalar(membership_sql, target_creds, workspace).strip()
+    if not source_memberships or source_memberships != target_memberships:
+        raise GateBlocked(
+            "BLOCKED_ROLE_MEMBERSHIPS: source and destination LOGIN role "
+            "memberships differ (including ADMIN, INHERIT and SET options); "
+            "no restoration DDL is permitted"
+        )
+
+
 def execute(mode: str) -> None:
     if mode not in ("export_only", "restore_isolated"):
         raise GateBlocked("unrecognized operation")
