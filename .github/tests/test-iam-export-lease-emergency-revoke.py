@@ -73,6 +73,31 @@ class RevokerTest(TestCase):
                 m.decode_credentials(val)
             self.assertNotIn(PASSWORD, str(cm.exception))
 
+    def test_preflight_denies_unsafe_export_reader_before_any_change(self):
+        for before in (
+            "READER_SECURITY|0|23|0|0|0|0",
+            "READER_SECURITY|1|23|0|0|1|0",
+            "READER_SECURITY|1|23|0|0|0|1",
+        ):
+            fake, calls = fake_runner((0, before))
+            with self.subTest(before=before), self.assertRaisesRegex(
+                m.GateBlocked, "unsafe export role"
+            ):
+                m.execute("preflight", "", supplied(), fake)
+            self.assertEqual(len(calls), 1)
+            self.assertNotIn("REVOKE MAINTAIN", calls[0][1])
+
+    def test_workflow_is_manual_main_only_with_separate_environment(self):
+        workflow = (SCRIPT.parents[1] / "workflows" /
+                    "iam-export-emergency-revoke.yml").read_text(encoding="utf8")
+        self.assertIn("on:\n  workflow_dispatch:", workflow)
+        self.assertNotIn("\n  schedule:", workflow)
+        self.assertIn("github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("name: IAM-Canonical-Revocation", workflow)
+        self.assertIn("IAM_EXPORT_REVOKER_URL: " + "${{ secrets.IAM_EXPORT_REVOKER_URL }}", workflow)
+        self.assertNotIn("\n  pull_request_target:", workflow)
+        self.assertNotIn("GRANT MAINTAIN", workflow)
+
     def test_source_branch_id_is_required_before_even_preflight(self):
         for name, changed in (
             ("IAM_EXPORT_REVOKER_PROJECT_ID", "twilight-fire-88497009"),
