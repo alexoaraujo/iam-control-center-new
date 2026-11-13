@@ -362,8 +362,8 @@ class IsolatedRunnerContract(unittest.TestCase):
                     "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
         self.assertIn("          - readiness_only", workflow)
         self.assertIn("inputs.operation == 'readiness_only'", workflow)
-        auth = workflow.split("\\n  authenticated-export-and-optional-restore:", 1)[1]
-        self.assertIn("environment:\\n      name: IAM-Canonical-Isolated-Restore", auth)
+        auth = workflow.split("\n  authenticated-export-and-optional-restore:", 1)[1]
+        self.assertIn("environment:\n      name: IAM-Canonical-Isolated-Restore", auth)
         self.assertIn("IAM_CANONICAL_CONFIRMATION: ${{ inputs.confirm_isolated_ddl }}", auth)
         self.assertIn("IAM_CANONICAL_OPERATION: ${{ inputs.operation }}", auth)
 
