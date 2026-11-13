@@ -103,3 +103,31 @@ The absence of a `COMMIT` is intentional. Once reviewed and specifically authori
 - `BLOCKED`: any structural/ledger drift, unreviewed ownership difference, changed policies, unknown grants, role escalation, wrong branch, unresolved backup/restore, unavailable independent approval, or missing rollback evidence.
 - `SKIPPED` never equals PASS.
 - This PR's CI can confirm **guard correctness** and may not prove Neon branch identity, full Auth0 end-to-end, or data recovery.
+
+
+## PEOS 2026-11-13 — independent rollback and conflict-reconciliation review
+
+**Status: REVIEW-ONLY; no Neon persistent DDL, no deployment, no merge or cutover authorized by this document.** Target project \`tiny-rice-70320263\`, Development branch \`br-ancient-term-b6mmx5ol\`, database \`iam_database\`. An operator must recheck these exact coordinates via the Neon control plane; the SQL database name alone never proves branch identity.
+
+### Conflict reconciliation against main SHA 665b41008d16e88d6cd6f9857951a294ddb112f2
+
+- Keep both existing \`database/tests/pg18-schema-only-maintain-ci.sh\` (PG18 MAINTAIN/regression gate) **and** PR #47's \`database/tests/full-data-pgdump-restore-ci.sh\` in the same \`restore-source-schema\` job. Never replace one with the other.
+- Preserve \`database/tests/run.sh\` from current main; append the PR #47 fail-closed preflight and shadow-ACL negative fixture. Do not relax the runtime/PG18 contracts.
+- The local synthetic \`pg_dump -Fc\` / \`pg_restore --single-transaction\` CI harness proves a disposable PostgreSQL fixture only. It **does not** restore Neon Development, measure Neon RPO/RTO, prove PITR or establish a durable backup.
+- The runbook references \`database/scripts/neon-security-definer-preflight.sql\` from **unmerged PR #45**. That file does **not** exist on this branch or current \`main\`. Obtain the independently reviewed PR #45 artifact and reconcile that dependency **before** attempting any live security-definer or ACL release gate. Never silently skip it.
+- A merge of \`main\` into this PR invalidates prior SHA-specific review and checks; require a new CI PostgreSQL 18 run and independent post-merge review.
+
+### Required rollback review / stop conditions
+
+| Moment | Evidence required | STOP / fallback |
+|---|---|---|
+| Prior to transaction | Exact Neon project, branch ID, direct TLS host identity, database, privileged role \`neondb_owner\`, approvals linked to this exact change; fresh full catalog manifest, 6/6 expected owner-specific defaults, zero unknown/indirect paths; database and application gates | If any mismatch, **do not run ALTER** |
+| Independent recovery | A Development-derived **disposable** restore rehearsal from an authenticated export, with count+digest schema/ACL/owner/ledger verification, data privacy, retention and rollback witness. A cloned branch or native schema diff alone is insufficient | No demonstrated restore / no approved RPO-RTO = **NO PERSISTENT DDL** |
+| Before candidate COMMIT | In a single owner-authorized transaction, assert the exactly-six before-state, issue only two reviewed \`ALTER DEFAULT PRIVILEGES ... IN SCHEMA public REVOKE\`, then assert exactly zero matching defaults and unchanged non-target grants, role memberships, RLS policies, owners, ledger and extant relation ACLs | Any unexpected state or timeout = **ROLLBACK** and evidence of absence of partial change |
+| After approved COMMIT | New session rechecks zero target defaults, no indirect paths, rollback checkpoint still valid; application runtime/auth/tenant-negative tests on non-production clone | If failed, freeze further work and use an *independently approved* inverse action only after assessing intervening object creation |
+| Inverse recovery | Confirm original six grants were the only changes; inverse owner-scoped \`GRANT SELECT/INSERT/UPDATE/DELETE ON TABLES\` and \`GRANT SELECT/USAGE ON SEQUENCES\` restores **future** defaults. Verify exactly six afterwards and no other drift | Restore defaults **does not** revert privileges on objects created in between, nor replace database restore; halt release if they exist |
+| Cutover | Approved canonical source export, complete ledger reconciliation, independent restore rehearsal, RBAC grant/revoke + RLS A/B + Auth0 E2E in exact SHA, Vercel healthy and formal release signoff | Any blocked/skipped gate = **NO CUTOVER** |
+
+**Dependency and risk owner:** PR #45 (runtime/default-ACL and SECURITY DEFINER preflights), issue #31 (privilege remediation), #14 (canonical parity), #15 (ledger), #34 (restore). Rehearsal-only CLI and GitHub CI results are never signatures authorizing live grants.
+
+**Operator sign-off fields (not yet completed):** change ticket; independent reviewer and timestamp; exact branch/LSN; original six-grant fingerprint; snapshot/restore artifact and isolated recovery evidence; consent for scope-specific Development DDL; after/rollback report; separation of duties; approval for any later Production cutover.

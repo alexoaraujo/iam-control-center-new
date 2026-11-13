@@ -5,6 +5,11 @@ on:
     paths:
       - "database/scripts/guard-canonical-restore-target.py"
       - "database/scripts/canonical-isolated-operation.py"
+      - ".github/scripts/iam-export-lease-emergency-revoke.py"
+      - ".github/scripts/psql"
+      - ".github/tests/test-iam-export-lease-emergency-revoke.py"
+      - ".github/workflows/iam-export-emergency-revoke.yml"
+      - "docs/operations/iam-export-independent-revocation-runbook.md"
       - ".github/scripts/configure-iam-canonical-environment.py"
       - ".github/tests/test-configure-iam-canonical-environment.py"
       - "database/tests/test-guard-canonical-restore-target.py"
@@ -30,6 +35,7 @@ jobs:
           python3 database/tests/test-guard-canonical-restore-target.py
           python3 database/tests/test-canonical-isolated-operation.py
           python3 .github/tests/test-configure-iam-canonical-environment.py
+          python3 .github/tests/test-iam-export-lease-emergency-revoke.py
       - name: Prove missing credentials fail closed
         shell: bash
         run: |

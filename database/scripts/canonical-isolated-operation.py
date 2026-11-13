@@ -21,6 +21,8 @@ spec.loader.exec_module(mod)
 EXPIRES = datetime.fromisoformat("2026-11-20T09:12:00+00:00")
 APPROVAL = "APPROVED_BR_SWEET_UNION_ONLY"
 CONFIRMATION = "RESTORE_BR_SWEET_UNION_ONLY"
+# Built by the gated GitHub workflow from the minimal CA fixture.
+PG18_CLIENT_IMAGE = "iam-pg18-system-ca:local"
 
 class GateBlocked(Exception):
     pass
@@ -58,7 +60,7 @@ def docker_run(args: list[str], creds: dict[str, str], workspace: Path) -> str:
     cmd = [
         "docker", "run", "--rm", "--network", "host", "--user", str(os.getuid()),
         "--env-file", str(secret_file), "-v", f"{workspace}:/work",
-        "postgres:18-bookworm", *args
+        PG18_CLIENT_IMAGE, *args
     ]
     try:
         result = subprocess.run(
@@ -66,8 +68,43 @@ def docker_run(args: list[str], creds: dict[str, str], workspace: Path) -> str:
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=300
         )
         if result.returncode:
-            # Never echo pg_dump/pg_restore stderr; it can contain SQL definitions.
-            raise GateBlocked("PostgreSQL 18 command failed; inspect guarded run")
+            # Never emit raw stderr: pg client errors may include SQL or secrets.
+            # Emit only an allowlisted stage and failure category.
+            stage = {
+                "psql": ("source_preflight" if creds.get("PGUSER") == mod.SOURCE_ROLE
+                         else "target_preflight"),
+                "pg_dump": "schema_export",
+                "pg_restore": "archive_inspection" if "--list" in args else "schema_restore",
+            }.get(args[0], "postgres_client")
+            stderr = result.stderr.lower()
+            if "no password supplied" in stderr:
+                category = "AUTH_NO_PASSWORD"
+            elif "password authentication failed" in stderr:
+                category = "AUTH_REJECTED"
+            elif "password has expired" in stderr or "expired password" in stderr:
+                category = "AUTH_EXPIRED"
+            elif "role " in stderr and "does not exist" in stderr:
+                category = "AUTH_ROLE_MISSING"
+            elif ("certificate verify failed" in stderr
+                  or "server certificate for" in stderr
+                  or "hostname mismatch" in stderr):
+                category = "TLS_CERT_VERIFY"
+            elif ("root certificate" in stderr or "sslrootcert" in stderr
+                  or "certificate store" in stderr):
+                category = "TLS_TRUST_STORE"
+            elif ("ssl error" in stderr or "sslmode" in stderr
+                  or "tlsv1 alert" in stderr):
+                category = "TLS_HANDSHAKE"
+            elif ("permission denied" in stderr or "must be owner" in stderr
+                  or "insufficient privilege" in stderr):
+                category = "PRIVILEGE"
+            elif ("could not translate host name" in stderr or "connection refused" in stderr
+                  or "connection timed out" in stderr or "network is unreachable" in stderr):
+                category = "NETWORK"
+            else:
+                category = "UNCLASSIFIED"
+            raise GateBlocked(f"PG18_{stage.upper()}_{category}: command failed; "
+                              "raw stderr withheld for secret/SQL safety")
         return result.stdout.strip()
     except subprocess.TimeoutExpired as e:
         raise GateBlocked("PostgreSQL command timed out") from e
@@ -78,9 +115,30 @@ def scalar(sql: str, creds: dict[str, str], workspace: Path) -> str:
     return docker_run(["psql", "-X", "-w", "-v", "ON_ERROR_STOP=1",
                        "-A", "-t", "-c", sql], creds, workspace)
 
+def check_authentication_only(creds: dict[str, str],
+                              expected_database: str, expected_role: str,
+                              workspace: Path) -> None:
+    """Authenticate through libpq with strict client-side TLS, then check session identity.
+
+    Neon's proxy terminates external TLS before forwarding to PostgreSQL.
+    pg_stat_ssl describes the proxy-to-backend hop, NOT client-to-proxy TLS.
+    PGSSLMODE=verify-full and PGSSLROOTCERT=system force libpq to reject
+    untrusted certificates and hostname mismatches before this SELECT succeeds.
+    """
+    if creds.get("PGSSLMODE") != "verify-full" or creds.get("PGSSLROOTCERT") != "system":
+        raise GateBlocked("BLOCKED_AUTH_TLS_CONFIG: verified external TLS is mandatory")
+    sql = "SELECT current_database(), current_user, session_user"
+    got = scalar(sql, creds, workspace).split("|")
+    if len(got) != 3:
+        raise GateBlocked("BLOCKED_AUTH_OUTPUT_SHAPE: expected three identity columns")
+    if got[0] != expected_database:
+        raise GateBlocked("BLOCKED_AUTH_DATABASE: connected database differs from allowlist")
+    if got[1] != expected_role or got[2] != expected_role:
+        raise GateBlocked("BLOCKED_AUTH_ROLE: effective/session identity differs from allowlist")
+
+
 def check_source(creds: dict[str, str], workspace: Path) -> None:
     sql = """SELECT current_database(), current_user, session_user,
-      (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),
       (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
        WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p')),
       (SELECT count(*) FROM pg_policies
@@ -88,22 +146,24 @@ def check_source(creds: dict[str, str], workspace: Path) -> None:
       (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
        WHERE n.nspname IN ('iam','audit','app_private')
        AND c.relkind IN ('r','p') AND c.relforcerowsecurity),
-      has_table_privilege(current_user,'iam.schema_migrations','SELECT'),
+      (SELECT has_table_privilege(current_user,c.oid,'SELECT')
+         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='iam' AND c.relname='schema_migrations'
+          AND c.relkind IN ('r','p')),
       (SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user),
       (SELECT rolcanlogin FROM pg_roles WHERE rolname=current_user),
       (SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.member
        WHERE r.rolname=current_user)"""
     got = scalar(sql, creds, workspace).split("|")
     expected = [
-        "iam_database", mod.SOURCE_ROLE, mod.SOURCE_ROLE, "t",
+        "iam_database", mod.SOURCE_ROLE, mod.SOURCE_ROLE,
         "23", "41", "20", "f", "f", "t", "0"
     ]
     if got != expected:
-        raise GateBlocked("source role, TLS, structure or least-privilege check failed")
+        raise GateBlocked("source identity, schema or least-privilege check failed")
 
 def check_target(creds: dict[str, str], workspace: Path) -> None:
     sql = """SELECT current_database(), current_user, session_user,
-      (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),
       (SELECT count(*) FROM pg_namespace WHERE nspname IN ('iam','audit','app_private')),
       (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
        WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p')),
@@ -121,7 +181,7 @@ def check_target(creds: dict[str, str], workspace: Path) -> None:
       to_regclass('iam.schema_migrations') IS NULL"""
     got = scalar(sql, creds, workspace).split("|")
     expected = [
-        "iam_canonical_validation", "neondb_owner", "neondb_owner", "t",
+        "iam_canonical_validation", "neondb_owner", "neondb_owner",
         "0", "0", "0", "0", "4", "4", "1", "t"
     ]
     if got != expected:
@@ -140,9 +200,8 @@ def check_restored(creds: dict[str, str], workspace: Path) -> None:
        WHERE n.nspname IN ('iam','audit','app_private')
        AND c.relkind IN ('r','p') AND c.relowner=to_regrole('iam_owner')),
       to_regclass('iam.schema_migrations') IS NOT NULL,
-      (SELECT count(*) FROM iam.schema_migrations),
-      (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid())"""
-    if scalar(sql, creds, workspace) != "23|41|20|23|t|0|t":
+      (SELECT count(*) FROM iam.schema_migrations)"""
+    if scalar(sql, creds, workspace) != "23|41|20|23|t|0":
         raise GateBlocked("post-restore contract mismatch; freeze isolated target for review")
 
 def check_restore_acl_principals(source_creds: dict[str, str],
@@ -188,22 +247,30 @@ def check_restore_acl_principals(source_creds: dict[str, str],
 def check_runtime_role_contract(source_creds: dict[str, str],
                                 target_creds: dict[str, str],
                                 workspace: Path) -> None:
-    """A restored RLS schema is not canonical with a divergent login inheritance."""
+    """Enforce canonical IAM role contract, not merely source/target parity.
+
+    Matching two insecure role graphs must never yield PASS. The runtime
+    contract comes from database/bootstrap/0000_iam_roles.sql; worker is
+    the current P0 extension. Compare ADMIN, INHERIT and SET per membership.
+    """
     sql = """SELECT rolname, rolcanlogin, rolinherit, rolbypassrls, rolsuper
       FROM pg_roles
      WHERE rolname IN ('iam_app_runtime_login','iam_migrator_login','iam_worker_login')
      ORDER BY rolname"""
     source = scalar(sql, source_creds, workspace).strip()
     target = scalar(sql, target_creds, workspace).strip()
-    if not source or source != target:
+    expected = (
+        "iam_app_runtime_login|t|t|f|f\n"
+        "iam_migrator_login|t|f|f|f\n"
+        "iam_worker_login|t|f|f|f"
+    )
+    if source != expected or target != expected:
         raise GateBlocked(
-            "BLOCKED_ROLE_ATTRIBUTES: source and destination IAM login roles differ; "
-            "roles are Neon branch-wide and must be reviewed independently before DDL"
+            "BLOCKED_ROLE_ATTRIBUTES: source and destination must both "
+            "match the canonical IAM runtime/migrator/worker LOGIN contract; "
+            "copying a drifted target into source is prohibited"
         )
 
-
-    # Compare every outbound membership and PostgreSQL 16+ SET / INHERIT
-    # option; equal LOGIN attributes do not establish authorization parity.
     membership_sql = """SELECT member.rolname, granted.rolname,
       m.admin_option, m.inherit_option, m.set_option
       FROM pg_auth_members m
@@ -214,16 +281,136 @@ def check_runtime_role_contract(source_creds: dict[str, str],
       ORDER BY member.rolname, granted.rolname"""
     source_memberships = scalar(membership_sql, source_creds, workspace).strip()
     target_memberships = scalar(membership_sql, target_creds, workspace).strip()
-    if not source_memberships or source_memberships != target_memberships:
+    expected_memberships = (
+        "iam_app_runtime_login|iam_app_runtime|f|t|f\n"
+        "iam_migrator_login|iam_migrator|f|f|t\n"
+        "iam_worker_login|iam_worker|f|t|t"
+    )
+    if (source_memberships != expected_memberships
+            or target_memberships != expected_memberships):
         raise GateBlocked(
-            "BLOCKED_ROLE_MEMBERSHIPS: source and destination LOGIN role "
-            "memberships differ (including ADMIN, INHERIT and SET options); "
-            "no restoration DDL is permitted"
+            "BLOCKED_ROLE_MEMBERSHIPS: source and destination must both "
+            "match canonical ADMIN=false/INHERIT/SET options; "
+            "runtime login may not SET ROLE, no extra outbound memberships"
         )
 
 
+def check_schema_export_lock_permissions(creds: dict[str, str], workspace: Path) -> None:
+    """Require MAINTAIN-only lock capability and reject SELECT/DML bypass.
+
+    MAINTAIN allows locks and other maintenance actions; this diagnostic is
+    NOT approval to GRANT it in Neon. All privileges must be reviewed.
+    """
+    sql = """WITH tables AS (
+        SELECT count(*) AS total,
+          count(*) FILTER (
+            WHERE has_table_privilege(current_user,c.oid,'MAINTAIN')
+          ) AS maintain,
+          count(*) FILTER (WHERE
+            has_table_privilege(current_user,c.oid,'SELECT') OR
+            has_table_privilege(current_user,c.oid,'INSERT') OR
+            has_table_privilege(current_user,c.oid,'UPDATE') OR
+            has_table_privilege(current_user,c.oid,'DELETE') OR
+            has_table_privilege(current_user,c.oid,'TRUNCATE') OR
+            has_table_privilege(current_user,c.oid,'REFERENCES') OR
+            has_table_privilege(current_user,c.oid,'TRIGGER')
+          ) AS broad
+        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname IN ('iam','audit','app_private')
+          AND c.relkind IN ('r','p')
+      ), schemas AS (
+        SELECT count(*) AS total,
+          count(*) FILTER (
+            WHERE has_schema_privilege(current_user,n.oid,'USAGE')
+          ) AS usage,
+          count(*) FILTER (
+            WHERE has_schema_privilege(current_user,n.oid,'CREATE')
+          ) AS creation
+        FROM pg_namespace n
+        WHERE n.nspname IN ('iam','audit','app_private')
+      )
+      SELECT tables.total, tables.maintain, tables.broad,
+             schemas.total, schemas.usage, schemas.creation
+        FROM tables CROSS JOIN schemas"""
+    raw = scalar(sql, creds, workspace).strip()
+    try:
+        counts = tuple(int(value) for value in raw.split("|"))
+    except ValueError as exc:
+        raise GateBlocked(
+            "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES: invalid catalog evidence"
+        ) from exc
+    if len(counts) != 6 or any(value < 0 for value in counts):
+        raise GateBlocked(
+            "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES: incomplete catalog evidence"
+        )
+    table_count, maintenance, broad, schema_count, schema_usage, schema_create = counts
+    if broad != 0 or schema_create != 0:
+        raise GateBlocked(
+            "BLOCKED_SOURCE_SCHEMA_EXCESS_PRIVILEGES: export role has "
+            "SELECT/DML or schema CREATE; MAINTAIN-only review required"
+        )
+    if (table_count, maintenance, schema_count, schema_usage) != (23, 23, 3, 3):
+        raise GateBlocked(
+            "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES: requires MAINTAIN "
+            "on 23/23 tables and USAGE on 3/3 schemas; do not grant SELECT"
+        )
+
+def check_migrator_owner_membership(source_creds: dict[str, str],
+                                    target_creds: dict[str, str],
+                                    workspace: Path) -> None:
+    """Ensure migrator can SET iam_owner with no automatic inheritance/admin."""
+    sql = """SELECT m.admin_option,m.inherit_option,m.set_option
+      FROM pg_auth_members m
+      JOIN pg_roles member ON member.oid=m.member
+      JOIN pg_roles granted ON granted.oid=m.roleid
+     WHERE member.rolname='iam_migrator' AND granted.rolname='iam_owner'"""
+    source = scalar(sql, source_creds, workspace).strip()
+    target = scalar(sql, target_creds, workspace).strip()
+    if source != "f|f|t" or target != source:
+        raise GateBlocked(
+            "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP: isolated destination differs "
+            "from source (ADMIN=false, INHERIT=false, SET=true); "
+            "privileged role changes require independent approval")
+
+
+def check_pgcrypto_availability(source_creds: dict[str, str],
+                               target_creds: dict[str, str],
+                               workspace: Path) -> None:
+    source = scalar(
+        "SELECT count(*) FROM pg_extension WHERE extname='pgcrypto'",
+        source_creds, workspace).strip()
+    target = scalar(
+        "SELECT count(*) FROM pg_available_extensions WHERE name='pgcrypto'",
+        target_creds, workspace).strip()
+    if source != "1" or target != "1":
+        raise GateBlocked("BLOCKED_PGCRYPTO: source extension or target package missing")
+
+
+def check_authenticated_readiness(source_creds: dict[str, str],
+                                  target_creds: dict[str, str],
+                                  workspace: Path) -> None:
+    """Catalog-only checks; collect all blockers without touching data or DDL."""
+    checks = (
+        lambda: check_restore_acl_principals(source_creds, target_creds, workspace),
+        lambda: check_runtime_role_contract(source_creds, target_creds, workspace),
+        lambda: check_migrator_owner_membership(source_creds, target_creds, workspace),
+        lambda: check_pgcrypto_availability(source_creds, target_creds, workspace),
+        lambda: check_schema_export_lock_permissions(source_creds, workspace),
+    )
+    blockers = []
+    for check in checks:
+        try:
+            check()
+        except GateBlocked as exc:
+            blockers.append(str(exc))
+    if blockers:
+        raise GateBlocked("; ".join(blockers))
+    print("PASS_AUTHENTICATED_READINESS_ONLY: source/target catalogs, "
+          "ACL roles, grants and extension prerequisites; no DDL or data read")
+
+
 def execute(mode: str) -> None:
-    if mode not in ("export_only", "restore_isolated"):
+    if mode not in ("auth_only", "readiness_only", "export_only", "restore_isolated"):
         raise GateBlocked("unrecognized operation")
     if datetime.now(timezone.utc) >= EXPIRES:
         raise GateBlocked("disposable Neon branch has expired")
@@ -233,6 +420,8 @@ def execute(mode: str) -> None:
         mod.verify_connections(source, target)
     except mod.GateBlocked as e:
         raise GateBlocked(str(e)) from e
+    if mode in ("auth_only", "readiness_only", "export_only") and os.environ.get("IAM_CANONICAL_CONFIRMATION", "") != "NO_DDL":
+        raise GateBlocked("read-only operation requires NO_DDL confirmation")
     if mode == "restore_isolated":
         if os.environ.get("IAM_CANONICAL_OPERATOR_APPROVAL", "") != APPROVAL:
             raise GateBlocked("protected environment approval secret missing or invalid")
@@ -244,8 +433,30 @@ def execute(mode: str) -> None:
         workspace = Path(tmp)
         src = pg_env(source)
         dst = pg_env(target)
+        if mode == "auth_only":
+            failures = []
+            for label, credentials, database, role in (
+                ("SOURCE", src, mod.SOURCE_DATABASE, mod.SOURCE_ROLE),
+                ("TARGET", dst, mod.TARGET_DATABASE, mod.TARGET_ROLE),
+            ):
+                try:
+                    check_authentication_only(credentials, database, role, workspace)
+                except GateBlocked as exc:
+                    # Only allowlisted diagnostics; raw stderr, passwords and SQL suppressed.
+                    failures.append(f"{label}: {exc}")
+            if failures:
+                raise GateBlocked("BLOCKED_AUTH_ONLY: " + "; ".join(failures))
+            print("PASS_AUTHENTICATED_IDENTITY_ONLY: pinned DB, role and verified TLS; no DDL")
+            return
         check_source(src, workspace)
         check_target(dst, workspace)
+        # Every export or restore must pass the SAME comprehensive readiness gate
+        # as readiness_only, before any pg_dump call or other external operation.
+        # This prevents an isolated grant to the export role from bypassing
+        # source/target role and membership parity checks.
+        check_authenticated_readiness(src, dst, workspace)
+        if mode == "readiness_only":
+            return
         archive = workspace / "schema.dump"
         docker_run([
             "pg_dump", "-w", "--schema-only", "--format=custom",
@@ -267,6 +478,8 @@ def execute(mode: str) -> None:
         # Inventory ACL recipients before any extension, CREATE or restore DDL.
         check_restore_acl_principals(src, dst, workspace)
         check_runtime_role_contract(src, dst, workspace)
+        check_migrator_owner_membership(src, dst, workspace)
+        check_pgcrypto_availability(src, dst, workspace)
         # Scope is the exact isolated database, NEVER inherited iam_database.
         # CREATE EXTENSION may remain if restore fails; other DDL is one transaction.
         docker_run([

@@ -17,7 +17,7 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 SOURCE = ("postgresql://iam_schema_export_reader:TEST_ONLY@"
-          "ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech:5432/"
+          "ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech:5432/"
           "iam_database?sslmode=verify-full&sslrootcert=system")
 TARGET = ("postgresql://neondb_owner:TEST_ONLY@"
           "ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech:5432/"
@@ -39,6 +39,117 @@ class IsolatedRunnerContract(unittest.TestCase):
         self.assertEqual(e["PGSSLROOTCERT"], "system")
         self.assertEqual(e["PGDATABASE"], "iam_database")
         self.assertNotIn("IAM_CANONICAL_SOURCE_URL", module.no_trust_env())
+
+    def test_pg18_client_build_installs_trusted_ca_bundle_without_tls_downgrade(self):
+        dockerfile = (HERE / "fixtures" / "pg18-system-ca.Dockerfile").read_text(encoding="utf8")
+        workflow = (HERE.parent.parent / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        auth = workflow.split("\n  authenticated-export-and-optional-restore:", 1)[1]
+        self.assertIn("FROM postgres:18-bookworm", dockerfile)
+        self.assertIn("apt-get install -y --no-install-recommends ca-certificates", dockerfile)
+        self.assertIn("update-ca-certificates", dockerfile)
+        self.assertIn("test -s /etc/ssl/certs/ca-certificates.crt", dockerfile)
+        self.assertIn("ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt", dockerfile)
+        self.assertEqual(workflow.count("docker build --pull --file database/tests/fixtures/pg18-system-ca.Dockerfile"), 2)
+        self.assertIn("PG18_CLIENT_IMAGE = \"iam-pg18-system-ca:local\"", (HERE.parent / "scripts" / "canonical-isolated-operation.py").read_text(encoding="utf8"))
+        self.assertLess(auth.index("python3 database/scripts/guard-canonical-restore-target.py"),
+                        auth.index("docker build --pull --file"))
+        self.assertLess(auth.index("docker build --pull --file"),
+                        auth.index("python3 database/scripts/canonical-isolated-operation.py"))
+        self.assertEqual(module.pg_env(SOURCE)["PGSSLMODE"], "verify-full")
+        self.assertEqual(module.pg_env(SOURCE)["PGSSLROOTCERT"], "system")
+        self.assertNotIn("sslmode=require", dockerfile + workflow)
+        self.assertNotIn("sslmode=disable", dockerfile + workflow)
+        self.assertNotIn("PGSSLROOTCERT=none", dockerfile + workflow)
+
+    def test_safe_failure_stage_and_category_without_stderr_leakage(self):
+        import subprocess
+        import tempfile
+        failures = [
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "FATAL: password authentication failed for user SECRET_USER",
+             "PG18_SOURCE_PREFLIGHT_AUTH_REJECTED"),
+            (["psql", "-c", "SELECT 1"], "neondb_owner",
+             "could not translate host name SECRET_HOST",
+             "PG18_TARGET_PREFLIGHT_NETWORK"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "fe_sendauth: no password supplied PRIVATE",
+             "PG18_SOURCE_PREFLIGHT_AUTH_NO_PASSWORD"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "FATAL: password has expired SECRET_USER",
+             "PG18_SOURCE_PREFLIGHT_AUTH_EXPIRED"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "FATAL: role SECRET_USER does not exist",
+             "PG18_SOURCE_PREFLIGHT_AUTH_ROLE_MISSING"),
+            (["pg_dump", "--schema-only"], "iam_schema_export_reader",
+             "ERROR: permission denied for table secret_table",
+             "PG18_SCHEMA_EXPORT_PRIVILEGE"),
+            (["pg_restore", "--list"], "neondb_owner",
+             "SSL error SECRET",
+             "PG18_ARCHIVE_INSPECTION_TLS_HANDSHAKE"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "SSL error: certificate verify failed PRIVATE HOST",
+             "PG18_SOURCE_PREFLIGHT_TLS_CERT_VERIFY"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "root certificate file PRIVATE PATH is missing",
+             "PG18_SOURCE_PREFLIGHT_TLS_TRUST_STORE"),
+            (["pg_restore", "--single-transaction"], "neondb_owner",
+             "sensitive SQL statement here",
+             "PG18_SCHEMA_RESTORE_UNCLASSIFIED"),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            for args, role, stderr, expected in failures:
+                completed = subprocess.CompletedProcess(args, 1, "", stderr)
+                with (
+                    self.subTest(expected=expected),
+                    patch.object(module.subprocess, "run", return_value=completed),
+                ):
+                    with self.assertRaises(module.GateBlocked) as exc:
+                        module.docker_run(args, {"PGUSER": role}, Path(tmp))
+                    message = str(exc.exception)
+                    self.assertIn(expected, message)
+                    self.assertNotIn("SECRET", message)
+                    self.assertNotIn("secret_table", message)
+                    self.assertNotIn("sensitive SQL", message)
+
+    def test_tls_probe_is_credential_free_and_not_restoration(self):
+        workflow = (HERE.parent.parent / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        self.assertIn("          - tls_probe_only", workflow)
+        self.assertIn("inputs.operation == 'tls_probe_only'", workflow)
+        public = workflow.split("\n  public-tls-probe:", 1)[1].split(
+            "\n  authenticated-export-and-optional-restore:", 1
+        )[0]
+        self.assertIn("needs: preflight-offline", public)
+        # Jobs are isolated; preflight checkout does not persist into this job.
+        checkout = "uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"
+        self.assertIn(checkout, public)
+        self.assertIn("persist-credentials: false", public)
+        self.assertLess(public.index(checkout), public.index("docker build --pull --file"))
+        self.assertLess(public.index(checkout), public.index("-starttls postgres"))
+        self.assertIn("-starttls postgres", public)
+        self.assertIn("-verify_hostname", public)
+        self.assertIn("-verify_return_error", public)
+        self.assertIn("ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech", public)
+        self.assertIn("ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech", public)
+        self.assertNotIn("secrets.", public)
+        self.assertNotIn("environment:", public)
+        self.assertNotIn("IAM_CANONICAL_SOURCE_URL", public)
+        self.assertNotIn("IAM_CANONICAL_TARGET_URL", public)
+        self.assertNotIn("pg_dump", public)
+        self.assertNotIn("pg_restore", public)
+        self.assertIn("iam-pg18-system-ca:local psql -X -w -q -f /dev/null", public)
+        self.assertIn("docker build --pull --file database/tests/fixtures/pg18-system-ca.Dockerfile", public)
+        self.assertTrue(public.index("docker build --pull --file") < public.index("iam-pg18-system-ca:local psql"))
+        self.assertIn("PGSSLMODE=verify-full", public)
+        self.assertIn("PGSSLROOTCERT=system", public)
+        self.assertIn("iam_tls_probe_nonexistent_noauth", public)
+        self.assertIn("PASS_PG18_LIBPQ_TLS_", public)
+        self.assertIn("BLOCKED_PG18_LIBPQ_TLS_", public)
+        self.assertIn("no password supplied|password authentication failed", public)
+        self.assertIn("authentication refused as expected", public)
+        self.assertNotIn("PGPASSWORD=", public)
+        self.assertNotIn("IAM_CANONICAL_OPERATOR_APPROVAL", public)
 
     def test_no_operator_approval_blocks_before_docker(self):
         with self.env(), patch.object(module, "docker_run") as d:
@@ -65,20 +176,25 @@ class IsolatedRunnerContract(unittest.TestCase):
 
     def test_export_only_never_runs_ddl(self):
         calls = []
-        with self.env(), patch.object(module, "check_source"), \
+        with self.env(confirm="NO_DDL"), patch.object(module, "check_source"), \
              patch.object(module, "check_target"), \
+             patch.object(module, "check_authenticated_readiness",
+                          side_effect=lambda *_: calls.append(["readiness"])), \
              patch.object(module, "docker_run", side_effect=self.simulated_docker(calls)):
             module.execute("export_only")
-        self.assertEqual([call[0] for call in calls], ["pg_dump", "pg_restore"])
+        self.assertEqual([call[0] for call in calls], ["readiness", "pg_dump", "pg_restore"])
         self.assertFalse(any("CREATE EXTENSION" in str(call) for call in calls))
 
     def test_restore_confirmation_allows_only_isolated_database(self):
         calls = []
         with self.env(approval=module.APPROVAL, confirm=module.CONFIRMATION), \
              patch.object(module, "check_source"), patch.object(module, "check_target"), \
+             patch.object(module, "check_authenticated_readiness"), \
              patch.object(module, "check_restored"), \
              patch.object(module, "check_restore_acl_principals"), \
              patch.object(module, "check_runtime_role_contract"), \
+             patch.object(module, "check_migrator_owner_membership"), \
+             patch.object(module, "check_pgcrypto_availability"), \
              patch.object(module, "docker_run", side_effect=self.simulated_docker(calls)):
             module.execute("restore_isolated")
         self.assertEqual(len(calls), 4)
@@ -94,39 +210,116 @@ class IsolatedRunnerContract(unittest.TestCase):
             if args[:2] == ["pg_restore", "--list"]:
                 return "TABLE DATA iam.identities\n"
             return ""
-        with self.env(), patch.object(module, "check_source"), \
+        with self.env(confirm="NO_DDL"), patch.object(module, "check_source"), \
              patch.object(module, "check_target"), \
+             patch.object(module, "check_authenticated_readiness"), \
              patch.object(module, "docker_run", side_effect=contaminated):
             with self.assertRaises(module.GateBlocked):
                 module.execute("export_only")
 
+    def test_export_only_requires_no_ddl_confirmation_even_when_called_directly(self):
+        # Workflow input protection is not a substitute for runner-level safety.
+        for confirmation in ("", module.CONFIRMATION):
+            with (
+                self.subTest(confirmation=confirmation),
+                self.env(confirm=confirmation),
+                patch.object(module, "check_source") as source,
+                patch.object(module, "check_target") as target,
+                patch.object(module, "check_authenticated_readiness") as readiness,
+                patch.object(module, "docker_run") as client,
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "NO_DDL"):
+                    module.execute("export_only")
+                source.assert_not_called()
+                target.assert_not_called()
+                readiness.assert_not_called()
+                client.assert_not_called()
+
+    def test_export_and_restore_fail_closed_on_unresolved_role_parity_before_dump(self):
+        # Even if source/target identity and table lock grants are fixed in isolation,
+        # export must not bypass the full readiness gate or produce an archive.
+        cases = (
+            ("export_only", "", "NO_DDL"),
+            ("restore_isolated", module.APPROVAL, module.CONFIRMATION),
+        )
+        for mode, approval, confirmation in cases:
+            with (
+                self.subTest(mode=mode),
+                self.env(approval=approval, confirm=confirmation),
+                patch.object(module, "check_source"),
+                patch.object(module, "check_target"),
+                patch.object(
+                    module, "check_authenticated_readiness",
+                    side_effect=module.GateBlocked("BLOCKED_ROLE_ATTRIBUTES"),
+                ) as readiness,
+                patch.object(module, "docker_run") as client,
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_ROLE_ATTRIBUTES"):
+                    module.execute(mode)
+                readiness.assert_called_once()
+                client.assert_not_called()
+
+    def test_export_and_restore_fail_closed_on_schema_lock_denial_before_dump(self):
+        cases = (
+            ("export_only", "", "NO_DDL"),
+            ("restore_isolated", module.APPROVAL, module.CONFIRMATION),
+        )
+        for mode, approval, confirmation in cases:
+            with (
+                self.subTest(mode=mode),
+                self.env(approval=approval, confirm=confirmation),
+                patch.object(module, "check_source"),
+                patch.object(module, "check_target"),
+                patch.object(
+                    module, "check_authenticated_readiness",
+                    side_effect=module.GateBlocked("BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES"),
+                ),
+                patch.object(module, "docker_run") as client,
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES"):
+                    module.execute(mode)
+                client.assert_not_called()
+
     def test_catalog_checks_fail_closed(self):
         with patch.object(module, "scalar", return_value=(
-            "iam_database|iam_schema_export_reader|iam_schema_export_reader|t|"
+            "iam_database|iam_schema_export_reader|iam_schema_export_reader|"
             "23|41|20|f|f|t|0"
         )):
             module.check_source({}, Path("/tmp"))
         with patch.object(module, "scalar", return_value=(
-            "iam_database|iam_schema_export_reader|iam_schema_export_reader|f|"
-            "23|41|20|f|f|t|0"
+            "iam_database|iam_schema_export_reader|iam_schema_export_reader|"
+            "23|41|20|t|f|t|0"
         )):
             with self.assertRaises(module.GateBlocked):
                 module.check_source({}, Path("/tmp"))
         with patch.object(module, "scalar", return_value=(
-            "iam_canonical_validation|neondb_owner|neondb_owner|t|"
+            "iam_canonical_validation|neondb_owner|neondb_owner|"
             "0|0|0|0|4|4|1|t"
         )):
             module.check_target({}, Path("/tmp"))
         with patch.object(module, "scalar", return_value=(
-            "iam_database|neondb_owner|neondb_owner|t|0|0|0|0|4|4|1|t"
+            "iam_database|neondb_owner|neondb_owner|0|0|0|0|4|4|1|t"
         )):
             with self.assertRaises(module.GateBlocked):
                 module.check_target({}, Path("/tmp"))
-        with patch.object(module, "scalar", return_value="23|41|20|23|t|0|t"):
+        with patch.object(module, "scalar", return_value="23|41|20|23|t|0"):
             module.check_restored({}, Path("/tmp"))
-        with patch.object(module, "scalar", return_value="23|41|20|0|t|0|t"):
+        with patch.object(module, "scalar", return_value="23|41|20|0|t|0"):
             with self.assertRaises(module.GateBlocked):
                 module.check_restored({}, Path("/tmp"))
+
+    def test_reader_ledger_acl_check_uses_catalog_oid_without_schema_usage(self):
+        # Neon reader intentionally has no USAGE on iam, but pg_catalog is visible.
+        # Name-based regclass lookup for 'iam.schema_migrations' can raise 42501.
+        import inspect
+        sql_source = inspect.getsource(module.check_source)
+        self.assertIn("has_table_privilege(current_user,c.oid,'SELECT')", sql_source)
+        self.assertNotIn("has_table_privilege(current_user,'iam.schema_migrations'", sql_source)
+        with patch.object(module, "scalar", return_value=(
+            "iam_database|iam_schema_export_reader|iam_schema_export_reader|"
+            "23|41|20|f|f|t|0"
+        )):
+            module.check_source({}, Path("/tmp"))
 
     def test_source_acl_roles_missing_in_target_blocks_before_any_ddl(self):
         source_roles = "iam_app_runtime\niam_migrator\niam_owner\niam_schema_export_reader"
@@ -144,49 +337,307 @@ class IsolatedRunnerContract(unittest.TestCase):
                 module.check_restore_acl_principals({}, {}, Path("/tmp"))
 
     def test_role_attributes_drift_blocks_restoration(self):
-        legacy = ("iam_app_runtime_login|t|f|f|f\n"
-                  "iam_migrator_login|t|f|f|f\n"
-                  "iam_worker_login|t|f|f|f")
-        target = "iam_app_runtime_login|t|t|f|f"
-        with patch.object(module, "scalar", side_effect=[legacy, target]):
-            with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_ROLE_ATTRIBUTES"):
-                module.check_runtime_role_contract({}, {}, Path("/tmp"))
-        memberships = ("iam_app_runtime_login|iam_app_runtime|f|t|t\n"
+        canonical = ("iam_app_runtime_login|t|t|f|f\n"
+                     "iam_migrator_login|t|f|f|f\n"
+                     "iam_worker_login|t|f|f|f")
+        legacy = canonical.replace("iam_app_runtime_login|t|t|f|f",
+                                   "iam_app_runtime_login|t|f|f|f")
+        for src, dst in (
+            (legacy, canonical), (canonical, legacy),
+            (legacy, legacy), (canonical, canonical.replace("iam_worker_login|t", "iam_worker_login|f")),
+            (canonical.replace("iam_migrator_login|t", "iam_migrator_login|f"), canonical),
+            ("", canonical),
+        ):
+            with self.subTest(src=src, dst=dst), patch.object(
+                module, "scalar", side_effect=[src, dst]
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_ROLE_ATTRIBUTES"):
+                    module.check_runtime_role_contract({}, {}, Path("/tmp"))
+        memberships = ("iam_app_runtime_login|iam_app_runtime|f|t|f\n"
                        "iam_migrator_login|iam_migrator|f|f|t\n"
                        "iam_worker_login|iam_worker|f|t|t")
         with patch.object(module, "scalar", side_effect=[
-            legacy, legacy, memberships, memberships
+            canonical, canonical, memberships, memberships
         ]):
             module.check_runtime_role_contract({}, {}, Path("/tmp"))
 
     def test_membership_set_option_drift_blocks_restoration(self):
-        roles = ("iam_app_runtime_login|t|f|f|f\n"
-                 "iam_migrator_login|t|f|f|f\n"
-                 "iam_worker_login|t|f|f|f")
-        source = ("iam_app_runtime_login|iam_app_runtime|f|t|t\n"
-                  "iam_migrator_login|iam_migrator|f|f|t\n"
-                  "iam_worker_login|iam_worker|f|t|t")
-        wrong_set = source.replace("iam_app_runtime|f|t|t",
-                                   "iam_app_runtime|f|t|f")
-        with patch.object(module, "scalar", side_effect=[
-            roles, roles, source, wrong_set
-        ]):
-            with self.assertRaisesRegex(module.GateBlocked,
-                                        "BLOCKED_ROLE_MEMBERSHIPS"):
-                module.check_runtime_role_contract({}, {}, Path("/tmp"))
-        extra_grant = source + "\niam_worker_login|iam_owner|f|t|t"
-        with patch.object(module, "scalar", side_effect=[
-            roles, roles, source, extra_grant
-        ]):
-            with self.assertRaisesRegex(module.GateBlocked,
-                                        "BLOCKED_ROLE_MEMBERSHIPS"):
-                module.check_runtime_role_contract({}, {}, Path("/tmp"))
-        with patch.object(module, "scalar", side_effect=[
-            roles, roles, "", source
-        ]):
-            with self.assertRaisesRegex(module.GateBlocked,
-                                        "BLOCKED_ROLE_MEMBERSHIPS"):
-                module.check_runtime_role_contract({}, {}, Path("/tmp"))
+        canonical_roles = ("iam_app_runtime_login|t|t|f|f\n"
+                           "iam_migrator_login|t|f|f|f\n"
+                           "iam_worker_login|t|f|f|f")
+        canonical_memberships = ("iam_app_runtime_login|iam_app_runtime|f|t|f\n"
+                                 "iam_migrator_login|iam_migrator|f|f|t\n"
+                                 "iam_worker_login|iam_worker|f|t|t")
+        insecure_set = canonical_memberships.replace("iam_app_runtime|f|t|f",
+                                                     "iam_app_runtime|f|t|t")
+        extra_owner = canonical_memberships + "\niam_worker_login|iam_owner|f|f|t"
+        broad_admin = canonical_memberships.replace("iam_migrator|f|f|t",
+                                                    "iam_migrator|t|f|t")
+        for source, target in (
+            (canonical_memberships, insecure_set),
+            (insecure_set, canonical_memberships),
+            (insecure_set, insecure_set),       # source/target parity is NOT enough
+            (extra_owner, extra_owner),
+            (broad_admin, broad_admin),
+            ("", canonical_memberships),
+            (canonical_memberships, ""),
+        ):
+            with self.subTest(source=source, target=target), patch.object(
+                module, "scalar", side_effect=[
+                    canonical_roles, canonical_roles, source, target
+                ]
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_ROLE_MEMBERSHIPS"):
+                    module.check_runtime_role_contract({}, {}, Path("/tmp"))
+
+    def test_schema_lock_guard_fails_before_any_dump(self):
+        # IAM tables, MAINTAIN covered, broad grants, schemas, USAGE, CREATE.
+        for raw in (
+            "23|0|0|3|0|0", "23|22|0|3|3|0", "23|23|0|3|2|0",
+            "22|22|0|3|3|0", "23|23|0|2|2|0",
+            "", "23|no|0|3|3|0", "23|23|0|3|3", "-1|23|0|3|3|0",
+        ):
+            with self.subTest(raw=raw), patch.object(module, "scalar", return_value=raw):
+                with self.assertRaisesRegex(
+                    module.GateBlocked, "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES"
+                ):
+                    module.check_schema_export_lock_permissions({}, Path("/tmp"))
+        for raw in (
+            "23|23|1|3|3|0", "23|23|23|3|3|0", "23|23|0|3|3|1",
+        ):
+            with self.subTest(raw=raw), patch.object(module, "scalar", return_value=raw):
+                with self.assertRaisesRegex(
+                    module.GateBlocked, "BLOCKED_SOURCE_SCHEMA_EXCESS_PRIVILEGES"
+                ):
+                    module.check_schema_export_lock_permissions({}, Path("/tmp"))
+        with patch.object(module, "scalar", return_value="23|23|0|3|3|0"):
+            module.check_schema_export_lock_permissions({}, Path("/tmp"))
+
+    def test_schema_lock_guard_sql_requires_maintain_but_rejects_select(self):
+        with patch.object(module, "scalar", return_value="23|23|0|3|3|0") as query:
+            module.check_schema_export_lock_permissions({}, Path("/tmp"))
+        sql = query.call_args.args[0]
+        self.assertIn("has_table_privilege(current_user,c.oid,'MAINTAIN')", sql)
+        self.assertIn("has_table_privilege(current_user,c.oid,'SELECT')", sql)
+        self.assertIn("has_schema_privilege(current_user,n.oid,'USAGE')", sql)
+        self.assertIn("has_schema_privilege(current_user,n.oid,'CREATE')", sql)
+
+    def test_migrator_owner_set_membership_must_match_on_both_branches(self):
+        with patch.object(module, "scalar", side_effect=["f|f|t", "f|f|t"]):
+            module.check_migrator_owner_membership({}, {}, Path("/tmp"))
+        for target in ("", "f|t|t", "t|f|t", "f|f|f"):
+            with self.subTest(target=target), patch.object(
+                module, "scalar", side_effect=["f|f|t", target]
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP"):
+                    module.check_migrator_owner_membership({}, {}, Path("/tmp"))
+
+    def test_pgcrypto_requirement_is_source_installed_target_available(self):
+        with patch.object(module, "scalar", side_effect=["1", "1"]):
+            module.check_pgcrypto_availability({}, {}, Path("/tmp"))
+        with patch.object(module, "scalar", side_effect=["1", "0"]):
+            with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_PGCRYPTO"):
+                module.check_pgcrypto_availability({}, {}, Path("/tmp"))
+
+    def test_auth_only_checks_two_pinned_roles_without_dump_restore_or_ddl(self):
+        expected = [
+            ("iam_database", "iam_schema_export_reader"),
+            ("iam_canonical_validation", "neondb_owner"),
+        ]
+        attempted = []
+        def mock_auth(creds, db, role, workspace):
+            attempted.append((db, role))
+        with (
+            self.env(confirm="NO_DDL"),
+            patch.object(module, "check_authentication_only", side_effect=mock_auth),
+            patch.object(module, "check_source") as source,
+            patch.object(module, "check_target") as target,
+            patch.object(module, "docker_run") as docker,
+        ):
+            module.execute("auth_only")
+            self.assertEqual(attempted, expected)
+            source.assert_not_called()
+            target.assert_not_called()
+            docker.assert_not_called()
+
+    def test_auth_only_runs_target_after_source_rejection(self):
+        attempted = []
+        def mock_auth(creds, db, role, workspace):
+            attempted.append(db)
+            if db == "iam_database":
+                raise module.GateBlocked("PG18_SOURCE_PREFLIGHT_AUTH_REJECTED")
+        with (
+            self.env(confirm="NO_DDL"),
+            patch.object(module, "check_authentication_only", side_effect=mock_auth),
+            patch.object(module, "check_source") as source,
+            patch.object(module, "check_target") as target,
+            patch.object(module, "docker_run") as docker,
+        ):
+            with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_AUTH_ONLY") as exc:
+                module.execute("auth_only")
+            self.assertIn("SOURCE: PG18_SOURCE_PREFLIGHT_AUTH_REJECTED", str(exc.exception))
+            self.assertEqual(attempted, ["iam_database", "iam_canonical_validation"])
+            source.assert_not_called()
+            target.assert_not_called()
+            docker.assert_not_called()
+
+    def test_auth_only_rejects_ddl_confirmation_and_preserves_authorized_source(self):
+        with self.env(confirm="RESTORE_BR_SWEET_UNION_ONLY"), patch.object(
+            module, "docker_run"
+        ) as docker:
+            with self.assertRaisesRegex(module.GateBlocked, "read-only operation requires NO_DDL"):
+                module.execute("auth_only")
+            docker.assert_not_called()
+        workflow = (HERE.parent.parent / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        self.assertIn("          - auth_only", workflow)
+        self.assertIn("inputs.operation == 'auth_only'", workflow)
+        self.assertIn("name: IAM-Canonical-Isolated-Restore", workflow)
+        self.assertIn("ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech", workflow)
+        self.assertNotIn("ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech", workflow)
+
+    def test_auth_only_requires_pinned_database_and_role_over_verified_client_tls(self):
+        cases = [
+            ("iam_database|iam_schema_export_reader|iam_schema_export_reader", None),
+            ("iam_database|neondb_owner|neondb_owner", "BLOCKED_AUTH_ROLE"),
+            ("iam_canonical_validation|iam_schema_export_reader|iam_schema_export_reader", "BLOCKED_AUTH_DATABASE"),
+            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|t", "BLOCKED_AUTH_OUTPUT_SHAPE"),
+        ]
+        creds = module.pg_env(SOURCE)
+        for raw, blocked in cases:
+            with self.subTest(raw=raw), patch.object(module, "scalar", return_value=raw):
+                if blocked is None:
+                    module.check_authentication_only(creds, module.mod.SOURCE_DATABASE,
+                                                     module.mod.SOURCE_ROLE, Path("/tmp"))
+                else:
+                    with self.assertRaisesRegex(module.GateBlocked, blocked):
+                        module.check_authentication_only(creds, module.mod.SOURCE_DATABASE,
+                                                         module.mod.SOURCE_ROLE, Path("/tmp"))
+
+    def test_auth_only_target_requires_pinned_database_and_role(self):
+        cases = [
+            ("iam_canonical_validation|neondb_owner|neondb_owner", None),
+            ("iam_canonical_validation|iam_schema_export_reader|iam_schema_export_reader", "BLOCKED_AUTH_ROLE"),
+            ("iam_database|neondb_owner|neondb_owner", "BLOCKED_AUTH_DATABASE"),
+        ]
+        creds = module.pg_env(TARGET)
+        for raw, blocked in cases:
+            with self.subTest(raw=raw), patch.object(module, "scalar", return_value=raw):
+                if blocked is None:
+                    module.check_authentication_only(creds, module.mod.TARGET_DATABASE,
+                                                     module.mod.TARGET_ROLE, Path("/tmp"))
+                else:
+                    with self.assertRaisesRegex(module.GateBlocked, blocked):
+                        module.check_authentication_only(creds, module.mod.TARGET_DATABASE,
+                                                         module.mod.TARGET_ROLE, Path("/tmp"))
+
+    def test_auth_only_rejects_client_tls_downgrade_before_sql(self):
+        for url in (SOURCE, TARGET):
+            for key, invalid in (("PGSSLMODE", "require"), ("PGSSLMODE", "disable"),
+                                 ("PGSSLROOTCERT", ""), ("PGSSLROOTCERT", "/tmp/fake-ca")):
+                creds = module.pg_env(url)
+                creds[key] = invalid
+                with self.subTest(role=creds["PGUSER"], key=key, invalid=invalid), \
+                     patch.object(module, "scalar") as query:
+                    with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_AUTH_TLS_CONFIG"):
+                        module.check_authentication_only(creds, creds["PGDATABASE"],
+                                                         creds["PGUSER"], Path("/tmp"))
+                    query.assert_not_called()
+
+    def test_neon_proxy_backend_ssl_false_not_used_as_external_tls_proof(self):
+        # Verified libpq transport is enforced by pg_env and checked before scalar.
+        # Backend pg_stat_ssl can be false even when client-to-Neon uses TLS.
+        import inspect
+        self.assertNotIn("pg_stat_ssl", inspect.getsource(module.check_source))
+        self.assertNotIn("pg_stat_ssl", inspect.getsource(module.check_target))
+        self.assertNotIn("pg_stat_ssl", inspect.getsource(module.check_restored))
+        creds = module.pg_env(SOURCE)
+        with patch.object(module, "scalar",
+                          return_value="iam_database|iam_schema_export_reader|iam_schema_export_reader"):
+            module.check_authentication_only(creds, module.mod.SOURCE_DATABASE,
+                                             module.mod.SOURCE_ROLE, Path("/tmp"))
+
+    def test_readiness_reports_multiple_blockers_with_no_dump_or_ddl(self):
+        with (
+            self.env(confirm="NO_DDL"),
+            patch.object(module, "check_source"),
+            patch.object(module, "check_target"),
+            patch.object(module, "check_restore_acl_principals"),
+            patch.object(module, "check_runtime_role_contract"),
+            patch.object(module, "check_pgcrypto_availability"),
+            patch.object(module, "check_migrator_owner_membership",
+                         side_effect=module.GateBlocked("BLOCKED_MIGRATOR_OWNER_MEMBERSHIP")),
+            patch.object(module, "check_schema_export_lock_permissions",
+                         side_effect=module.GateBlocked("BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES")),
+            patch.object(module, "docker_run") as d,
+        ):
+            with self.assertRaises(module.GateBlocked) as exc:
+                module.execute("readiness_only")
+            self.assertIn("BLOCKED_MIGRATOR_OWNER_MEMBERSHIP", str(exc.exception))
+            self.assertIn("BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES", str(exc.exception))
+            d.assert_not_called()
+
+    def test_readiness_pass_is_catalog_only_and_must_confirm_no_ddl(self):
+        with (
+            self.env(confirm="NO_DDL"),
+            patch.object(module, "check_source"),
+            patch.object(module, "check_target"),
+            patch.object(module, "check_authenticated_readiness"),
+            patch.object(module, "docker_run") as d,
+        ):
+            module.execute("readiness_only")
+            d.assert_not_called()
+        with self.env(confirm="RESTORE_BR_SWEET_UNION_ONLY"), patch.object(
+            module, "docker_run"
+        ) as d:
+            with self.assertRaisesRegex(module.GateBlocked, "read-only operation requires NO_DDL"):
+                module.execute("readiness_only")
+            d.assert_not_called()
+
+    def test_current_canonical_runbook_has_correct_branch_and_fail_closed_gates(self):
+        runbook = (HERE.parent.parent / "docs" / "operations" /
+                   "iam-canonical-isolated-workflow-runbook.md").read_text(encoding="utf8")
+        for required in (
+            "tiny-rice-70320263",
+            "br-ancient-term-b6mmx5ol",
+            "br-sweet-union-b6j80a7j",
+            "ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech",
+            "ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech",
+            "iam_schema_export_reader",
+            "iam_canonical_validation",
+            "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES",
+            "BLOCKED_ROLE_ATTRIBUTES",
+            "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP",
+            "0/23",
+            "NO_DDL",
+            "verify-full",
+            "sslrootcert=system",
+            "43481191111",
+            "43482719449",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, runbook)
+        for forbidden in (
+            "twilight-fire-88497009",
+            "ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech",
+            "iam_schema_export_reader does **not exist**",
+            "reader is not provisioned",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, runbook)
+        self.assertIn("export_only` | `NO_DDL`", runbook)
+        self.assertIn("restore_isolated` | `RESTORE_BR_SWEET_UNION_ONLY`", runbook)
+        self.assertIn("sem schemas IAM", runbook)
+
+    def test_workflow_requires_protected_environment_for_readiness(self):
+        workflow = (HERE.parent.parent / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        self.assertIn("          - readiness_only", workflow)
+        self.assertIn("inputs.operation == 'readiness_only'", workflow)
+        auth = workflow.split("\n  authenticated-export-and-optional-restore:", 1)[1]
+        self.assertIn("environment:\n      name: IAM-Canonical-Isolated-Restore", auth)
+        self.assertIn("IAM_CANONICAL_CONFIRMATION: ${{ inputs.confirm_isolated_ddl }}", auth)
+        self.assertIn("IAM_CANONICAL_OPERATION: ${{ inputs.operation }}", auth)
 
     def test_expired_branch_fails_before_credential_use(self):
         from datetime import datetime, timezone

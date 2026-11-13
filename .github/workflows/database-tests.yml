@@ -194,6 +194,7 @@ jobs:
                 bash database/tests/run-ci-runtime-login.sh
                 psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f database/tests/rbac-grant-revoke-rollback.sql
                 bash database/tests/test-migration-lock-concurrency.sh
+                bash database/tests/pg18-schema-only-maintain-ci.sh
                 bash database/tests/full-data-pgdump-restore-ci.sh
               '
 

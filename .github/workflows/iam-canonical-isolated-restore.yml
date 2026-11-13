@@ -4,12 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: "No DDL by default; export schema, or restore ONLY into iam_canonical_validation"
+        description: "Preflight, authenticated identity-only, catalog readiness, schema export, or isolated restore"
         required: true
         type: choice
         default: preflight_only
         options:
           - preflight_only
+          - tls_probe_only
+          - auth_only
+          - readiness_only
           - export_only
           - restore_isolated
       confirm_isolated_ddl:
@@ -33,7 +36,7 @@ jobs:
     if: >-
       github.repository == 'alexoaraujo/iam-control-center-new' &&
       github.ref == 'refs/heads/main' &&
-      (inputs.operation == 'preflight_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
+      (inputs.operation == 'preflight_only' || inputs.operation == 'tls_probe_only' || inputs.operation == 'auth_only' || inputs.operation == 'readiness_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -51,7 +54,7 @@ jobs:
           if [[ "$OPERATION" == "restore_isolated" ]]; then
             test "$CONFIRMATION" = "RESTORE_BR_SWEET_UNION_ONLY" || { echo "::error::Isolated DDL approval missing"; exit 1; }
           else
-            test "$CONFIRMATION" = "NO_DDL" || { echo "::error::NO_DDL must be selected for preflight/export"; exit 1; }
+            test "$CONFIRMATION" = "NO_DDL" || { echo "::error::NO_DDL required for every non-restore operation"; exit 1; }
           fi
       - name: Offline security tests - no credentials or Neon connectivity
         run: |
@@ -61,12 +64,101 @@ jobs:
         run: |
           echo "PASS_PREFLIGHT_ONLY: only offline security tests ran; no database operation"
 
+
+  public-tls-probe:
+    needs: preflight-offline
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.operation == 'tls_probe_only'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout reviewed main without persistent credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Verify pinned Neon PostgreSQL public certificates (no credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Fixed allowlist: no URL/host input and no credentials or protected environment.
+          for entry in \
+            "SOURCE:ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech" \
+            "TARGET:ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech"; do
+            label="${entry%%:*}"
+            host="${entry#*:}"
+            if timeout 25 openssl s_client -starttls postgres \
+              -connect "${host}:5432" -servername "${host}" \
+              -verify_hostname "${host}" -verify_return_error \
+              -brief </dev/null >/dev/null 2>&1; then
+              echo "PASS_PUBLIC_TLS_${label}: trusted CA, hostname, and TLS handshake verified"
+            else
+              echo "::error::BLOCKED_PUBLIC_TLS_${label}: public certificate, hostname, or network verification failed"
+              exit 1
+            fi
+          done
+          echo "PASS_PUBLIC_TLS_ONLY: no database authentication, SQL, credentials or DDL"
+      - name: Build PostgreSQL 18 client with system CA roots (no credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull --file database/tests/fixtures/pg18-system-ca.Dockerfile \
+            --tag iam-pg18-system-ca:local database/tests/fixtures
+          docker run --rm --entrypoint sh iam-pg18-system-ca:local \
+            -ec 'test -s /etc/ssl/certs/ca-certificates.crt; test "$SSL_CERT_FILE" = /etc/ssl/certs/ca-certificates.crt'
+      - name: Verify PG18 libpq system CA and hostname before auth (no credentials or SQL)
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          output_file="$(mktemp)"
+          trap 'rm -f "$output_file"' EXIT
+          # Match the production pg_env options inside the exact PostgreSQL 18 image.
+          # A deliberately nonexistent role has no password; successful auth fails closed.
+          for entry in \
+            "SOURCE:ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech:iam_database" \
+            "TARGET:ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech:iam_canonical_validation"; do
+            IFS=: read -r label host database <<< "$entry"
+            : > "$output_file"
+            if timeout 45 docker run --rm --network host \
+              --env "PGHOST=$host" --env "PGPORT=5432" \
+              --env "PGDATABASE=$database" \
+              --env "PGUSER=iam_tls_probe_nonexistent_noauth" \
+              --env "PGSSLMODE=verify-full" --env "PGSSLROOTCERT=system" \
+              --env "PGCONNECT_TIMEOUT=15" \
+              --env "PGOPTIONS=-c statement_timeout=60000 -c lock_timeout=10000" \
+              iam-pg18-system-ca:local psql -X -w -q -f /dev/null \
+              >/dev/null 2>"$output_file"; then
+              echo "::error::BLOCKED_PG18_LIBPQ_${label}_UNEXPECTED_LOGIN: synthetic role authenticated"
+              exit 1
+            fi
+            # Only an expected authentication denial demonstrates libpq reached
+            # authentication after certificate and hostname checks succeeded.
+            if grep -Eqi 'no password supplied|password authentication failed|role .* does not exist' "$output_file"; then
+              echo "PASS_PG18_LIBPQ_TLS_${label}: verified CA and hostname; authentication refused as expected"
+            elif grep -Eqi 'certificate|sslrootcert|ssl error|sslmode|tlsv1' "$output_file"; then
+              echo "::error::BLOCKED_PG18_LIBPQ_TLS_${label}: certificate, CA trust store or handshake failed"
+              exit 1
+            elif grep -Eqi 'could not translate host name|connection refused|timed out|network is unreachable' "$output_file"; then
+              echo "::error::BLOCKED_PG18_LIBPQ_NETWORK_${label}: endpoint not reachable"
+              exit 1
+            else
+              echo "::error::BLOCKED_PG18_LIBPQ_${label}_UNCLASSIFIED: unexpected response; details redacted"
+              exit 1
+            fi
+          done
+          echo "PASS_PG18_LIBPQ_TLS_ONLY: no real login, SQL, DDL, secrets or restore"
+
+
   authenticated-export-and-optional-restore:
     needs: preflight-offline
     if: >-
       github.repository == 'alexoaraujo/iam-control-center-new' &&
       github.ref == 'refs/heads/main' &&
-      (inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
+      (inputs.operation == 'auth_only' || inputs.operation == 'readiness_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
@@ -88,6 +180,11 @@ jobs:
           set -euo pipefail
           umask 077
           python3 database/scripts/guard-canonical-restore-target.py
+          # Build only from a fixture-only context; no protected env or data is sent to Docker.
+          docker build --pull --file database/tests/fixtures/pg18-system-ca.Dockerfile \
+            --tag iam-pg18-system-ca:local database/tests/fixtures
+          docker run --rm --entrypoint sh iam-pg18-system-ca:local \
+            -ec 'test -s /etc/ssl/certs/ca-certificates.crt; test "$SSL_CERT_FILE" = /etc/ssl/certs/ca-certificates.crt'
           python3 database/scripts/canonical-isolated-operation.py "$IAM_CANONICAL_OPERATION"
       - name: Record final scope of the run
         if: success()
@@ -96,9 +193,9 @@ jobs:
           {
             echo "### IAM canonical Neon isolated operation"
             echo "- Operation: $IAM_CANONICAL_OPERATION"
-            echo "- Source: twilight-fire-88497009 / main / iam_database (read-only role)"
+            echo "- Source: tiny-rice-70320263 / development / br-ancient-term-b6mmx5ol / iam_database (reader role pending)"
             echo "- Target: tiny-rice-70320263 / br-sweet-union-b6j80a7j / iam_canonical_validation"
-            echo "- PostgreSQL 18 direct TLS: verify-full; CA=system"
+            echo "- PostgreSQL 18 direct TLS: verify-full; CA=system (container Debian ca-certificates)"
             echo "- No change to Production, main DATABASE_URL, Auth0 or Vercel settings"
             echo "- Does not approve the six remaining PEOS release/cutover gates"
           } >> "$GITHUB_STEP_SUMMARY"

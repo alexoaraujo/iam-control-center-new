@@ -6,17 +6,18 @@ import sys
 from dataclasses import dataclass
 from urllib.parse import parse_qs, unquote, urlparse
 
-# Independent Neon control-plane mapping captured 2026-11-13.
+# Independently verified against the user's authorized Neon organization on 2026-11-13.
+# SOURCE is development in org alexoaraujo; legacy cross-org projects are forbidden.
 # Do not replace with caller-controlled production/project variables.
-SOURCE_HOST = "ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech"
+SOURCE_HOST = "ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech"
 TARGET_HOST = "ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech"
 SOURCE_DATABASE = "iam_database"
 TARGET_DATABASE = "iam_canonical_validation"
 SOURCE_ROLE = "iam_schema_export_reader"
 TARGET_ROLE = "neondb_owner"
-EXPECTED_SOURCE_BRANCH = "br-little-fire-b6adup9f"
+EXPECTED_SOURCE_BRANCH = "br-ancient-term-b6mmx5ol"
 EXPECTED_TARGET_BRANCH = "br-sweet-union-b6j80a7j"
-EXPECTED_SOURCE_PROJECT = "twilight-fire-88497009"
+EXPECTED_SOURCE_PROJECT = "tiny-rice-70320263"
 EXPECTED_TARGET_PROJECT = "tiny-rice-70320263"
 
 class GateBlocked(ValueError):

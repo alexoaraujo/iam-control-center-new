@@ -28,6 +28,42 @@ class GuardContract(unittest.TestCase):
         self.assertNotEqual(a.hostname, b.hostname)
         self.assertEqual(b.database, "iam_canonical_validation")
 
+    def test_only_authorized_neon_organization_and_branch_are_pinned(self):
+        self.assertEqual(mod.EXPECTED_SOURCE_PROJECT, "tiny-rice-70320263")
+        self.assertEqual(mod.EXPECTED_TARGET_PROJECT, "tiny-rice-70320263")
+        self.assertEqual(mod.EXPECTED_SOURCE_BRANCH, "br-ancient-term-b6mmx5ol")
+        self.assertEqual(mod.EXPECTED_TARGET_BRANCH, "br-sweet-union-b6j80a7j")
+        self.assertEqual(mod.SOURCE_HOST, "ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech")
+        self.assertNotEqual(mod.EXPECTED_SOURCE_BRANCH, mod.EXPECTED_TARGET_BRANCH)
+        self.assertNotEqual(mod.SOURCE_HOST, mod.TARGET_HOST)
+
+    def test_old_cross_organization_and_production_hosts_are_blocked(self):
+        forbidden = [
+            "ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech",
+            "ep-odd-fog-b643wfck.c-2.sa-east-1.aws.neon.tech",
+            "ep-winter-leaf-b6cp8d2c-pooler.c-2.sa-east-1.aws.neon.tech",
+        ]
+        for host in forbidden:
+            with self.subTest(host=host), self.assertRaises(mod.GateBlocked):
+                mod.verify_connections(uri(host, mod.SOURCE_DATABASE, mod.SOURCE_ROLE), target())
+
+    def test_legacy_schema_export_workflow_is_quarantined(self):
+        workflow = (file.parents[2] / ".github" / "workflows" /
+                    "neon-schema-export.yml").read_text(encoding="utf8")
+        self.assertIn("QUARANTINED", workflow)
+        job = workflow.split("\n  export-schema:", 1)[1]
+        self.assertIn("    if: false", job)
+        self.assertIn("The previous Neon source project belongs to a different organization.", job)
+
+    def test_pinned_tls_probe_is_for_authorized_development_only(self):
+        workflow = (file.parents[2] / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        self.assertIn("ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech", workflow)
+        self.assertNotIn("ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech", workflow)
+        self.assertIn("br-ancient-term-b6mmx5ol", workflow)
+        self.assertIn("tiny-rice-70320263 / development", workflow)
+        self.assertIn("ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech", workflow)
+
     def test_target_negative_paths(self):
         bad = [
             "", source(),
