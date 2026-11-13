@@ -63,8 +63,10 @@ class IsolatedRunnerContract(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             for args, role, stderr, expected in failures:
                 completed = subprocess.CompletedProcess(args, 1, "", stderr)
-                with self.subTest(expected=expected), \\
-                     patch.object(module.subprocess, "run", return_value=completed):
+                with (
+                    self.subTest(expected=expected),
+                    patch.object(module.subprocess, "run", return_value=completed),
+                ):
                     with self.assertRaises(module.GateBlocked) as exc:
                         module.docker_run(args, {"PGUSER": role}, Path(tmp))
                     message = str(exc.exception)
