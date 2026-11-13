@@ -1,5 +1,7 @@
 # GitHub Actions — authenticated source export and isolated canonical restore
 
+> **ACTIVE SOURCE-SCOPE CORRECTION — 2026-11-13.** The operator uses Neon organization `alexoaraujo` (org `org-billowing-mouse-09498904`) and project `tiny-rice-70320263`. The authorized **source candidate** is `development` (`br-ancient-term-b6mmx5ol`), database `iam_database`, direct host `ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech`. The isolated **target** is still `br-sweet-union-b6j80a7j`, database `iam_canonical_validation`. **All older instructions below naming `twilight-fire-88497009`, the other organization's `main`, or its `ep-twilight-shadow` endpoint are historical only and MUST NOT be executed.** The dedicated source login `iam_schema_export_reader` does **not exist** on authorized Development as inspected; no secret or privileged owner account may substitute. Do not invoke authenticated `auth_only`, `readiness_only`, `export_only`, or `restore_isolated` until the source export identity and approved credential contract exist. `neon-schema-export.yml` is quarantined. Only offline `preflight_only` or passwordless `tls_probe_only` may be used after revised workflow merges; keep Production untouched.
+
 **Purpose:** operationally allow the previously approved DDL **only** in Neon NEW's disposable database `iam_canonical_validation`. This is **not** approval for any role creation/alteration (Neon roles are branch-wide), ledger manipulation, existing database mutation, Production connection or cutover.
 
 ## Run workflow
