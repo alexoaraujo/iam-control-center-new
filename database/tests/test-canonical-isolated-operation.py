@@ -77,6 +77,7 @@ class IsolatedRunnerContract(unittest.TestCase):
         with self.env(approval=module.APPROVAL, confirm=module.CONFIRMATION), \
              patch.object(module, "check_source"), patch.object(module, "check_target"), \
              patch.object(module, "check_restored"), \
+             patch.object(module, "check_restore_acl_principals"), \
              patch.object(module, "docker_run", side_effect=self.simulated_docker(calls)):
             module.execute("restore_isolated")
         self.assertEqual(len(calls), 4)
@@ -125,6 +126,21 @@ class IsolatedRunnerContract(unittest.TestCase):
         with patch.object(module, "scalar", return_value="23|41|20|0|t|0|t"):
             with self.assertRaises(module.GateBlocked):
                 module.check_restored({}, Path("/tmp"))
+
+    def test_source_acl_roles_missing_in_target_blocks_before_any_ddl(self):
+        source_roles = "iam_app_runtime\niam_migrator\niam_owner\niam_schema_export_reader"
+        target_roles = "iam_app_runtime\niam_migrator\niam_owner"
+        with patch.object(module, "scalar", side_effect=[source_roles, target_roles]):
+            with self.assertRaises(module.GateBlocked) as cm:
+                module.check_restore_acl_principals({}, {}, Path("/tmp"))
+        self.assertIn("iam_schema_export_reader", str(cm.exception))
+        with patch.object(module, "scalar", side_effect=[source_roles, source_roles]):
+            module.check_restore_acl_principals({}, {}, Path("/tmp"))
+
+    def test_acl_inventory_incomplete_blocks_fail_closed(self):
+        with patch.object(module, "scalar", side_effect=["", "iam_owner"]):
+            with self.assertRaises(module.GateBlocked):
+                module.check_restore_acl_principals({}, {}, Path("/tmp"))
 
     def test_expired_branch_fails_before_credential_use(self):
         from datetime import datetime, timezone
