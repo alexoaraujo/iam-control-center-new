@@ -594,7 +594,7 @@ class IsolatedRunnerContract(unittest.TestCase):
                 self.assertNotIn(forbidden, runbook)
         self.assertIn("export_only` | `NO_DDL`", runbook)
         self.assertIn("restore_isolated` | `RESTORE_BR_SWEET_UNION_ONLY`", runbook)
-        self.assertIn("0 schemas IAM", runbook.replace("sem schemas IAM", "0 schemas IAM"))
+        self.assertIn("sem schemas IAM", runbook)
 
     def test_workflow_requires_protected_environment_for_readiness(self):
         workflow = (HERE.parent.parent / ".github" / "workflows" /
