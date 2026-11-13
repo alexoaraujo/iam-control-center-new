@@ -68,10 +68,19 @@ class IsolatedRunnerContract(unittest.TestCase):
         failures = [
             (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
              "FATAL: password authentication failed for user SECRET_USER",
-             "PG18_SOURCE_PREFLIGHT_AUTHENTICATION"),
+             "PG18_SOURCE_PREFLIGHT_AUTH_REJECTED"),
             (["psql", "-c", "SELECT 1"], "neondb_owner",
              "could not translate host name SECRET_HOST",
              "PG18_TARGET_PREFLIGHT_NETWORK"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "fe_sendauth: no password supplied PRIVATE HOST",
+             "PG18_SOURCE_PREFLIGHT_AUTH_NO_PASSWORD"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "FATAL: password has expired SECRET_USER",
+             "PG18_SOURCE_PREFLIGHT_AUTH_EXPIRED"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "FATAL: role SECRET_USER does not exist",
+             "PG18_SOURCE_PREFLIGHT_AUTH_ROLE_MISSING"),
             (["pg_dump", "--schema-only"], "iam_schema_export_reader",
              "ERROR: permission denied for table secret_table",
              "PG18_SCHEMA_EXPORT_PRIVILEGE"),
@@ -320,6 +329,60 @@ class IsolatedRunnerContract(unittest.TestCase):
             with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_PGCRYPTO"):
                 module.check_pgcrypto_availability({}, {}, Path("/tmp"))
 
+    def test_auth_only_pinned_source_target_identity_and_tls(self):
+        cases = [
+            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|t", True),
+            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|f", False),
+            ("iam_database|neondb_owner|neondb_owner|t", False),
+            ("iam_canonical_validation|neondb_owner|neondb_owner|t", False),
+        ]
+        for result, good in cases:
+            with self.subTest(result=result), patch.object(module, "scalar", return_value=result):
+                if good:
+                    module.check_authentication_only({}, module.mod.SOURCE_DATABASE,
+                                                     module.mod.SOURCE_ROLE, Path("/tmp"))
+                else:
+                    with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_AUTH_IDENTITY"):
+                        module.check_authentication_only({}, module.mod.SOURCE_DATABASE,
+                                                         module.mod.SOURCE_ROLE, Path("/tmp"))
+
+    def test_auth_only_never_queries_iam_rows_or_runs_dump_restore(self):
+        calls = []
+        def fake_auth(creds, database, role, workspace):
+            calls.append((database, role))
+        with (
+            self.env(confirm="NO_DDL"),
+            patch.object(module, "check_authentication_only", side_effect=fake_auth),
+            patch.object(module, "check_source") as check_source,
+            patch.object(module, "check_target") as check_target,
+            patch.object(module, "docker_run") as docker,
+        ):
+            module.execute("auth_only")
+            check_source.assert_not_called()
+            check_target.assert_not_called()
+            docker.assert_not_called()
+        self.assertEqual(calls, [
+            ("iam_database", "iam_schema_export_reader"),
+            ("iam_canonical_validation", "neondb_owner"),
+        ])
+        with self.env(confirm="RESTORE_BR_SWEET_UNION_ONLY"), patch.object(
+            module, "docker_run"
+        ) as docker:
+            with self.assertRaisesRegex(module.GateBlocked, "read-only operation requires NO_DDL"):
+                module.execute("auth_only")
+            docker.assert_not_called()
+
+    def test_auth_only_workflow_is_protected_and_no_ddl(self):
+        workflow = (HERE.parent.parent / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        self.assertIn("          - auth_only", workflow)
+        self.assertIn("inputs.operation == 'auth_only'", workflow)
+        auth = workflow.split("\n  authenticated-export-and-optional-restore:", 1)[1]
+        self.assertIn("name: IAM-Canonical-Isolated-Restore", auth)
+        self.assertIn("IAM_CANONICAL_CONFIRMATION: ${{ inputs.confirm_isolated_ddl }}", auth)
+        self.assertIn("IAM_CANONICAL_OPERATION: ${{ inputs.operation }}", auth)
+        self.assertIn("python3 database/scripts/guard-canonical-restore-target.py", auth)
+
     def test_readiness_reports_multiple_blockers_with_no_dump_or_ddl(self):
         with (
             self.env(confirm="NO_DDL"),
@@ -353,7 +416,7 @@ class IsolatedRunnerContract(unittest.TestCase):
         with self.env(confirm="RESTORE_BR_SWEET_UNION_ONLY"), patch.object(
             module, "docker_run"
         ) as d:
-            with self.assertRaisesRegex(module.GateBlocked, "readiness_only requires NO_DDL"):
+            with self.assertRaisesRegex(module.GateBlocked, "read-only operation requires NO_DDL"):
                 module.execute("readiness_only")
             d.assert_not_called()
 
