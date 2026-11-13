@@ -388,20 +388,38 @@ class IsolatedRunnerContract(unittest.TestCase):
 
     def test_auth_only_requires_pinned_database_role_and_tls(self):
         cases = [
-            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|t", True),
-            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|f", False),
-            ("iam_database|neondb_owner|neondb_owner|t", False),
-            ("iam_canonical_validation|neondb_owner|neondb_owner|t", False),
+            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|t", None),
+            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|f", "BLOCKED_AUTH_TLS"),
+            ("iam_database|neondb_owner|neondb_owner|t", "BLOCKED_AUTH_ROLE"),
+            ("iam_canonical_validation|iam_schema_export_reader|iam_schema_export_reader|t", "BLOCKED_AUTH_DATABASE"),
+            ("iam_database|iam_schema_export_reader|iam_schema_export_reader", "BLOCKED_AUTH_OUTPUT_SHAPE"),
         ]
-        for raw, good in cases:
-            with self.subTest(raw=raw), patch.object(module, "scalar", return_value=raw):
-                if good:
+        for raw, blocked in cases:
+            with self.subTest(blocked=blocked, raw=raw), patch.object(module, "scalar", return_value=raw):
+                if blocked is None:
                     module.check_authentication_only({}, module.mod.SOURCE_DATABASE,
                                                      module.mod.SOURCE_ROLE, Path("/tmp"))
                 else:
-                    with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_AUTH_IDENTITY"):
+                    with self.assertRaisesRegex(module.GateBlocked, blocked):
                         module.check_authentication_only({}, module.mod.SOURCE_DATABASE,
                                                          module.mod.SOURCE_ROLE, Path("/tmp"))
+
+    def test_auth_only_target_role_and_tls_diagnostics(self):
+        cases = [
+            ("iam_canonical_validation|neondb_owner|neondb_owner|t", None),
+            ("iam_canonical_validation|neondb_owner|neondb_owner|f", "BLOCKED_AUTH_TLS"),
+            ("iam_canonical_validation|iam_schema_export_reader|iam_schema_export_reader|t", "BLOCKED_AUTH_ROLE"),
+            ("iam_database|neondb_owner|neondb_owner|t", "BLOCKED_AUTH_DATABASE"),
+        ]
+        for raw, blocked in cases:
+            with self.subTest(blocked=blocked, raw=raw), patch.object(module, "scalar", return_value=raw):
+                if blocked is None:
+                    module.check_authentication_only({}, module.mod.TARGET_DATABASE,
+                                                     module.mod.TARGET_ROLE, Path("/tmp"))
+                else:
+                    with self.assertRaisesRegex(module.GateBlocked, blocked):
+                        module.check_authentication_only({}, module.mod.TARGET_DATABASE,
+                                                         module.mod.TARGET_ROLE, Path("/tmp"))
 
     def test_readiness_reports_multiple_blockers_with_no_dump_or_ddl(self):
         with (
