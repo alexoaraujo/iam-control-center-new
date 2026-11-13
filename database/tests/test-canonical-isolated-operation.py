@@ -244,6 +244,19 @@ class IsolatedRunnerContract(unittest.TestCase):
             with self.assertRaises(module.GateBlocked):
                 module.check_restored({}, Path("/tmp"))
 
+    def test_reader_ledger_acl_check_uses_catalog_oid_without_schema_usage(self):
+        # Neon reader intentionally has no USAGE on iam, but pg_catalog is visible.
+        # Name-based regclass lookup for 'iam.schema_migrations' can raise 42501.
+        import inspect
+        sql_source = inspect.getsource(module.check_source)
+        self.assertIn("has_table_privilege(current_user,c.oid,'SELECT')", sql_source)
+        self.assertNotIn("has_table_privilege(current_user,'iam.schema_migrations'", sql_source)
+        with patch.object(module, "scalar", return_value=(
+            "iam_database|iam_schema_export_reader|iam_schema_export_reader|"
+            "23|41|20|f|f|t|0"
+        )):
+            module.check_source({}, Path("/tmp"))
+
     def test_source_acl_roles_missing_in_target_blocks_before_any_ddl(self):
         source_roles = "iam_app_runtime\niam_migrator\niam_owner\niam_schema_export_reader"
         target_roles = "iam_app_runtime\niam_migrator\niam_owner"
