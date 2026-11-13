@@ -159,7 +159,7 @@ class RevokerTest(TestCase):
         self.assertNotIn("ALTER ROLE", sql)
         self.assertNotIn("SELECT * FROM IAM.", sql)
         self.assertIn("LOCK_TIMEOUT", sql)
-        self.assertIn("ON_ERROR_STOP", " ".join(m.psql.__code__.co_consts if False else ["ON_ERROR_STOP"]))
+        self.assertIn("ON_ERROR_STOP=1", SCRIPT.read_text(encoding="utf8"))
         self.assertIn("BEGIN;", sql)
         self.assertIn("COMMIT;", sql)
 
