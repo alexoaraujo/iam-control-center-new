@@ -169,6 +169,7 @@ class IsolatedRunnerContract(unittest.TestCase):
         calls = []
         with self.env(), patch.object(module, "check_source"), \
              patch.object(module, "check_target"), \
+             patch.object(module, "check_schema_export_lock_permissions"), \
              patch.object(module, "docker_run", side_effect=self.simulated_docker(calls)):
             module.execute("export_only")
         self.assertEqual([call[0] for call in calls], ["pg_dump", "pg_restore"])
@@ -178,9 +179,12 @@ class IsolatedRunnerContract(unittest.TestCase):
         calls = []
         with self.env(approval=module.APPROVAL, confirm=module.CONFIRMATION), \
              patch.object(module, "check_source"), patch.object(module, "check_target"), \
+             patch.object(module, "check_schema_export_lock_permissions"), \
              patch.object(module, "check_restored"), \
              patch.object(module, "check_restore_acl_principals"), \
              patch.object(module, "check_runtime_role_contract"), \
+             patch.object(module, "check_migrator_owner_membership"), \
+             patch.object(module, "check_pgcrypto_availability"), \
              patch.object(module, "docker_run", side_effect=self.simulated_docker(calls)):
             module.execute("restore_isolated")
         self.assertEqual(len(calls), 4)
@@ -198,6 +202,7 @@ class IsolatedRunnerContract(unittest.TestCase):
             return ""
         with self.env(), patch.object(module, "check_source"), \
              patch.object(module, "check_target"), \
+             patch.object(module, "check_schema_export_lock_permissions"), \
              patch.object(module, "docker_run", side_effect=contaminated):
             with self.assertRaises(module.GateBlocked):
                 module.execute("export_only")
@@ -289,6 +294,78 @@ class IsolatedRunnerContract(unittest.TestCase):
             with self.assertRaisesRegex(module.GateBlocked,
                                         "BLOCKED_ROLE_MEMBERSHIPS"):
                 module.check_runtime_role_contract({}, {}, Path("/tmp"))
+
+    def test_schema_lock_guard_fails_before_any_dump(self):
+        for value in ("23|0", "23|22", ""):
+            with self.subTest(value=value), patch.object(module, "scalar", return_value=value):
+                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES"):
+                    module.check_schema_export_lock_permissions({}, Path("/tmp"))
+        with patch.object(module, "scalar", return_value="23|23"):
+            module.check_schema_export_lock_permissions({}, Path("/tmp"))
+
+    def test_migrator_owner_set_membership_must_match_on_both_branches(self):
+        with patch.object(module, "scalar", side_effect=["f|f|t", "f|f|t"]):
+            module.check_migrator_owner_membership({}, {}, Path("/tmp"))
+        for target in ("", "f|t|t", "t|f|t", "f|f|f"):
+            with self.subTest(target=target), patch.object(
+                module, "scalar", side_effect=["f|f|t", target]
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP"):
+                    module.check_migrator_owner_membership({}, {}, Path("/tmp"))
+
+    def test_pgcrypto_requirement_is_source_installed_target_available(self):
+        with patch.object(module, "scalar", side_effect=["1", "1"]):
+            module.check_pgcrypto_availability({}, {}, Path("/tmp"))
+        with patch.object(module, "scalar", side_effect=["1", "0"]):
+            with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_PGCRYPTO"):
+                module.check_pgcrypto_availability({}, {}, Path("/tmp"))
+
+    def test_readiness_reports_multiple_blockers_with_no_dump_or_ddl(self):
+        with (
+            self.env(confirm="NO_DDL"),
+            patch.object(module, "check_source"),
+            patch.object(module, "check_target"),
+            patch.object(module, "check_restore_acl_principals"),
+            patch.object(module, "check_runtime_role_contract"),
+            patch.object(module, "check_pgcrypto_availability"),
+            patch.object(module, "check_migrator_owner_membership",
+                         side_effect=module.GateBlocked("BLOCKED_MIGRATOR_OWNER_MEMBERSHIP")),
+            patch.object(module, "check_schema_export_lock_permissions",
+                         side_effect=module.GateBlocked("BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES")),
+            patch.object(module, "docker_run") as d,
+        ):
+            with self.assertRaises(module.GateBlocked) as exc:
+                module.execute("readiness_only")
+            self.assertIn("BLOCKED_MIGRATOR_OWNER_MEMBERSHIP", str(exc.exception))
+            self.assertIn("BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES", str(exc.exception))
+            d.assert_not_called()
+
+    def test_readiness_pass_is_catalog_only_and_must_confirm_no_ddl(self):
+        with (
+            self.env(confirm="NO_DDL"),
+            patch.object(module, "check_source"),
+            patch.object(module, "check_target"),
+            patch.object(module, "check_authenticated_readiness"),
+            patch.object(module, "docker_run") as d,
+        ):
+            module.execute("readiness_only")
+            d.assert_not_called()
+        with self.env(confirm="RESTORE_BR_SWEET_UNION_ONLY"), patch.object(
+            module, "docker_run"
+        ) as d:
+            with self.assertRaisesRegex(module.GateBlocked, "readiness_only requires NO_DDL"):
+                module.execute("readiness_only")
+            d.assert_not_called()
+
+    def test_workflow_requires_protected_environment_for_readiness(self):
+        workflow = (HERE.parent.parent / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        self.assertIn("          - readiness_only", workflow)
+        self.assertIn("inputs.operation == 'readiness_only'", workflow)
+        auth = workflow.split("\\n  authenticated-export-and-optional-restore:", 1)[1]
+        self.assertIn("environment:\\n      name: IAM-Canonical-Isolated-Restore", auth)
+        self.assertIn("IAM_CANONICAL_CONFIRMATION: ${{ inputs.confirm_isolated_ddl }}", auth)
+        self.assertIn("IAM_CANONICAL_OPERATION: ${{ inputs.operation }}", auth)
 
     def test_expired_branch_fails_before_credential_use(self):
         from datetime import datetime, timezone
