@@ -1,0 +1,104 @@
+name: IAM canonical export and isolated restore (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "No DDL by default; export schema, or restore ONLY into iam_canonical_validation"
+        required: true
+        type: choice
+        default: preflight_only
+        options:
+          - preflight_only
+          - export_only
+          - restore_isolated
+      confirm_isolated_ddl:
+        description: "For restore only: RESTORE_BR_SWEET_UNION_ONLY; otherwise NO_DDL"
+        required: true
+        type: choice
+        default: NO_DDL
+        options:
+          - NO_DDL
+          - RESTORE_BR_SWEET_UNION_ONLY
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-canonical-isolated-restore-20261113
+  cancel-in-progress: false
+
+jobs:
+  preflight-offline:
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      github.ref == 'refs/heads/main' &&
+      (inputs.operation == 'preflight_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout reviewed main without persistent credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Fail closed when confirmation does not match the operation
+        env:
+          OPERATION: ${{ inputs.operation }}
+          CONFIRMATION: ${{ inputs.confirm_isolated_ddl }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$OPERATION" == "restore_isolated" ]]; then
+            test "$CONFIRMATION" = "RESTORE_BR_SWEET_UNION_ONLY" || { echo "::error::Isolated DDL approval missing"; exit 1; }
+          else
+            test "$CONFIRMATION" = "NO_DDL" || { echo "::error::NO_DDL must be selected for preflight/export"; exit 1; }
+          fi
+      - name: Offline security tests - no credentials or Neon connectivity
+        run: |
+          python3 database/tests/test-guard-canonical-restore-target.py
+          python3 database/tests/test-canonical-isolated-operation.py
+      - name: Summarize safe preflight
+        run: |
+          echo "PASS_PREFLIGHT_ONLY: only offline security tests ran; no database operation"
+
+  authenticated-export-and-optional-restore:
+    needs: preflight-offline
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      github.ref == 'refs/heads/main' &&
+      (inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: IAM-Canonical-Isolated-Restore
+    env:
+      IAM_CANONICAL_SOURCE_URL: ${{ secrets.IAM_CANONICAL_SOURCE_URL }}
+      IAM_CANONICAL_TARGET_URL: ${{ secrets.IAM_CANONICAL_TARGET_URL }}
+      IAM_CANONICAL_OPERATOR_APPROVAL: ${{ secrets.IAM_CANONICAL_OPERATOR_APPROVAL }}
+      IAM_CANONICAL_CONFIRMATION: ${{ inputs.confirm_isolated_ddl }}
+      IAM_CANONICAL_OPERATION: ${{ inputs.operation }}
+    steps:
+      - name: Checkout reviewed main without persistent credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Validate pinned TLS endpoints and run PG18 export or isolated restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 database/scripts/guard-canonical-restore-target.py
+          python3 database/scripts/canonical-isolated-operation.py "$IAM_CANONICAL_OPERATION"
+      - name: Record final scope of the run
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "### IAM canonical Neon isolated operation"
+            echo "- Operation: $IAM_CANONICAL_OPERATION"
+            echo "- Source: twilight-fire-88497009 / main / iam_database (read-only role)"
+            echo "- Target: tiny-rice-70320263 / br-sweet-union-b6j80a7j / iam_canonical_validation"
+            echo "- PostgreSQL 18 direct TLS: verify-full; CA=system"
+            echo "- No change to Production, main DATABASE_URL, Auth0 or Vercel settings"
+            echo "- Does not approve the six remaining PEOS release/cutover gates"
+          } >> "$GITHUB_STEP_SUMMARY"
