@@ -1,5 +1,7 @@
 # IAM canonical restoration — isolated target guard
 
+> **SUPERSEDING CONTROL-PLANE SCOPE — 2026-11-13.** The operator explicitly excludes the legacy cross-organization Neon project `twilight-fire-88497009`. The active authorized project is `tiny-rice-70320263` in organization `alexoaraujo`. Source candidate: `development` / `br-ancient-term-b6mmx5ol` / `iam_database` / direct `ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech`; destination: disposable `br-sweet-union-b6j80a7j` / `iam_canonical_validation`. The SOURCE role `iam_schema_export_reader` is **not provisioned in Development**, so authenticated export is **BLOCKED**. The historical source table and legacy restoration rationale below are retained as a snapshot only, NOT a current authorization. Require a new independent source-identity/least-privilege review before any authenticated schema operation; no Production modification.
+
 **State: DRAFT / REVIEW ONLY.** This is not permission to perform a schema restore, write data, fix ACLs in Development or Production, update main, or cut over. It is an executable guard for credentials and targets, tested entirely offline with synthetic passwords.
 
 ## Verified Neon control-plane targets (2026-11-13)
