@@ -21,6 +21,8 @@ spec.loader.exec_module(mod)
 EXPIRES = datetime.fromisoformat("2026-11-20T09:12:00+00:00")
 APPROVAL = "APPROVED_BR_SWEET_UNION_ONLY"
 CONFIRMATION = "RESTORE_BR_SWEET_UNION_ONLY"
+# Built by the gated GitHub workflow from the minimal CA fixture.
+PG18_CLIENT_IMAGE = "iam-pg18-system-ca:local"
 
 class GateBlocked(Exception):
     pass
@@ -58,7 +60,7 @@ def docker_run(args: list[str], creds: dict[str, str], workspace: Path) -> str:
     cmd = [
         "docker", "run", "--rm", "--network", "host", "--user", str(os.getuid()),
         "--env-file", str(secret_file), "-v", f"{workspace}:/work",
-        "postgres:18-bookworm", *args
+        PG18_CLIENT_IMAGE, *args
     ]
     try:
         result = subprocess.run(
