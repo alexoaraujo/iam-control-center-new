@@ -337,49 +337,58 @@ class IsolatedRunnerContract(unittest.TestCase):
                 module.check_restore_acl_principals({}, {}, Path("/tmp"))
 
     def test_role_attributes_drift_blocks_restoration(self):
-        legacy = ("iam_app_runtime_login|t|f|f|f\n"
-                  "iam_migrator_login|t|f|f|f\n"
-                  "iam_worker_login|t|f|f|f")
-        target = "iam_app_runtime_login|t|t|f|f"
-        with patch.object(module, "scalar", side_effect=[legacy, target]):
-            with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_ROLE_ATTRIBUTES"):
-                module.check_runtime_role_contract({}, {}, Path("/tmp"))
-        memberships = ("iam_app_runtime_login|iam_app_runtime|f|t|t\n"
+        canonical = ("iam_app_runtime_login|t|t|f|f\n"
+                     "iam_migrator_login|t|f|f|f\n"
+                     "iam_worker_login|t|f|f|f")
+        legacy = canonical.replace("iam_app_runtime_login|t|t|f|f",
+                                   "iam_app_runtime_login|t|f|f|f")
+        for src, dst in (
+            (legacy, canonical), (canonical, legacy),
+            (legacy, legacy), (canonical, canonical.replace("iam_worker_login|t", "iam_worker_login|f")),
+            (canonical.replace("iam_migrator_login|t", "iam_migrator_login|f"), canonical),
+            ("", canonical),
+        ):
+            with self.subTest(src=src, dst=dst), patch.object(
+                module, "scalar", side_effect=[src, dst]
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_ROLE_ATTRIBUTES"):
+                    module.check_runtime_role_contract({}, {}, Path("/tmp"))
+        memberships = ("iam_app_runtime_login|iam_app_runtime|f|t|f\n"
                        "iam_migrator_login|iam_migrator|f|f|t\n"
                        "iam_worker_login|iam_worker|f|t|t")
         with patch.object(module, "scalar", side_effect=[
-            legacy, legacy, memberships, memberships
+            canonical, canonical, memberships, memberships
         ]):
             module.check_runtime_role_contract({}, {}, Path("/tmp"))
 
     def test_membership_set_option_drift_blocks_restoration(self):
-        roles = ("iam_app_runtime_login|t|f|f|f\n"
-                 "iam_migrator_login|t|f|f|f\n"
-                 "iam_worker_login|t|f|f|f")
-        source = ("iam_app_runtime_login|iam_app_runtime|f|t|t\n"
-                  "iam_migrator_login|iam_migrator|f|f|t\n"
-                  "iam_worker_login|iam_worker|f|t|t")
-        wrong_set = source.replace("iam_app_runtime|f|t|t",
-                                   "iam_app_runtime|f|t|f")
-        with patch.object(module, "scalar", side_effect=[
-            roles, roles, source, wrong_set
-        ]):
-            with self.assertRaisesRegex(module.GateBlocked,
-                                        "BLOCKED_ROLE_MEMBERSHIPS"):
-                module.check_runtime_role_contract({}, {}, Path("/tmp"))
-        extra_grant = source + "\niam_worker_login|iam_owner|f|t|t"
-        with patch.object(module, "scalar", side_effect=[
-            roles, roles, source, extra_grant
-        ]):
-            with self.assertRaisesRegex(module.GateBlocked,
-                                        "BLOCKED_ROLE_MEMBERSHIPS"):
-                module.check_runtime_role_contract({}, {}, Path("/tmp"))
-        with patch.object(module, "scalar", side_effect=[
-            roles, roles, "", source
-        ]):
-            with self.assertRaisesRegex(module.GateBlocked,
-                                        "BLOCKED_ROLE_MEMBERSHIPS"):
-                module.check_runtime_role_contract({}, {}, Path("/tmp"))
+        canonical_roles = ("iam_app_runtime_login|t|t|f|f\n"
+                           "iam_migrator_login|t|f|f|f\n"
+                           "iam_worker_login|t|f|f|f")
+        canonical_memberships = ("iam_app_runtime_login|iam_app_runtime|f|t|f\n"
+                                 "iam_migrator_login|iam_migrator|f|f|t\n"
+                                 "iam_worker_login|iam_worker|f|t|t")
+        insecure_set = canonical_memberships.replace("iam_app_runtime|f|t|f",
+                                                     "iam_app_runtime|f|t|t")
+        extra_owner = canonical_memberships + "\niam_worker_login|iam_owner|f|f|t"
+        broad_admin = canonical_memberships.replace("iam_migrator|f|f|t",
+                                                    "iam_migrator|t|f|t")
+        for source, target in (
+            (canonical_memberships, insecure_set),
+            (insecure_set, canonical_memberships),
+            (insecure_set, insecure_set),       # source/target parity is NOT enough
+            (extra_owner, extra_owner),
+            (broad_admin, broad_admin),
+            ("", canonical_memberships),
+            (canonical_memberships, ""),
+        ):
+            with self.subTest(source=source, target=target), patch.object(
+                module, "scalar", side_effect=[
+                    canonical_roles, canonical_roles, source, target
+                ]
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_ROLE_MEMBERSHIPS"):
+                    module.check_runtime_role_contract({}, {}, Path("/tmp"))
 
     def test_schema_lock_guard_fails_before_any_dump(self):
         # IAM tables, MAINTAIN covered, broad grants, schemas, USAGE, CREATE.
