@@ -95,6 +95,49 @@ jobs:
             fi
           done
           echo "PASS_PUBLIC_TLS_ONLY: no database authentication, SQL, credentials or DDL"
+      - name: Verify PG18 libpq system CA and hostname before auth (no credentials or SQL)
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          output_file="$(mktemp)"
+          trap 'rm -f "$output_file"' EXIT
+          # Match the production pg_env options inside the exact PostgreSQL 18 image.
+          # A deliberately nonexistent role has no password; successful auth fails closed.
+          for entry in \
+            "SOURCE:ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech:iam_database" \
+            "TARGET:ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech:iam_canonical_validation"; do
+            IFS=: read -r label host database <<< "$entry"
+            : > "$output_file"
+            if timeout 45 docker run --rm --network host \
+              --env "PGHOST=$host" --env "PGPORT=5432" \
+              --env "PGDATABASE=$database" \
+              --env "PGUSER=iam_tls_probe_nonexistent_noauth" \
+              --env "PGSSLMODE=verify-full" --env "PGSSLROOTCERT=system" \
+              --env "PGCONNECT_TIMEOUT=15" \
+              --env "PGOPTIONS=-c statement_timeout=60000 -c lock_timeout=10000" \
+              postgres:18-bookworm psql -X -w -q -f /dev/null \
+              >/dev/null 2>"$output_file"; then
+              echo "::error::BLOCKED_PG18_LIBPQ_${label}_UNEXPECTED_LOGIN: synthetic role authenticated"
+              exit 1
+            fi
+            # Only an expected authentication denial demonstrates libpq reached
+            # authentication after certificate and hostname checks succeeded.
+            if grep -Eqi 'no password supplied|password authentication failed|role .* does not exist' "$output_file"; then
+              echo "PASS_PG18_LIBPQ_TLS_${label}: verified CA and hostname; authentication refused as expected"
+            elif grep -Eqi 'certificate|sslrootcert|ssl error|sslmode|tlsv1' "$output_file"; then
+              echo "::error::BLOCKED_PG18_LIBPQ_TLS_${label}: certificate, CA trust store or handshake failed"
+              exit 1
+            elif grep -Eqi 'could not translate host name|connection refused|timed out|network is unreachable' "$output_file"; then
+              echo "::error::BLOCKED_PG18_LIBPQ_NETWORK_${label}: endpoint not reachable"
+              exit 1
+            else
+              echo "::error::BLOCKED_PG18_LIBPQ_${label}_UNCLASSIFIED: unexpected response; details redacted"
+              exit 1
+            fi
+          done
+          echo "PASS_PG18_LIBPQ_TLS_ONLY: no real login, SQL, DDL, secrets or restore"
+
 
   authenticated-export-and-optional-restore:
     needs: preflight-offline

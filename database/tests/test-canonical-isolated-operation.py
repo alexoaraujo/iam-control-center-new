@@ -101,6 +101,16 @@ class IsolatedRunnerContract(unittest.TestCase):
         self.assertNotIn("IAM_CANONICAL_TARGET_URL", public)
         self.assertNotIn("pg_dump", public)
         self.assertNotIn("pg_restore", public)
+        self.assertIn("postgres:18-bookworm psql -X -w -q -f /dev/null", public)
+        self.assertIn("PGSSLMODE=verify-full", public)
+        self.assertIn("PGSSLROOTCERT=system", public)
+        self.assertIn("iam_tls_probe_nonexistent_noauth", public)
+        self.assertIn("PASS_PG18_LIBPQ_TLS_", public)
+        self.assertIn("BLOCKED_PG18_LIBPQ_TLS_", public)
+        self.assertIn("no password supplied|password authentication failed", public)
+        self.assertIn("authentication refused as expected", public)
+        self.assertNotIn("PGPASSWORD=", public)
+        self.assertNotIn("IAM_CANONICAL_OPERATOR_APPROVAL", public)
 
     def test_no_operator_approval_blocks_before_docker(self):
         with self.env(), patch.object(module, "docker_run") as d:
