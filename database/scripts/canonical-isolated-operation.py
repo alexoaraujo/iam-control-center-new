@@ -369,7 +369,7 @@ def execute(mode: str) -> None:
         mod.verify_connections(source, target)
     except mod.GateBlocked as e:
         raise GateBlocked(str(e)) from e
-    if mode in ("auth_only", "readiness_only") and os.environ.get("IAM_CANONICAL_CONFIRMATION", "") != "NO_DDL":
+    if mode in ("auth_only", "readiness_only", "export_only") and os.environ.get("IAM_CANONICAL_CONFIRMATION", "") != "NO_DDL":
         raise GateBlocked("read-only operation requires NO_DDL confirmation")
     if mode == "restore_isolated":
         if os.environ.get("IAM_CANONICAL_OPERATOR_APPROVAL", "") != APPROVAL:
@@ -399,10 +399,13 @@ def execute(mode: str) -> None:
             return
         check_source(src, workspace)
         check_target(dst, workspace)
+        # Every export or restore must pass the SAME comprehensive readiness gate
+        # as readiness_only, before any pg_dump call or other external operation.
+        # This prevents an isolated grant to the export role from bypassing
+        # source/target role and membership parity checks.
+        check_authenticated_readiness(src, dst, workspace)
         if mode == "readiness_only":
-            check_authenticated_readiness(src, dst, workspace)
             return
-        check_schema_export_lock_permissions(src, workspace)
         archive = workspace / "schema.dump"
         docker_run([
             "pg_dump", "-w", "--schema-only", "--format=custom",

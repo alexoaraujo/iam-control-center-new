@@ -176,19 +176,20 @@ class IsolatedRunnerContract(unittest.TestCase):
 
     def test_export_only_never_runs_ddl(self):
         calls = []
-        with self.env(), patch.object(module, "check_source"), \
+        with self.env(confirm="NO_DDL"), patch.object(module, "check_source"), \
              patch.object(module, "check_target"), \
-             patch.object(module, "check_schema_export_lock_permissions"), \
+             patch.object(module, "check_authenticated_readiness",
+                          side_effect=lambda *_: calls.append(["readiness"])), \
              patch.object(module, "docker_run", side_effect=self.simulated_docker(calls)):
             module.execute("export_only")
-        self.assertEqual([call[0] for call in calls], ["pg_dump", "pg_restore"])
+        self.assertEqual([call[0] for call in calls], ["readiness", "pg_dump", "pg_restore"])
         self.assertFalse(any("CREATE EXTENSION" in str(call) for call in calls))
 
     def test_restore_confirmation_allows_only_isolated_database(self):
         calls = []
         with self.env(approval=module.APPROVAL, confirm=module.CONFIRMATION), \
              patch.object(module, "check_source"), patch.object(module, "check_target"), \
-             patch.object(module, "check_schema_export_lock_permissions"), \
+             patch.object(module, "check_authenticated_readiness"), \
              patch.object(module, "check_restored"), \
              patch.object(module, "check_restore_acl_principals"), \
              patch.object(module, "check_runtime_role_contract"), \
@@ -209,12 +210,75 @@ class IsolatedRunnerContract(unittest.TestCase):
             if args[:2] == ["pg_restore", "--list"]:
                 return "TABLE DATA iam.identities\n"
             return ""
-        with self.env(), patch.object(module, "check_source"), \
+        with self.env(confirm="NO_DDL"), patch.object(module, "check_source"), \
              patch.object(module, "check_target"), \
-             patch.object(module, "check_schema_export_lock_permissions"), \
+             patch.object(module, "check_authenticated_readiness"), \
              patch.object(module, "docker_run", side_effect=contaminated):
             with self.assertRaises(module.GateBlocked):
                 module.execute("export_only")
+
+    def test_export_only_requires_no_ddl_confirmation_even_when_called_directly(self):
+        # Workflow input protection is not a substitute for runner-level safety.
+        for confirmation in ("", module.CONFIRMATION):
+            with (
+                self.subTest(confirmation=confirmation),
+                self.env(confirm=confirmation),
+                patch.object(module, "check_source") as source,
+                patch.object(module, "check_target") as target,
+                patch.object(module, "check_authenticated_readiness") as readiness,
+                patch.object(module, "docker_run") as client,
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "NO_DDL"):
+                    module.execute("export_only")
+                source.assert_not_called()
+                target.assert_not_called()
+                readiness.assert_not_called()
+                client.assert_not_called()
+
+    def test_export_and_restore_fail_closed_on_unresolved_role_parity_before_dump(self):
+        # Even if source/target identity and table lock grants are fixed in isolation,
+        # export must not bypass the full readiness gate or produce an archive.
+        cases = (
+            ("export_only", "", "NO_DDL"),
+            ("restore_isolated", module.APPROVAL, module.CONFIRMATION),
+        )
+        for mode, approval, confirmation in cases:
+            with (
+                self.subTest(mode=mode),
+                self.env(approval=approval, confirm=confirmation),
+                patch.object(module, "check_source"),
+                patch.object(module, "check_target"),
+                patch.object(
+                    module, "check_authenticated_readiness",
+                    side_effect=module.GateBlocked("BLOCKED_ROLE_ATTRIBUTES"),
+                ) as readiness,
+                patch.object(module, "docker_run") as client,
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_ROLE_ATTRIBUTES"):
+                    module.execute(mode)
+                readiness.assert_called_once()
+                client.assert_not_called()
+
+    def test_export_and_restore_fail_closed_on_schema_lock_denial_before_dump(self):
+        cases = (
+            ("export_only", "", "NO_DDL"),
+            ("restore_isolated", module.APPROVAL, module.CONFIRMATION),
+        )
+        for mode, approval, confirmation in cases:
+            with (
+                self.subTest(mode=mode),
+                self.env(approval=approval, confirm=confirmation),
+                patch.object(module, "check_source"),
+                patch.object(module, "check_target"),
+                patch.object(
+                    module, "check_authenticated_readiness",
+                    side_effect=module.GateBlocked("BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES"),
+                ),
+                patch.object(module, "docker_run") as client,
+            ):
+                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES"):
+                    module.execute(mode)
+                client.assert_not_called()
 
     def test_catalog_checks_fail_closed(self):
         with patch.object(module, "scalar", return_value=(
