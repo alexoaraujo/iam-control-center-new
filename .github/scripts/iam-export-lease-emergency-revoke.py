@@ -174,6 +174,10 @@ def execute(mode: str, confirm: str, environ: dict[str, str],
     if mode == "preflight":
         if before[0] != 1 or before[4] != 0 or before[5] != 0:
             raise GateBlocked("unsafe export role attributes or memberships")
+        # A healthy lease is either fully absent or fully present. Partial grants
+        # are a security incident, not a successful operational preflight.
+        if (before[2], before[3]) not in ((0, 0), (23, 3)):
+            raise GateBlocked("partial or inconsistent export lease; emergency revoke required")
         return "PASS_REVOKER_PREFLIGHT_ONLY_NO_DDL"
     if mode != "revoke" or confirm != APPROVAL or \
             environ.get("IAM_EXPORT_REVOKER_APPROVAL") != APPROVAL:
