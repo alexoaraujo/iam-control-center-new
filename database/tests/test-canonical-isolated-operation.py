@@ -75,6 +75,27 @@ class IsolatedRunnerContract(unittest.TestCase):
                     self.assertNotIn("secret_table", message)
                     self.assertNotIn("sensitive SQL", message)
 
+    def test_tls_probe_is_credential_free_and_not_restoration(self):
+        workflow = (HERE.parent.parent / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        self.assertIn("          - tls_probe_only", workflow)
+        self.assertIn("inputs.operation == 'tls_probe_only'", workflow)
+        public = workflow.split("\n  public-tls-probe:", 1)[1].split(
+            "\n  authenticated-export-and-optional-restore:", 1
+        )[0]
+        self.assertIn("needs: preflight-offline", public)
+        self.assertIn("-starttls postgres", public)
+        self.assertIn("-verify_hostname", public)
+        self.assertIn("-verify_return_error", public)
+        self.assertIn("ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech", public)
+        self.assertIn("ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech", public)
+        self.assertNotIn("secrets.", public)
+        self.assertNotIn("environment:", public)
+        self.assertNotIn("IAM_CANONICAL_SOURCE_URL", public)
+        self.assertNotIn("IAM_CANONICAL_TARGET_URL", public)
+        self.assertNotIn("pg_dump", public)
+        self.assertNotIn("pg_restore", public)
+
     def test_no_operator_approval_blocks_before_docker(self):
         with self.env(), patch.object(module, "docker_run") as d:
             with self.assertRaises(module.GateBlocked):
