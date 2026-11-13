@@ -5,6 +5,8 @@ on:
     paths:
       - "database/scripts/guard-canonical-restore-target.py"
       - "database/scripts/canonical-isolated-operation.py"
+      - ".github/scripts/configure-iam-canonical-environment.py"
+      - ".github/tests/test-configure-iam-canonical-environment.py"
       - "database/tests/test-guard-canonical-restore-target.py"
       - "database/tests/test-canonical-isolated-operation.py"
       - ".github/workflows/iam-canonical-isolated-restore.yml"
@@ -27,6 +29,7 @@ jobs:
         run: |
           python3 database/tests/test-guard-canonical-restore-target.py
           python3 database/tests/test-canonical-isolated-operation.py
+          python3 .github/tests/test-configure-iam-canonical-environment.py
       - name: Prove missing credentials fail closed
         shell: bash
         run: |
