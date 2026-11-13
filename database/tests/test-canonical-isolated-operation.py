@@ -218,29 +218,29 @@ class IsolatedRunnerContract(unittest.TestCase):
 
     def test_catalog_checks_fail_closed(self):
         with patch.object(module, "scalar", return_value=(
-            "iam_database|iam_schema_export_reader|iam_schema_export_reader|t|"
+            "iam_database|iam_schema_export_reader|iam_schema_export_reader|"
             "23|41|20|f|f|t|0"
         )):
             module.check_source({}, Path("/tmp"))
         with patch.object(module, "scalar", return_value=(
-            "iam_database|iam_schema_export_reader|iam_schema_export_reader|f|"
-            "23|41|20|f|f|t|0"
+            "iam_database|iam_schema_export_reader|iam_schema_export_reader|"
+            "23|41|20|t|f|t|0"
         )):
             with self.assertRaises(module.GateBlocked):
                 module.check_source({}, Path("/tmp"))
         with patch.object(module, "scalar", return_value=(
-            "iam_canonical_validation|neondb_owner|neondb_owner|t|"
+            "iam_canonical_validation|neondb_owner|neondb_owner|"
             "0|0|0|0|4|4|1|t"
         )):
             module.check_target({}, Path("/tmp"))
         with patch.object(module, "scalar", return_value=(
-            "iam_database|neondb_owner|neondb_owner|t|0|0|0|0|4|4|1|t"
+            "iam_database|neondb_owner|neondb_owner|0|0|0|0|4|4|1|t"
         )):
             with self.assertRaises(module.GateBlocked):
                 module.check_target({}, Path("/tmp"))
-        with patch.object(module, "scalar", return_value="23|41|20|23|t|0|t"):
+        with patch.object(module, "scalar", return_value="23|41|20|23|t|0"):
             module.check_restored({}, Path("/tmp"))
-        with patch.object(module, "scalar", return_value="23|41|20|0|t|0|t"):
+        with patch.object(module, "scalar", return_value="23|41|20|0|t|0"):
             with self.assertRaises(module.GateBlocked):
                 module.check_restored({}, Path("/tmp"))
 
@@ -386,40 +386,66 @@ class IsolatedRunnerContract(unittest.TestCase):
         self.assertIn("ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech", workflow)
         self.assertNotIn("ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech", workflow)
 
-    def test_auth_only_requires_pinned_database_role_and_tls(self):
+    def test_auth_only_requires_pinned_database_and_role_over_verified_client_tls(self):
         cases = [
-            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|t", None),
-            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|f", "BLOCKED_AUTH_TLS"),
-            ("iam_database|neondb_owner|neondb_owner|t", "BLOCKED_AUTH_ROLE"),
-            ("iam_canonical_validation|iam_schema_export_reader|iam_schema_export_reader|t", "BLOCKED_AUTH_DATABASE"),
-            ("iam_database|iam_schema_export_reader|iam_schema_export_reader", "BLOCKED_AUTH_OUTPUT_SHAPE"),
+            ("iam_database|iam_schema_export_reader|iam_schema_export_reader", None),
+            ("iam_database|neondb_owner|neondb_owner", "BLOCKED_AUTH_ROLE"),
+            ("iam_canonical_validation|iam_schema_export_reader|iam_schema_export_reader", "BLOCKED_AUTH_DATABASE"),
+            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|t", "BLOCKED_AUTH_OUTPUT_SHAPE"),
         ]
+        creds = module.pg_env(SOURCE)
         for raw, blocked in cases:
-            with self.subTest(blocked=blocked, raw=raw), patch.object(module, "scalar", return_value=raw):
+            with self.subTest(raw=raw), patch.object(module, "scalar", return_value=raw):
                 if blocked is None:
-                    module.check_authentication_only({}, module.mod.SOURCE_DATABASE,
+                    module.check_authentication_only(creds, module.mod.SOURCE_DATABASE,
                                                      module.mod.SOURCE_ROLE, Path("/tmp"))
                 else:
                     with self.assertRaisesRegex(module.GateBlocked, blocked):
-                        module.check_authentication_only({}, module.mod.SOURCE_DATABASE,
+                        module.check_authentication_only(creds, module.mod.SOURCE_DATABASE,
                                                          module.mod.SOURCE_ROLE, Path("/tmp"))
 
-    def test_auth_only_target_role_and_tls_diagnostics(self):
+    def test_auth_only_target_requires_pinned_database_and_role(self):
         cases = [
-            ("iam_canonical_validation|neondb_owner|neondb_owner|t", None),
-            ("iam_canonical_validation|neondb_owner|neondb_owner|f", "BLOCKED_AUTH_TLS"),
-            ("iam_canonical_validation|iam_schema_export_reader|iam_schema_export_reader|t", "BLOCKED_AUTH_ROLE"),
-            ("iam_database|neondb_owner|neondb_owner|t", "BLOCKED_AUTH_DATABASE"),
+            ("iam_canonical_validation|neondb_owner|neondb_owner", None),
+            ("iam_canonical_validation|iam_schema_export_reader|iam_schema_export_reader", "BLOCKED_AUTH_ROLE"),
+            ("iam_database|neondb_owner|neondb_owner", "BLOCKED_AUTH_DATABASE"),
         ]
+        creds = module.pg_env(TARGET)
         for raw, blocked in cases:
-            with self.subTest(blocked=blocked, raw=raw), patch.object(module, "scalar", return_value=raw):
+            with self.subTest(raw=raw), patch.object(module, "scalar", return_value=raw):
                 if blocked is None:
-                    module.check_authentication_only({}, module.mod.TARGET_DATABASE,
+                    module.check_authentication_only(creds, module.mod.TARGET_DATABASE,
                                                      module.mod.TARGET_ROLE, Path("/tmp"))
                 else:
                     with self.assertRaisesRegex(module.GateBlocked, blocked):
-                        module.check_authentication_only({}, module.mod.TARGET_DATABASE,
+                        module.check_authentication_only(creds, module.mod.TARGET_DATABASE,
                                                          module.mod.TARGET_ROLE, Path("/tmp"))
+
+    def test_auth_only_rejects_client_tls_downgrade_before_sql(self):
+        for url in (SOURCE, TARGET):
+            for key, invalid in (("PGSSLMODE", "require"), ("PGSSLMODE", "disable"),
+                                 ("PGSSLROOTCERT", ""), ("PGSSLROOTCERT", "/tmp/fake-ca")):
+                creds = module.pg_env(url)
+                creds[key] = invalid
+                with self.subTest(role=creds["PGUSER"], key=key, invalid=invalid), \
+                     patch.object(module, "scalar") as query:
+                    with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_AUTH_TLS_CONFIG"):
+                        module.check_authentication_only(creds, creds["PGDATABASE"],
+                                                         creds["PGUSER"], Path("/tmp"))
+                    query.assert_not_called()
+
+    def test_neon_proxy_backend_ssl_false_not_used_as_external_tls_proof(self):
+        # Verified libpq transport is enforced by pg_env and checked before scalar.
+        # Backend pg_stat_ssl can be false even when client-to-Neon uses TLS.
+        import inspect
+        self.assertNotIn("pg_stat_ssl", inspect.getsource(module.check_source))
+        self.assertNotIn("pg_stat_ssl", inspect.getsource(module.check_target))
+        self.assertNotIn("pg_stat_ssl", inspect.getsource(module.check_restored))
+        creds = module.pg_env(SOURCE)
+        with patch.object(module, "scalar",
+                          return_value="iam_database|iam_schema_export_reader|iam_schema_export_reader"):
+            module.check_authentication_only(creds, module.mod.SOURCE_DATABASE,
+                                             module.mod.SOURCE_ROLE, Path("/tmp"))
 
     def test_readiness_reports_multiple_blockers_with_no_dump_or_ddl(self):
         with (
