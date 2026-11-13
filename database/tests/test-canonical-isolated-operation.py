@@ -40,6 +40,28 @@ class IsolatedRunnerContract(unittest.TestCase):
         self.assertEqual(e["PGDATABASE"], "iam_database")
         self.assertNotIn("IAM_CANONICAL_SOURCE_URL", module.no_trust_env())
 
+    def test_pg18_client_build_installs_trusted_ca_bundle_without_tls_downgrade(self):
+        dockerfile = (HERE / "fixtures" / "pg18-system-ca.Dockerfile").read_text(encoding="utf8")
+        workflow = (HERE.parent.parent / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        auth = workflow.split("\n  authenticated-export-and-optional-restore:", 1)[1]
+        self.assertIn("FROM postgres:18-bookworm", dockerfile)
+        self.assertIn("apt-get install -y --no-install-recommends ca-certificates", dockerfile)
+        self.assertIn("update-ca-certificates", dockerfile)
+        self.assertIn("test -s /etc/ssl/certs/ca-certificates.crt", dockerfile)
+        self.assertIn("ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt", dockerfile)
+        self.assertEqual(workflow.count("docker build --pull --file database/tests/fixtures/pg18-system-ca.Dockerfile"), 2)
+        self.assertIn("PG18_CLIENT_IMAGE = \"iam-pg18-system-ca:local\"", (HERE.parent / "scripts" / "canonical-isolated-operation.py").read_text(encoding="utf8"))
+        self.assertLess(auth.index("python3 database/scripts/guard-canonical-restore-target.py"),
+                        auth.index("docker build --pull --file"))
+        self.assertLess(auth.index("docker build --pull --file"),
+                        auth.index("python3 database/scripts/canonical-isolated-operation.py"))
+        self.assertEqual(module.pg_env(SOURCE)["PGSSLMODE"], "verify-full")
+        self.assertEqual(module.pg_env(SOURCE)["PGSSLROOTCERT"], "system")
+        self.assertNotIn("sslmode=require", dockerfile + workflow)
+        self.assertNotIn("sslmode=disable", dockerfile + workflow)
+        self.assertNotIn("PGSSLROOTCERT=none", dockerfile + workflow)
+
     def test_safe_failure_stage_and_category_without_stderr_leakage(self):
         import subprocess
         import tempfile
@@ -101,7 +123,9 @@ class IsolatedRunnerContract(unittest.TestCase):
         self.assertNotIn("IAM_CANONICAL_TARGET_URL", public)
         self.assertNotIn("pg_dump", public)
         self.assertNotIn("pg_restore", public)
-        self.assertIn("postgres:18-bookworm psql -X -w -q -f /dev/null", public)
+        self.assertIn("iam-pg18-system-ca:local psql -X -w -q -f /dev/null", public)
+        self.assertIn("docker build --pull --file database/tests/fixtures/pg18-system-ca.Dockerfile", public)
+        self.assertTrue(public.index("docker build --pull --file") < public.index("iam-pg18-system-ca:local psql"))
         self.assertIn("PGSSLMODE=verify-full", public)
         self.assertIn("PGSSLROOTCERT=system", public)
         self.assertIn("iam_tls_probe_nonexistent_noauth", public)
