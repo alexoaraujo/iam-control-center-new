@@ -17,7 +17,7 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 SOURCE = ("postgresql://iam_schema_export_reader:TEST_ONLY@"
-          "ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech:5432/"
+          "ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech:5432/"
           "iam_database?sslmode=verify-full&sslrootcert=system")
 TARGET = ("postgresql://neondb_owner:TEST_ONLY@"
           "ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech:5432/"
@@ -121,7 +121,7 @@ class IsolatedRunnerContract(unittest.TestCase):
         self.assertIn("-starttls postgres", public)
         self.assertIn("-verify_hostname", public)
         self.assertIn("-verify_return_error", public)
-        self.assertIn("ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech", public)
+        self.assertIn("ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech", public)
         self.assertIn("ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech", public)
         self.assertNotIn("secrets.", public)
         self.assertNotIn("environment:", public)
