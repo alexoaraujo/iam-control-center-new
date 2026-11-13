@@ -1,0 +1,41 @@
+name: IAM canonical restore target guard (offline)
+
+on:
+  pull_request:
+    paths:
+      - "database/scripts/guard-canonical-restore-target.py"
+      - "database/scripts/canonical-isolated-operation.py"
+      - ".github/scripts/configure-iam-canonical-environment.py"
+      - ".github/tests/test-configure-iam-canonical-environment.py"
+      - "database/tests/test-guard-canonical-restore-target.py"
+      - "database/tests/test-canonical-isolated-operation.py"
+      - ".github/workflows/iam-canonical-isolated-restore.yml"
+      - ".github/workflows/iam-canonical-target-guard.yml"
+      - "docs/operations/iam-canonical-restore-isolation.md"
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-target-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout unprivileged PR
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Run offline negative tests without secrets or network access to Neon
+        run: |
+          python3 database/tests/test-guard-canonical-restore-target.py
+          python3 database/tests/test-canonical-isolated-operation.py
+          python3 .github/tests/test-configure-iam-canonical-environment.py
+      - name: Prove missing credentials fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if env -u IAM_CANONICAL_SOURCE_URL -u IAM_CANONICAL_TARGET_URL python3 database/scripts/guard-canonical-restore-target.py; then
+            echo "::error::Missing credentials must fail closed"
+            exit 1
+          fi
+          echo "PASS: missing credentials block restore preflight"
