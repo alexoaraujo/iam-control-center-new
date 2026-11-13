@@ -372,6 +372,27 @@ class IsolatedRunnerContract(unittest.TestCase):
                 module.execute("auth_only")
             docker.assert_not_called()
 
+    def test_auth_only_checks_target_even_when_source_auth_is_rejected(self):
+        attempts = []
+        def simulate(creds, db, role, workspace):
+            attempts.append(db)
+            if db == "iam_database":
+                raise module.GateBlocked("PG18_SOURCE_PREFLIGHT_AUTH_REJECTED")
+        with (
+            self.env(confirm="NO_DDL"),
+            patch.object(module, "check_authentication_only", side_effect=simulate),
+            patch.object(module, "check_source") as check_source,
+            patch.object(module, "check_target") as check_target,
+            patch.object(module, "docker_run") as docker,
+        ):
+            with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_AUTH_ONLY") as exc:
+                module.execute("auth_only")
+            self.assertIn("SOURCE: PG18_SOURCE_PREFLIGHT_AUTH_REJECTED", str(exc.exception))
+            self.assertEqual(attempts, ["iam_database", "iam_canonical_validation"])
+            check_source.assert_not_called()
+            check_target.assert_not_called()
+            docker.assert_not_called()
+
     def test_auth_only_workflow_is_protected_and_no_ddl(self):
         workflow = (HERE.parent.parent / ".github" / "workflows" /
                     "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
