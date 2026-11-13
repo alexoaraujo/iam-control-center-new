@@ -1,4 +1,4 @@
-name: Neon post-hardening schema export
+name: Legacy cross-org Neon schema export — QUARANTINED
 
 on:
   # Only the trusted default branch may run the source export. Removing
@@ -19,10 +19,15 @@ concurrency:
 
 jobs:
   export-schema:
-    name: Read-only schema export from canonical Neon main
+    name: Legacy source export permanently disabled pending audited migration
+    # OPERATOR SCOPING CHANGE 2026-11-13:
+    # The previous Neon source project belongs to a different organization.
+    # This workflow MUST NOT open its former NEON_SCHEMA_EXPORT_URL secret.
+    # A replacement must use authorized tiny-rice / development, a vetted
+    # schema-only export identity, PG18 verify-full and a separate approval.
+    if: false
     # workflow_dispatch can select an arbitrary ref. Never expose the
     # environment secret unless the workflow is running from protected main.
-    if: github.repository == vars.IAM_INTEGRATION_REPOSITORY && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: neon-schema-export
