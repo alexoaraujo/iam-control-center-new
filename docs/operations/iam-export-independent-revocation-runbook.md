@@ -23,6 +23,24 @@
 - A failed psql invocation must not log raw stdout/stderr; only allowlisted status strings are printed. The URL/password is not on the psql command line; the workflow's Docker PostgreSQL 18 wrapper passes credential environment variable *names*, not secret values, to the container process.
 - The operation is intended to be **idempotent**. When the prior lease was already revoked, a re-run checks the same zero-privilege end-state.
 
+## Additional live Neon test — committed GRANT followed by separate committed REVOKE
+
+**Real clone execution 2026-11-13**, project `tiny-rice-70320263`, branch `br-spring-grass-b6gap6kp`, database `iam_database`, no dump or actual user-row reads:
+
+| Phase | MAINTAIN on IAM tables | schema USAGE | effective SELECT |
+| --- | ---: | ---: | ---: |
+| Before | 0/23 | 0/3 | 0/23 |
+| After separately COMMITted GRANT transaction | **23/23** | **3/3** | 0/23 |
+| After separately COMMITted REVOKE transaction | 0/23 | 0/3 | 0/23 |
+| Independent read-only connection to clone | 0/23 | 0/3 | 0/23 |
+| Independent read-only connection to Development | 0/23 | 0/3 | 0/23 |
+
+The emergency REVOKE was performed with the Neon SQL connector as a **separate administrative operation after COMMIT**, equivalent to the SQL body in this proposal. It was **not** a run of the new GitHub Actions workflow nor the external TLS-verifying Python/Docker wrapper. Those remain unproven.
+
+**Important residual catalog drift:** compared with Development, one relation in the clone, `app_private.context_keys`, changed its PostgreSQL `relacl` from implicit `NULL` to explicit owner-default `{iam_owner=arwdDxtm/iam_owner}` after committed GRANT/REVOKE. This does **not** give the export role additional effective privileges, but it does change the full catalog fingerprint (SOURCE `53be82958de7aebc4131c3190d4a31ce`, CLONE `8141397921ff3b30c108e9b6c4bdf803`, each over 74 entries, 41 RLS policies and 20 FORCE RLS). Therefore the correct status is **effective privilege revocation PASS, exact schema/catalog restoration NOT PASS**. A reset-from-parent of the disposable clone could restore full parity, but it discards branch-local changes and needs explicit separate authorization; it has **not** been performed. Avoid direct system-catalog updates to `pg_class.relacl`.
+
+This caveat is why the script's `PASS_REVOKER_COMMITTED_AND_INDEPENDENTLY_VERIFIED` means **privilege-only** revocation. It does **not** imply byte-equivalent ACL catalog state, restore/PITR evidence, or a timed kill-switch. Before any permanent MAINTAIN lease, reviewers must approve an ACL baseline/delta policy and branch recovery strategy.
+
 ## Threat model and limitations
 
 1. **MAINTAIN is broad**, allowing nontrivial maintenance commands and stronger locks. This procedure does not make MAINTAIN safe to leave in place even temporarily; it only provides emergency revocation of the narrow expected table/schema grants. Prefer a design that avoids persistent elevated rights when possible.
