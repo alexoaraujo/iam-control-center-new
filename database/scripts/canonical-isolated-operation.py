@@ -247,22 +247,30 @@ def check_restore_acl_principals(source_creds: dict[str, str],
 def check_runtime_role_contract(source_creds: dict[str, str],
                                 target_creds: dict[str, str],
                                 workspace: Path) -> None:
-    """A restored RLS schema is not canonical with a divergent login inheritance."""
+    """Enforce canonical IAM role contract, not merely source/target parity.
+
+    Matching two insecure role graphs must never yield PASS. The runtime
+    contract comes from database/bootstrap/0000_iam_roles.sql; worker is
+    the current P0 extension. Compare ADMIN, INHERIT and SET per membership.
+    """
     sql = """SELECT rolname, rolcanlogin, rolinherit, rolbypassrls, rolsuper
       FROM pg_roles
      WHERE rolname IN ('iam_app_runtime_login','iam_migrator_login','iam_worker_login')
      ORDER BY rolname"""
     source = scalar(sql, source_creds, workspace).strip()
     target = scalar(sql, target_creds, workspace).strip()
-    if not source or source != target:
+    expected = (
+        "iam_app_runtime_login|t|t|f|f\n"
+        "iam_migrator_login|t|f|f|f\n"
+        "iam_worker_login|t|f|f|f"
+    )
+    if source != expected or target != expected:
         raise GateBlocked(
-            "BLOCKED_ROLE_ATTRIBUTES: source and destination IAM login roles differ; "
-            "roles are Neon branch-wide and must be reviewed independently before DDL"
+            "BLOCKED_ROLE_ATTRIBUTES: source and destination must both "
+            "match the canonical IAM runtime/migrator/worker LOGIN contract; "
+            "copying a drifted target into source is prohibited"
         )
 
-
-    # Compare every outbound membership and PostgreSQL 16+ SET / INHERIT
-    # option; equal LOGIN attributes do not establish authorization parity.
     membership_sql = """SELECT member.rolname, granted.rolname,
       m.admin_option, m.inherit_option, m.set_option
       FROM pg_auth_members m
@@ -273,13 +281,18 @@ def check_runtime_role_contract(source_creds: dict[str, str],
       ORDER BY member.rolname, granted.rolname"""
     source_memberships = scalar(membership_sql, source_creds, workspace).strip()
     target_memberships = scalar(membership_sql, target_creds, workspace).strip()
-    if not source_memberships or source_memberships != target_memberships:
+    expected_memberships = (
+        "iam_app_runtime_login|iam_app_runtime|f|t|f\n"
+        "iam_migrator_login|iam_migrator|f|f|t\n"
+        "iam_worker_login|iam_worker|f|t|t"
+    )
+    if (source_memberships != expected_memberships
+            or target_memberships != expected_memberships):
         raise GateBlocked(
-            "BLOCKED_ROLE_MEMBERSHIPS: source and destination LOGIN role "
-            "memberships differ (including ADMIN, INHERIT and SET options); "
-            "no restoration DDL is permitted"
+            "BLOCKED_ROLE_MEMBERSHIPS: source and destination must both "
+            "match canonical ADMIN=false/INHERIT/SET options; "
+            "runtime login may not SET ROLE, no extra outbound memberships"
         )
-
 
 
 def check_schema_export_lock_permissions(creds: dict[str, str], workspace: Path) -> None:
