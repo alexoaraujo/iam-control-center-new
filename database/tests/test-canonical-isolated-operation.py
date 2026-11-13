@@ -151,8 +151,42 @@ class IsolatedRunnerContract(unittest.TestCase):
         with patch.object(module, "scalar", side_effect=[legacy, target]):
             with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_ROLE_ATTRIBUTES"):
                 module.check_runtime_role_contract({}, {}, Path("/tmp"))
-        with patch.object(module, "scalar", side_effect=[legacy, legacy]):
+        memberships = ("iam_app_runtime_login|iam_app_runtime|f|t|t\n"
+                       "iam_migrator_login|iam_migrator|f|f|t\n"
+                       "iam_worker_login|iam_worker|f|t|t")
+        with patch.object(module, "scalar", side_effect=[
+            legacy, legacy, memberships, memberships
+        ]):
             module.check_runtime_role_contract({}, {}, Path("/tmp"))
+
+    def test_membership_set_option_drift_blocks_restoration(self):
+        roles = ("iam_app_runtime_login|t|f|f|f\n"
+                 "iam_migrator_login|t|f|f|f\n"
+                 "iam_worker_login|t|f|f|f")
+        source = ("iam_app_runtime_login|iam_app_runtime|f|t|t\n"
+                  "iam_migrator_login|iam_migrator|f|f|t\n"
+                  "iam_worker_login|iam_worker|f|t|t")
+        wrong_set = source.replace("iam_app_runtime|f|t|t",
+                                   "iam_app_runtime|f|t|f")
+        with patch.object(module, "scalar", side_effect=[
+            roles, roles, source, wrong_set
+        ]):
+            with self.assertRaisesRegex(module.GateBlocked,
+                                        "BLOCKED_ROLE_MEMBERSHIPS"):
+                module.check_runtime_role_contract({}, {}, Path("/tmp"))
+        extra_grant = source + "\niam_worker_login|iam_owner|f|t|t"
+        with patch.object(module, "scalar", side_effect=[
+            roles, roles, source, extra_grant
+        ]):
+            with self.assertRaisesRegex(module.GateBlocked,
+                                        "BLOCKED_ROLE_MEMBERSHIPS"):
+                module.check_runtime_role_contract({}, {}, Path("/tmp"))
+        with patch.object(module, "scalar", side_effect=[
+            roles, roles, "", source
+        ]):
+            with self.assertRaisesRegex(module.GateBlocked,
+                                        "BLOCKED_ROLE_MEMBERSHIPS"):
+                module.check_runtime_role_contract({}, {}, Path("/tmp"))
 
     def test_expired_branch_fails_before_credential_use(self):
         from datetime import datetime, timezone
