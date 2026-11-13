@@ -172,6 +172,8 @@ def execute(mode: str, confirm: str, environ: dict[str, str],
     if before[1] != 23:
         raise GateBlocked("expected IAM 23-table inventory not found")
     if mode == "preflight":
+        if before[0] != 1 or before[4] != 0 or before[5] != 0:
+            raise GateBlocked("unsafe export role attributes or memberships")
         return "PASS_REVOKER_PREFLIGHT_ONLY_NO_DDL"
     if mode != "revoke" or confirm != APPROVAL or \
             environ.get("IAM_EXPORT_REVOKER_APPROVAL") != APPROVAL:
