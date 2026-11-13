@@ -66,8 +66,30 @@ def docker_run(args: list[str], creds: dict[str, str], workspace: Path) -> str:
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=300
         )
         if result.returncode:
-            # Never echo pg_dump/pg_restore stderr; it can contain SQL definitions.
-            raise GateBlocked("PostgreSQL 18 command failed; inspect guarded run")
+            # Never emit raw stderr: pg client errors may include SQL or secrets.
+            # Emit only an allowlisted stage and failure category.
+            stage = {
+                "psql": ("source_preflight" if creds.get("PGUSER") == mod.SOURCE_ROLE
+                         else "target_preflight"),
+                "pg_dump": "schema_export",
+                "pg_restore": "archive_inspection" if "--list" in args else "schema_restore",
+            }.get(args[0], "postgres_client")
+            stderr = result.stderr.lower()
+            if "password authentication failed" in stderr or "no password supplied" in stderr:
+                category = "AUTHENTICATION"
+            elif ("certificate verify failed" in stderr or "root certificate" in stderr
+                  or "ssl error" in stderr or "sslmode" in stderr):
+                category = "TLS"
+            elif ("permission denied" in stderr or "must be owner" in stderr
+                  or "insufficient privilege" in stderr):
+                category = "PRIVILEGE"
+            elif ("could not translate host name" in stderr or "connection refused" in stderr
+                  or "connection timed out" in stderr or "network is unreachable" in stderr):
+                category = "NETWORK"
+            else:
+                category = "UNCLASSIFIED"
+            raise GateBlocked(f"PG18_{stage.upper()}_{category}: command failed; "
+                              "raw stderr withheld for secret/SQL safety")
         return result.stdout.strip()
     except subprocess.TimeoutExpired as e:
         raise GateBlocked("PostgreSQL command timed out") from e
