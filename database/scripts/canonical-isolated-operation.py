@@ -157,7 +157,7 @@ def check_source(creds: dict[str, str], workspace: Path) -> None:
         "23", "41", "20", "f", "f", "t", "0"
     ]
     if got != expected:
-        raise GateBlocked("source role, TLS, structure or least-privilege check failed")
+        raise GateBlocked("source identity, schema or least-privilege check failed")
 
 def check_target(creds: dict[str, str], workspace: Path) -> None:
     sql = """SELECT current_database(), current_user, session_user,
