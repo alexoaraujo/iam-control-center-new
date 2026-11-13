@@ -112,6 +112,12 @@ class IsolatedRunnerContract(unittest.TestCase):
             "\n  authenticated-export-and-optional-restore:", 1
         )[0]
         self.assertIn("needs: preflight-offline", public)
+        # Jobs are isolated; preflight checkout does not persist into this job.
+        checkout = "uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09"
+        self.assertIn(checkout, public)
+        self.assertIn("persist-credentials: false", public)
+        self.assertLess(public.index(checkout), public.index("docker build --pull --file"))
+        self.assertLess(public.index(checkout), public.index("-starttls postgres"))
         self.assertIn("-starttls postgres", public)
         self.assertIn("-verify_hostname", public)
         self.assertIn("-verify_return_error", public)
