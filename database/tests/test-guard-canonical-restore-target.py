@@ -47,6 +47,23 @@ class GuardContract(unittest.TestCase):
             with self.subTest(host=host), self.assertRaises(mod.GateBlocked):
                 mod.verify_connections(uri(host, mod.SOURCE_DATABASE, mod.SOURCE_ROLE), target())
 
+    def test_legacy_schema_export_workflow_is_quarantined(self):
+        workflow = (file.parents[2] / ".github" / "workflows" /
+                    "neon-schema-export.yml").read_text(encoding="utf8")
+        self.assertIn("QUARANTINED", workflow)
+        job = workflow.split("\n  export-schema:", 1)[1]
+        self.assertIn("    if: false", job)
+        self.assertIn("The previous Neon source project belongs to a different organization.", job)
+
+    def test_pinned_tls_probe_is_for_authorized_development_only(self):
+        workflow = (file.parents[2] / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        self.assertIn("ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech", workflow)
+        self.assertNotIn("ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech", workflow)
+        self.assertIn("br-ancient-term-b6mmx5ol", workflow)
+        self.assertIn("tiny-rice-70320263 / development", workflow)
+        self.assertIn("ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech", workflow)
+
     def test_target_negative_paths(self):
         bad = [
             "", source(),
