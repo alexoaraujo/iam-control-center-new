@@ -146,7 +146,10 @@ def check_source(creds: dict[str, str], workspace: Path) -> None:
       (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
        WHERE n.nspname IN ('iam','audit','app_private')
        AND c.relkind IN ('r','p') AND c.relforcerowsecurity),
-      has_table_privilege(current_user,'iam.schema_migrations','SELECT'),
+      (SELECT has_table_privilege(current_user,c.oid,'SELECT')
+         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='iam' AND c.relname='schema_migrations'
+          AND c.relkind IN ('r','p')),
       (SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user),
       (SELECT rolcanlogin FROM pg_roles WHERE rolname=current_user),
       (SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.member
