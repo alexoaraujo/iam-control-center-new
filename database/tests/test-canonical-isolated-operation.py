@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Offline negative contract for guarded Neon export/restore; synthetic credentials only."""
+from __future__ import annotations
+import importlib.util
+import os
+from pathlib import Path
+import sys
+import unittest
+from unittest.mock import patch
+
+HERE = Path(__file__).resolve().parent
+spec = importlib.util.spec_from_file_location(
+    "iam_operation", HERE.parent / "scripts" / "canonical-isolated-operation.py"
+)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+SOURCE = ("postgresql://iam_schema_export_reader:TEST_ONLY@"
+          "ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech:5432/"
+          "iam_database?sslmode=verify-full&sslrootcert=system")
+TARGET = ("postgresql://neondb_owner:TEST_ONLY@"
+          "ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech:5432/"
+          "iam_canonical_validation?sslmode=verify-full&sslrootcert=system")
+
+class IsolatedRunnerContract(unittest.TestCase):
+    def env(self, approval="", confirm=""):
+        return patch.dict(os.environ, {
+            "IAM_CANONICAL_SOURCE_URL": SOURCE,
+            "IAM_CANONICAL_TARGET_URL": TARGET,
+            "IAM_CANONICAL_OPERATOR_APPROVAL": approval,
+            "IAM_CANONICAL_CONFIRMATION": confirm
+        })
+
+    def test_connection_env_does_not_put_password_in_commandline(self):
+        e = module.pg_env(SOURCE)
+        self.assertEqual(e["PGUSER"], "iam_schema_export_reader")
+        self.assertEqual(e["PGSSLMODE"], "verify-full")
+        self.assertEqual(e["PGSSLROOTCERT"], "system")
+        self.assertEqual(e["PGDATABASE"], "iam_database")
+        self.assertNotIn("IAM_CANONICAL_SOURCE_URL", module.no_trust_env())
+
+    def test_no_operator_approval_blocks_before_docker(self):
+        with self.env(), patch.object(module, "docker_run") as d:
+            with self.assertRaises(module.GateBlocked):
+                module.execute("restore_isolated")
+            d.assert_not_called()
+
+    def test_approval_without_manual_confirmation_blocks(self):
+        with self.env(approval=module.APPROVAL), patch.object(module, "docker_run") as d:
+            with self.assertRaises(module.GateBlocked):
+                module.execute("restore_isolated")
+            d.assert_not_called()
+
+    @staticmethod
+    def simulated_docker(calls):
+        def execute(args, credentials, workspace):
+            calls.append(args)
+            if args[0] == "pg_dump":
+                (workspace / "schema.dump").write_bytes(b"PGDMP" + b"Z" * 2049)
+            if args[:2] == ["pg_restore", "--list"]:
+                return "; valid schema only\n12; 1259 123 TABLE iam.tenants source\n"
+            return ""
+        return execute
+
+    def test_export_only_never_runs_ddl(self):
+        calls = []
+        with self.env(), patch.object(module, "check_source"), \
+             patch.object(module, "check_target"), \
+             patch.object(module, "docker_run", side_effect=self.simulated_docker(calls)):
+            module.execute("export_only")
+        self.assertEqual([call[0] for call in calls], ["pg_dump", "pg_restore"])
+        self.assertFalse(any("CREATE EXTENSION" in str(call) for call in calls))
+
+    def test_restore_confirmation_allows_only_isolated_database(self):
+        calls = []
+        with self.env(approval=module.APPROVAL, confirm=module.CONFIRMATION), \
+             patch.object(module, "check_source"), patch.object(module, "check_target"), \
+             patch.object(module, "check_restored"), \
+             patch.object(module, "docker_run", side_effect=self.simulated_docker(calls)):
+            module.execute("restore_isolated")
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(calls[-1][0], "pg_restore")
+        self.assertIn("--dbname=iam_canonical_validation", calls[-1])
+        self.assertIn("--single-transaction", calls[-1])
+        self.assertNotIn("--clean", calls[-1])
+
+    def test_export_detects_data_contamination(self):
+        def contaminated(args, credentials, workspace):
+            if args[0] == "pg_dump":
+                (workspace / "schema.dump").write_bytes(b"PGDMP" + b"Z" * 2049)
+            if args[:2] == ["pg_restore", "--list"]:
+                return "TABLE DATA iam.identities\n"
+            return ""
+        with self.env(), patch.object(module, "check_source"), \
+             patch.object(module, "check_target"), \
+             patch.object(module, "docker_run", side_effect=contaminated):
+            with self.assertRaises(module.GateBlocked):
+                module.execute("export_only")
+
+    def test_catalog_checks_fail_closed(self):
+        with patch.object(module, "scalar", return_value=(
+            "iam_database|iam_schema_export_reader|iam_schema_export_reader|t|"
+            "23|41|20|f|f|t|0"
+        )):
+            module.check_source({}, Path("/tmp"))
+        with patch.object(module, "scalar", return_value=(
+            "iam_database|iam_schema_export_reader|iam_schema_export_reader|f|"
+            "23|41|20|f|f|t|0"
+        )):
+            with self.assertRaises(module.GateBlocked):
+                module.check_source({}, Path("/tmp"))
+        with patch.object(module, "scalar", return_value=(
+            "iam_canonical_validation|neondb_owner|neondb_owner|t|"
+            "0|0|0|0|4|4|1|t"
+        )):
+            module.check_target({}, Path("/tmp"))
+        with patch.object(module, "scalar", return_value=(
+            "iam_database|neondb_owner|neondb_owner|t|0|0|0|0|4|4|1|t"
+        )):
+            with self.assertRaises(module.GateBlocked):
+                module.check_target({}, Path("/tmp"))
+        with patch.object(module, "scalar", return_value="23|41|20|23|t|0|t"):
+            module.check_restored({}, Path("/tmp"))
+        with patch.object(module, "scalar", return_value="23|41|20|0|t|0|t"):
+            with self.assertRaises(module.GateBlocked):
+                module.check_restored({}, Path("/tmp"))
+
+    def test_expired_branch_fails_before_credential_use(self):
+        from datetime import datetime, timezone
+        with patch.object(module, "EXPIRES", datetime(2000, 1, 1, tzinfo=timezone.utc)), \
+             patch.object(module, "docker_run") as d:
+            with self.assertRaises(module.GateBlocked):
+                module.execute("export_only")
+            d.assert_not_called()
+
+if __name__ == "__main__":
+    unittest.main()
