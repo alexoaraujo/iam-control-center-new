@@ -4,13 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: "Preflight, authenticated catalog-only readiness, schema export, or isolated restore"
+        description: "Preflight, authenticated identity-only, catalog readiness, schema export, or isolated restore"
         required: true
         type: choice
         default: preflight_only
         options:
           - preflight_only
           - tls_probe_only
+          - auth_only
           - readiness_only
           - export_only
           - restore_isolated
@@ -35,7 +36,7 @@ jobs:
     if: >-
       github.repository == 'alexoaraujo/iam-control-center-new' &&
       github.ref == 'refs/heads/main' &&
-      (inputs.operation == 'preflight_only' || inputs.operation == 'tls_probe_only' || inputs.operation == 'readiness_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
+      (inputs.operation == 'preflight_only' || inputs.operation == 'tls_probe_only' || inputs.operation == 'auth_only' || inputs.operation == 'readiness_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -157,7 +158,7 @@ jobs:
     if: >-
       github.repository == 'alexoaraujo/iam-control-center-new' &&
       github.ref == 'refs/heads/main' &&
-      (inputs.operation == 'readiness_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
+      (inputs.operation == 'auth_only' || inputs.operation == 'readiness_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:

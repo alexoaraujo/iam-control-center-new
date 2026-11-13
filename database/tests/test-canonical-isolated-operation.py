@@ -68,10 +68,19 @@ class IsolatedRunnerContract(unittest.TestCase):
         failures = [
             (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
              "FATAL: password authentication failed for user SECRET_USER",
-             "PG18_SOURCE_PREFLIGHT_AUTHENTICATION"),
+             "PG18_SOURCE_PREFLIGHT_AUTH_REJECTED"),
             (["psql", "-c", "SELECT 1"], "neondb_owner",
              "could not translate host name SECRET_HOST",
              "PG18_TARGET_PREFLIGHT_NETWORK"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "fe_sendauth: no password supplied PRIVATE",
+             "PG18_SOURCE_PREFLIGHT_AUTH_NO_PASSWORD"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "FATAL: password has expired SECRET_USER",
+             "PG18_SOURCE_PREFLIGHT_AUTH_EXPIRED"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "FATAL: role SECRET_USER does not exist",
+             "PG18_SOURCE_PREFLIGHT_AUTH_ROLE_MISSING"),
             (["pg_dump", "--schema-only"], "iam_schema_export_reader",
              "ERROR: permission denied for table secret_table",
              "PG18_SCHEMA_EXPORT_PRIVILEGE"),
@@ -320,6 +329,80 @@ class IsolatedRunnerContract(unittest.TestCase):
             with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_PGCRYPTO"):
                 module.check_pgcrypto_availability({}, {}, Path("/tmp"))
 
+    def test_auth_only_checks_two_pinned_roles_without_dump_restore_or_ddl(self):
+        expected = [
+            ("iam_database", "iam_schema_export_reader"),
+            ("iam_canonical_validation", "neondb_owner"),
+        ]
+        attempted = []
+        def mock_auth(creds, db, role, workspace):
+            attempted.append((db, role))
+        with (
+            self.env(confirm="NO_DDL"),
+            patch.object(module, "check_authentication_only", side_effect=mock_auth),
+            patch.object(module, "check_source") as source,
+            patch.object(module, "check_target") as target,
+            patch.object(module, "docker_run") as docker,
+        ):
+            module.execute("auth_only")
+            self.assertEqual(attempted, expected)
+            source.assert_not_called()
+            target.assert_not_called()
+            docker.assert_not_called()
+
+    def test_auth_only_runs_target_after_source_rejection(self):
+        attempted = []
+        def mock_auth(creds, db, role, workspace):
+            attempted.append(db)
+            if db == "iam_database":
+                raise module.GateBlocked("PG18_SOURCE_PREFLIGHT_AUTH_REJECTED")
+        with (
+            self.env(confirm="NO_DDL"),
+            patch.object(module, "check_authentication_only", side_effect=mock_auth),
+            patch.object(module, "check_source") as source,
+            patch.object(module, "check_target") as target,
+            patch.object(module, "docker_run") as docker,
+        ):
+            with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_AUTH_ONLY") as exc:
+                module.execute("auth_only")
+            self.assertIn("SOURCE: PG18_SOURCE_PREFLIGHT_AUTH_REJECTED", str(exc.exception))
+            self.assertEqual(attempted, ["iam_database", "iam_canonical_validation"])
+            source.assert_not_called()
+            target.assert_not_called()
+            docker.assert_not_called()
+
+    def test_auth_only_rejects_ddl_confirmation_and_preserves_authorized_source(self):
+        with self.env(confirm="RESTORE_BR_SWEET_UNION_ONLY"), patch.object(
+            module, "docker_run"
+        ) as docker:
+            with self.assertRaisesRegex(module.GateBlocked, "read-only operation requires NO_DDL"):
+                module.execute("auth_only")
+            docker.assert_not_called()
+        workflow = (HERE.parent.parent / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        self.assertIn("          - auth_only", workflow)
+        self.assertIn("inputs.operation == 'auth_only'", workflow)
+        self.assertIn("name: IAM-Canonical-Isolated-Restore", workflow)
+        self.assertIn("ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech", workflow)
+        self.assertNotIn("ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech", workflow)
+
+    def test_auth_only_requires_pinned_database_role_and_tls(self):
+        cases = [
+            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|t", True),
+            ("iam_database|iam_schema_export_reader|iam_schema_export_reader|f", False),
+            ("iam_database|neondb_owner|neondb_owner|t", False),
+            ("iam_canonical_validation|neondb_owner|neondb_owner|t", False),
+        ]
+        for raw, good in cases:
+            with self.subTest(raw=raw), patch.object(module, "scalar", return_value=raw):
+                if good:
+                    module.check_authentication_only({}, module.mod.SOURCE_DATABASE,
+                                                     module.mod.SOURCE_ROLE, Path("/tmp"))
+                else:
+                    with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_AUTH_IDENTITY"):
+                        module.check_authentication_only({}, module.mod.SOURCE_DATABASE,
+                                                         module.mod.SOURCE_ROLE, Path("/tmp"))
+
     def test_readiness_reports_multiple_blockers_with_no_dump_or_ddl(self):
         with (
             self.env(confirm="NO_DDL"),
@@ -353,7 +436,7 @@ class IsolatedRunnerContract(unittest.TestCase):
         with self.env(confirm="RESTORE_BR_SWEET_UNION_ONLY"), patch.object(
             module, "docker_run"
         ) as d:
-            with self.assertRaisesRegex(module.GateBlocked, "readiness_only requires NO_DDL"):
+            with self.assertRaisesRegex(module.GateBlocked, "read-only operation requires NO_DDL"):
                 module.execute("readiness_only")
             d.assert_not_called()
 
