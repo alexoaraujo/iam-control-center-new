@@ -561,6 +561,41 @@ class IsolatedRunnerContract(unittest.TestCase):
                 module.execute("readiness_only")
             d.assert_not_called()
 
+    def test_current_canonical_runbook_has_correct_branch_and_fail_closed_gates(self):
+        runbook = (HERE.parent.parent / "docs" / "operations" /
+                   "iam-canonical-isolated-workflow-runbook.md").read_text(encoding="utf8")
+        for required in (
+            "tiny-rice-70320263",
+            "br-ancient-term-b6mmx5ol",
+            "br-sweet-union-b6j80a7j",
+            "ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech",
+            "ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech",
+            "iam_schema_export_reader",
+            "iam_canonical_validation",
+            "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES",
+            "BLOCKED_ROLE_ATTRIBUTES",
+            "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP",
+            "0/23",
+            "NO_DDL",
+            "verify-full",
+            "sslrootcert=system",
+            "43481191111",
+            "43482719449",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, runbook)
+        for forbidden in (
+            "twilight-fire-88497009",
+            "ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech",
+            "iam_schema_export_reader does **not exist**",
+            "reader is not provisioned",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, runbook)
+        self.assertIn("export_only` | `NO_DDL`", runbook)
+        self.assertIn("restore_isolated` | `RESTORE_BR_SWEET_UNION_ONLY`", runbook)
+        self.assertIn("sem schemas IAM", runbook)
+
     def test_workflow_requires_protected_environment_for_readiness(self):
         workflow = (HERE.parent.parent / ".github" / "workflows" /
                     "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
