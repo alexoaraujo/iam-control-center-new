@@ -118,27 +118,27 @@ def scalar(sql: str, creds: dict[str, str], workspace: Path) -> str:
 def check_authentication_only(creds: dict[str, str],
                               expected_database: str, expected_role: str,
                               workspace: Path) -> None:
-    """Read only session identity and server TLS status; never IAM business data."""
-    # PostgreSQL psql unaligned output uses the default field separator "|".
-    # The auth-only contract must not infer that TLS is false from a parser
-    # mismatch, and must never print identities or raw server responses.
-    # Deliberate one-row result; internal Neon SQL Editor is NOT external TLS proof.
-    sql = """SELECT current_database(), current_user, session_user,
-      (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid())"""
+    """Authenticate through libpq with strict client-side TLS, then check session identity.
+
+    Neon's proxy terminates external TLS before forwarding to PostgreSQL.
+    pg_stat_ssl describes the proxy-to-backend hop, NOT client-to-proxy TLS.
+    PGSSLMODE=verify-full and PGSSLROOTCERT=system force libpq to reject
+    untrusted certificates and hostname mismatches before this SELECT succeeds.
+    """
+    if creds.get("PGSSLMODE") != "verify-full" or creds.get("PGSSLROOTCERT") != "system":
+        raise GateBlocked("BLOCKED_AUTH_TLS_CONFIG: verified external TLS is mandatory")
+    sql = "SELECT current_database(), current_user, session_user"
     got = scalar(sql, creds, workspace).split("|")
-    if len(got) != 4:
-        raise GateBlocked("BLOCKED_AUTH_OUTPUT_SHAPE: expected four scalar columns")
+    if len(got) != 3:
+        raise GateBlocked("BLOCKED_AUTH_OUTPUT_SHAPE: expected three identity columns")
     if got[0] != expected_database:
         raise GateBlocked("BLOCKED_AUTH_DATABASE: connected database differs from allowlist")
     if got[1] != expected_role or got[2] != expected_role:
         raise GateBlocked("BLOCKED_AUTH_ROLE: effective/session identity differs from allowlist")
-    if got[3] != "t":
-        raise GateBlocked("BLOCKED_AUTH_TLS: external connection did not prove PostgreSQL TLS")
 
 
 def check_source(creds: dict[str, str], workspace: Path) -> None:
     sql = """SELECT current_database(), current_user, session_user,
-      (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),
       (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
        WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p')),
       (SELECT count(*) FROM pg_policies
@@ -153,7 +153,7 @@ def check_source(creds: dict[str, str], workspace: Path) -> None:
        WHERE r.rolname=current_user)"""
     got = scalar(sql, creds, workspace).split("|")
     expected = [
-        "iam_database", mod.SOURCE_ROLE, mod.SOURCE_ROLE, "t",
+        "iam_database", mod.SOURCE_ROLE, mod.SOURCE_ROLE,
         "23", "41", "20", "f", "f", "t", "0"
     ]
     if got != expected:
@@ -161,7 +161,6 @@ def check_source(creds: dict[str, str], workspace: Path) -> None:
 
 def check_target(creds: dict[str, str], workspace: Path) -> None:
     sql = """SELECT current_database(), current_user, session_user,
-      (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()),
       (SELECT count(*) FROM pg_namespace WHERE nspname IN ('iam','audit','app_private')),
       (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
        WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p')),
@@ -179,7 +178,7 @@ def check_target(creds: dict[str, str], workspace: Path) -> None:
       to_regclass('iam.schema_migrations') IS NULL"""
     got = scalar(sql, creds, workspace).split("|")
     expected = [
-        "iam_canonical_validation", "neondb_owner", "neondb_owner", "t",
+        "iam_canonical_validation", "neondb_owner", "neondb_owner",
         "0", "0", "0", "0", "4", "4", "1", "t"
     ]
     if got != expected:
@@ -198,9 +197,8 @@ def check_restored(creds: dict[str, str], workspace: Path) -> None:
        WHERE n.nspname IN ('iam','audit','app_private')
        AND c.relkind IN ('r','p') AND c.relowner=to_regrole('iam_owner')),
       to_regclass('iam.schema_migrations') IS NOT NULL,
-      (SELECT count(*) FROM iam.schema_migrations),
-      (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid())"""
-    if scalar(sql, creds, workspace) != "23|41|20|23|t|0|t":
+      (SELECT count(*) FROM iam.schema_migrations)"""
+    if scalar(sql, creds, workspace) != "23|41|20|23|t|0":
         raise GateBlocked("post-restore contract mismatch; freeze isolated target for review")
 
 def check_restore_acl_principals(source_creds: dict[str, str],
