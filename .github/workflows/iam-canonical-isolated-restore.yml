@@ -4,13 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: "No DDL by default; export schema, or restore ONLY into iam_canonical_validation"
+        description: "Preflight, authenticated catalog-only readiness, schema export, or isolated restore"
         required: true
         type: choice
         default: preflight_only
         options:
           - preflight_only
           - tls_probe_only
+          - readiness_only
           - export_only
           - restore_isolated
       confirm_isolated_ddl:
@@ -34,7 +35,7 @@ jobs:
     if: >-
       github.repository == 'alexoaraujo/iam-control-center-new' &&
       github.ref == 'refs/heads/main' &&
-      (inputs.operation == 'preflight_only' || inputs.operation == 'tls_probe_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
+      (inputs.operation == 'preflight_only' || inputs.operation == 'tls_probe_only' || inputs.operation == 'readiness_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -52,7 +53,7 @@ jobs:
           if [[ "$OPERATION" == "restore_isolated" ]]; then
             test "$CONFIRMATION" = "RESTORE_BR_SWEET_UNION_ONLY" || { echo "::error::Isolated DDL approval missing"; exit 1; }
           else
-            test "$CONFIRMATION" = "NO_DDL" || { echo "::error::NO_DDL must be selected for preflight/export"; exit 1; }
+            test "$CONFIRMATION" = "NO_DDL" || { echo "::error::NO_DDL required for every non-restore operation"; exit 1; }
           fi
       - name: Offline security tests - no credentials or Neon connectivity
         run: |
@@ -156,7 +157,7 @@ jobs:
     if: >-
       github.repository == 'alexoaraujo/iam-control-center-new' &&
       github.ref == 'refs/heads/main' &&
-      (inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
+      (inputs.operation == 'readiness_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:

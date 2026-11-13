@@ -253,8 +253,85 @@ def check_runtime_role_contract(source_creds: dict[str, str],
         )
 
 
+
+def check_schema_export_lock_permissions(creds: dict[str, str], workspace: Path) -> None:
+    """pg_dump schema-only still needs ACCESS SHARE on every selected table.
+
+    Do not grant SELECT on IAM identity or secret tables just to satisfy a dump.
+    Source-DB remediation requires a separately approved, auditable export identity.
+    """
+    sql = """SELECT count(*),
+       count(*) FILTER (WHERE
+         has_table_privilege(current_user,c.oid,'SELECT') OR
+         has_table_privilege(current_user,c.oid,'MAINTAIN') OR
+         has_table_privilege(current_user,c.oid,'UPDATE') OR
+         has_table_privilege(current_user,c.oid,'DELETE') OR
+         has_table_privilege(current_user,c.oid,'TRUNCATE'))
+      FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+     WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p')"""
+    if scalar(sql, creds, workspace).strip() != "23|23":
+        raise GateBlocked(
+            "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES: export reader lacks "
+            "ACCESS SHARE eligibility on all 23 IAM tables; never grant "
+            "blanket SELECT on sensitive source tables")
+
+
+def check_migrator_owner_membership(source_creds: dict[str, str],
+                                    target_creds: dict[str, str],
+                                    workspace: Path) -> None:
+    """Ensure migrator can SET iam_owner with no automatic inheritance/admin."""
+    sql = """SELECT m.admin_option,m.inherit_option,m.set_option
+      FROM pg_auth_members m
+      JOIN pg_roles member ON member.oid=m.member
+      JOIN pg_roles granted ON granted.oid=m.roleid
+     WHERE member.rolname='iam_migrator' AND granted.rolname='iam_owner'"""
+    source = scalar(sql, source_creds, workspace).strip()
+    target = scalar(sql, target_creds, workspace).strip()
+    if source != "f|f|t" or target != source:
+        raise GateBlocked(
+            "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP: isolated destination differs "
+            "from source (ADMIN=false, INHERIT=false, SET=true); "
+            "privileged role changes require independent approval")
+
+
+def check_pgcrypto_availability(source_creds: dict[str, str],
+                               target_creds: dict[str, str],
+                               workspace: Path) -> None:
+    source = scalar(
+        "SELECT count(*) FROM pg_extension WHERE extname='pgcrypto'",
+        source_creds, workspace).strip()
+    target = scalar(
+        "SELECT count(*) FROM pg_available_extensions WHERE name='pgcrypto'",
+        target_creds, workspace).strip()
+    if source != "1" or target != "1":
+        raise GateBlocked("BLOCKED_PGCRYPTO: source extension or target package missing")
+
+
+def check_authenticated_readiness(source_creds: dict[str, str],
+                                  target_creds: dict[str, str],
+                                  workspace: Path) -> None:
+    """Catalog-only checks; collect all blockers without touching data or DDL."""
+    checks = (
+        lambda: check_restore_acl_principals(source_creds, target_creds, workspace),
+        lambda: check_runtime_role_contract(source_creds, target_creds, workspace),
+        lambda: check_migrator_owner_membership(source_creds, target_creds, workspace),
+        lambda: check_pgcrypto_availability(source_creds, target_creds, workspace),
+        lambda: check_schema_export_lock_permissions(source_creds, workspace),
+    )
+    blockers = []
+    for check in checks:
+        try:
+            check()
+        except GateBlocked as exc:
+            blockers.append(str(exc))
+    if blockers:
+        raise GateBlocked("; ".join(blockers))
+    print("PASS_AUTHENTICATED_READINESS_ONLY: source/target catalogs, "
+          "ACL roles, grants and extension prerequisites; no DDL or data read")
+
+
 def execute(mode: str) -> None:
-    if mode not in ("export_only", "restore_isolated"):
+    if mode not in ("readiness_only", "export_only", "restore_isolated"):
         raise GateBlocked("unrecognized operation")
     if datetime.now(timezone.utc) >= EXPIRES:
         raise GateBlocked("disposable Neon branch has expired")
@@ -264,6 +341,8 @@ def execute(mode: str) -> None:
         mod.verify_connections(source, target)
     except mod.GateBlocked as e:
         raise GateBlocked(str(e)) from e
+    if mode == "readiness_only" and os.environ.get("IAM_CANONICAL_CONFIRMATION", "") != "NO_DDL":
+        raise GateBlocked("readiness_only requires NO_DDL confirmation")
     if mode == "restore_isolated":
         if os.environ.get("IAM_CANONICAL_OPERATOR_APPROVAL", "") != APPROVAL:
             raise GateBlocked("protected environment approval secret missing or invalid")
@@ -277,6 +356,10 @@ def execute(mode: str) -> None:
         dst = pg_env(target)
         check_source(src, workspace)
         check_target(dst, workspace)
+        if mode == "readiness_only":
+            check_authenticated_readiness(src, dst, workspace)
+            return
+        check_schema_export_lock_permissions(src, workspace)
         archive = workspace / "schema.dump"
         docker_run([
             "pg_dump", "-w", "--schema-only", "--format=custom",
@@ -298,6 +381,8 @@ def execute(mode: str) -> None:
         # Inventory ACL recipients before any extension, CREATE or restore DDL.
         check_restore_acl_principals(src, dst, workspace)
         check_runtime_role_contract(src, dst, workspace)
+        check_migrator_owner_membership(src, dst, workspace)
+        check_pgcrypto_availability(src, dst, workspace)
         # Scope is the exact isolated database, NEVER inherited iam_database.
         # CREATE EXTENSION may remain if restore fails; other DDL is one transaction.
         docker_run([
