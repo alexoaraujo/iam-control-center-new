@@ -283,26 +283,64 @@ def check_runtime_role_contract(source_creds: dict[str, str],
 
 
 def check_schema_export_lock_permissions(creds: dict[str, str], workspace: Path) -> None:
-    """pg_dump schema-only still needs ACCESS SHARE on every selected table.
+    """Require MAINTAIN-only lock capability and reject SELECT/DML bypass.
 
-    Do not grant SELECT on IAM identity or secret tables just to satisfy a dump.
-    Source-DB remediation requires a separately approved, auditable export identity.
+    MAINTAIN allows locks and other maintenance actions; this diagnostic is
+    NOT approval to GRANT it in Neon. All privileges must be reviewed.
     """
-    sql = """SELECT count(*),
-       count(*) FILTER (WHERE
-         has_table_privilege(current_user,c.oid,'SELECT') OR
-         has_table_privilege(current_user,c.oid,'MAINTAIN') OR
-         has_table_privilege(current_user,c.oid,'UPDATE') OR
-         has_table_privilege(current_user,c.oid,'DELETE') OR
-         has_table_privilege(current_user,c.oid,'TRUNCATE'))
-      FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-     WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p')"""
-    if scalar(sql, creds, workspace).strip() != "23|23":
+    sql = """WITH tables AS (
+        SELECT count(*) AS total,
+          count(*) FILTER (
+            WHERE has_table_privilege(current_user,c.oid,'MAINTAIN')
+          ) AS maintain,
+          count(*) FILTER (WHERE
+            has_table_privilege(current_user,c.oid,'SELECT') OR
+            has_table_privilege(current_user,c.oid,'INSERT') OR
+            has_table_privilege(current_user,c.oid,'UPDATE') OR
+            has_table_privilege(current_user,c.oid,'DELETE') OR
+            has_table_privilege(current_user,c.oid,'TRUNCATE') OR
+            has_table_privilege(current_user,c.oid,'REFERENCES') OR
+            has_table_privilege(current_user,c.oid,'TRIGGER')
+          ) AS broad
+        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname IN ('iam','audit','app_private')
+          AND c.relkind IN ('r','p')
+      ), schemas AS (
+        SELECT count(*) AS total,
+          count(*) FILTER (
+            WHERE has_schema_privilege(current_user,n.oid,'USAGE')
+          ) AS usage,
+          count(*) FILTER (
+            WHERE has_schema_privilege(current_user,n.oid,'CREATE')
+          ) AS creation
+        FROM pg_namespace n
+        WHERE n.nspname IN ('iam','audit','app_private')
+      )
+      SELECT tables.total, tables.maintain, tables.broad,
+             schemas.total, schemas.usage, schemas.creation
+        FROM tables CROSS JOIN schemas"""
+    raw = scalar(sql, creds, workspace).strip()
+    try:
+        counts = tuple(int(value) for value in raw.split("|"))
+    except ValueError as exc:
         raise GateBlocked(
-            "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES: export reader lacks "
-            "ACCESS SHARE eligibility on all 23 IAM tables; never grant "
-            "blanket SELECT on sensitive source tables")
-
+            "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES: invalid catalog evidence"
+        ) from exc
+    if len(counts) != 6 or any(value < 0 for value in counts):
+        raise GateBlocked(
+            "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES: incomplete catalog evidence"
+        )
+    table_count, maintenance, broad, schema_count, schema_usage, schema_create = counts
+    if broad != 0 or schema_create != 0:
+        raise GateBlocked(
+            "BLOCKED_SOURCE_SCHEMA_EXCESS_PRIVILEGES: export role has "
+            "SELECT/DML or schema CREATE; MAINTAIN-only review required"
+        )
+    if (table_count, maintenance, schema_count, schema_usage) != (23, 23, 3, 3):
+        raise GateBlocked(
+            "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES: requires MAINTAIN "
+            "on 23/23 tables and USAGE on 3/3 schemas; do not grant SELECT"
+        )
 
 def check_migrator_owner_membership(source_creds: dict[str, str],
                                     target_creds: dict[str, str],

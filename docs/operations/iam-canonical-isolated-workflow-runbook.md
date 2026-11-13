@@ -40,6 +40,12 @@ Os textos `PASS_AUTHENTICATED_SCHEMA_EXPORT` e `PASS_ISOLATED_SCHEMA_RESTORE` no
 - **`BLOCKED_MIGRATOR_OWNER_MEMBERSHIP`**: SOURCE não possui `iam_migrator → iam_owner`; TARGET possui com ADMIN=false, INHERIT=false, SET=true.
 - Metadados positivos: ACL principals `iam_owner`, `iam_app_runtime`, `iam_worker`, `iam_migrator` presentes no TARGET; `pgcrypto` instalado na SOURCE e disponível no TARGET. Esses resultados **não** liberam o resto dos gates.
 
+### Export reader privilege contract — experimental / not grant approval
+
+The runner now requires `MAINTAIN` on **23/23 tables** and `USAGE` on **3/3 schemas**, rejecting effective table `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES`, `TRIGGER` and schema `CREATE`. A lock obtained by broad table access must **not** satisfy readiness. The [PR #63](https://github.com/alexoaraujo/iam-control-center-new/pull/63) tests `pg_dump --schema-only` with `MAINTAIN` in *synthetic PostgreSQL 18 only*.
+
+**`MAINTAIN` remains a broad maintenance capability, not an ACCESS SHARE-only permission.** Requiring it in a policy is not authority to grant it. Human review, risk analysis, strict timeboxing, clone rehearsal, explicit approval and rollback are mandatory before any real Neon action.
+
 ## Run workflow
 
 Workflow: [IAM canonical export and isolated restore (manual)](https://github.com/alexoaraujo/iam-control-center-new/actions/workflows/iam-canonical-isolated-restore.yml). Selecionar branch `main` e validar SHA, revisão e environment **antes** de cada execução.
