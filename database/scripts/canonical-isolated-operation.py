@@ -145,6 +145,46 @@ def check_restored(creds: dict[str, str], workspace: Path) -> None:
     if scalar(sql, creds, workspace) != "23|41|20|23|t|0|t":
         raise GateBlocked("post-restore contract mismatch; freeze isolated target for review")
 
+def check_restore_acl_principals(source_creds: dict[str, str],
+                                 target_creds: dict[str, str],
+                                 workspace: Path) -> None:
+    """Fail before the first DDL when pg_dump ACL grantee roles are absent.
+
+    PostgreSQL roles are branch-wide in Neon. This workflow must NEVER create,
+    alter or inherit them automatically to satisfy a database-scoped approval.
+    """
+    acl_sql = """WITH acl_grantees AS (
+      SELECT (aclexplode(n.nspacl)).grantee AS grantee
+        FROM pg_namespace n WHERE n.nspname IN ('iam','audit','app_private')
+      UNION ALL
+      SELECT (aclexplode(c.relacl)).grantee
+        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+       WHERE n.nspname IN ('iam','audit','app_private') AND c.relacl IS NOT NULL
+      UNION ALL
+      SELECT (aclexplode(p.proacl)).grantee
+        FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+       WHERE n.nspname IN ('iam','audit','app_private') AND p.proacl IS NOT NULL
+      UNION ALL
+      SELECT (aclexplode(d.defaclacl)).grantee
+        FROM pg_default_acl d JOIN pg_namespace n ON n.oid=d.defaclnamespace
+       WHERE n.nspname IN ('iam','audit','app_private')
+    )
+    SELECT DISTINCT rolname FROM acl_grantees a
+      JOIN pg_roles r ON r.oid=a.grantee
+     WHERE a.grantee <> 0 ORDER BY rolname"""
+    required = set(scalar(acl_sql, source_creds, workspace).splitlines())
+    target_sql = "SELECT rolname FROM pg_roles WHERE rolname LIKE 'iam_%' ORDER BY rolname"
+    existing = set(scalar(target_sql, target_creds, workspace).splitlines())
+    if not required or not {"iam_owner", "iam_app_runtime"}.issubset(required):
+        raise GateBlocked("source ACL principal inventory incomplete; no DDL permitted")
+    missing = sorted(required - existing)
+    if missing:
+        raise GateBlocked(
+            "BLOCKED_SOURCE_ACL_PRINCIPALS: destination Neon branch lacks role(s) "
+            + ", ".join(missing) + "; database-only authorization does not allow CREATE ROLE"
+        )
+
+
 def execute(mode: str) -> None:
     if mode not in ("export_only", "restore_isolated"):
         raise GateBlocked("unrecognized operation")
@@ -187,6 +227,8 @@ def execute(mode: str) -> None:
         if mode == "export_only":
             print("EXPORT_ONLY: no DDL or restoration performed")
             return
+        # Inventory ACL recipients before any extension, CREATE or restore DDL.
+        check_restore_acl_principals(src, dst, workspace)
         # Scope is the exact isolated database, NEVER inherited iam_database.
         # CREATE EXTENSION may remain if restore fails; other DDL is one transaction.
         docker_run([
