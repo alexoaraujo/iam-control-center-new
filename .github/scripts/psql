@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Actions runner: PostgreSQL 18 libpq only; no connection URLs in argv.
+set -euo pipefail
+exec docker run --rm -i --network host \
+  --env PGHOST --env PGPORT --env PGDATABASE --env PGUSER \
+  --env PGPASSWORD --env PGSSLMODE --env PGSSLROOTCERT \
+  --env PGCONNECT_TIMEOUT --env PGAPPNAME \
+  postgres:18-bookworm psql "$@"
