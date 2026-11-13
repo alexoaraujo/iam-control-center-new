@@ -78,7 +78,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Fixed allowlist: no URL/host input and no repository or environment secrets.
+          # Fixed allowlist: no URL/host input and no credentials or protected environment.
           for entry in \
             "SOURCE:ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech" \
             "TARGET:ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech"; do
