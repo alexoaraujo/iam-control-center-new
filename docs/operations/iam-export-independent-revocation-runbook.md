@@ -39,6 +39,8 @@ The emergency REVOKE was performed with the Neon SQL connector as a **separate a
 
 **Important residual catalog drift:** compared with Development, one relation in the clone, `app_private.context_keys`, changed its PostgreSQL `relacl` from implicit `NULL` to explicit owner-default `{iam_owner=arwdDxtm/iam_owner}` after committed GRANT/REVOKE. This does **not** give the export role additional effective privileges, but it does change the full catalog fingerprint (SOURCE `53be82958de7aebc4131c3190d4a31ce`, CLONE `8141397921ff3b30c108e9b6c4bdf803`, each over 74 entries, 41 RLS policies and 20 FORCE RLS). Therefore the correct status is **effective privilege revocation PASS, exact schema/catalog restoration NOT PASS**. A reset-from-parent of the disposable clone could restore full parity, but it discards branch-local changes and needs explicit separate authorization; it has **not** been performed. Avoid direct system-catalog updates to `pg_class.relacl`.
 
+The Neon read-only compare_database_schema API returned an empty diff between clone and Development even while the full catalog fingerprint differed. Accordingly, a schema SQL diff alone cannot certify exact ACL catalog parity; use an explicit catalog/ACL manifest and checksums.
+
 This caveat is why the script's `PASS_REVOKER_COMMITTED_AND_INDEPENDENTLY_VERIFIED` means **privilege-only** revocation. It does **not** imply byte-equivalent ACL catalog state, restore/PITR evidence, or a timed kill-switch. Before any permanent MAINTAIN lease, reviewers must approve an ACL baseline/delta policy and branch recovery strategy.
 
 ## Threat model and limitations
