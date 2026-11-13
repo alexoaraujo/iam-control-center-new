@@ -77,8 +77,14 @@ def docker_run(args: list[str], creds: dict[str, str], workspace: Path) -> str:
                 "pg_restore": "archive_inspection" if "--list" in args else "schema_restore",
             }.get(args[0], "postgres_client")
             stderr = result.stderr.lower()
-            if "password authentication failed" in stderr or "no password supplied" in stderr:
-                category = "AUTHENTICATION"
+            if "no password supplied" in stderr:
+                category = "AUTH_NO_PASSWORD"
+            elif "password authentication failed" in stderr:
+                category = "AUTH_REJECTED"
+            elif "password has expired" in stderr or "expired password" in stderr:
+                category = "AUTH_EXPIRED"
+            elif "role " in stderr and "does not exist" in stderr:
+                category = "AUTH_ROLE_MISSING"
             elif ("certificate verify failed" in stderr
                   or "server certificate for" in stderr
                   or "hostname mismatch" in stderr):
@@ -108,6 +114,17 @@ def docker_run(args: list[str], creds: dict[str, str], workspace: Path) -> str:
 def scalar(sql: str, creds: dict[str, str], workspace: Path) -> str:
     return docker_run(["psql", "-X", "-w", "-v", "ON_ERROR_STOP=1",
                        "-A", "-t", "-c", sql], creds, workspace)
+
+def check_authentication_only(creds: dict[str, str],
+                              expected_database: str, expected_role: str,
+                              workspace: Path) -> None:
+    """Read only session identity and server TLS status; never IAM business data."""
+    sql = """SELECT current_database(), current_user, session_user,
+      (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid())"""
+    expected = [expected_database, expected_role, expected_role, "t"]
+    if scalar(sql, creds, workspace).split("|") != expected:
+        raise GateBlocked("BLOCKED_AUTH_IDENTITY: source/target DB, role or TLS mismatch")
+
 
 def check_source(creds: dict[str, str], workspace: Path) -> None:
     sql = """SELECT current_database(), current_user, session_user,
@@ -331,7 +348,7 @@ def check_authenticated_readiness(source_creds: dict[str, str],
 
 
 def execute(mode: str) -> None:
-    if mode not in ("readiness_only", "export_only", "restore_isolated"):
+    if mode not in ("auth_only", "readiness_only", "export_only", "restore_isolated"):
         raise GateBlocked("unrecognized operation")
     if datetime.now(timezone.utc) >= EXPIRES:
         raise GateBlocked("disposable Neon branch has expired")
@@ -341,8 +358,8 @@ def execute(mode: str) -> None:
         mod.verify_connections(source, target)
     except mod.GateBlocked as e:
         raise GateBlocked(str(e)) from e
-    if mode == "readiness_only" and os.environ.get("IAM_CANONICAL_CONFIRMATION", "") != "NO_DDL":
-        raise GateBlocked("readiness_only requires NO_DDL confirmation")
+    if mode in ("auth_only", "readiness_only") and os.environ.get("IAM_CANONICAL_CONFIRMATION", "") != "NO_DDL":
+        raise GateBlocked("read-only operation requires NO_DDL confirmation")
     if mode == "restore_isolated":
         if os.environ.get("IAM_CANONICAL_OPERATOR_APPROVAL", "") != APPROVAL:
             raise GateBlocked("protected environment approval secret missing or invalid")
@@ -354,6 +371,21 @@ def execute(mode: str) -> None:
         workspace = Path(tmp)
         src = pg_env(source)
         dst = pg_env(target)
+        if mode == "auth_only":
+            failures = []
+            for label, credentials, database, role in (
+                ("SOURCE", src, mod.SOURCE_DATABASE, mod.SOURCE_ROLE),
+                ("TARGET", dst, mod.TARGET_DATABASE, mod.TARGET_ROLE),
+            ):
+                try:
+                    check_authentication_only(credentials, database, role, workspace)
+                except GateBlocked as exc:
+                    # Only allowlisted diagnostics; raw stderr, passwords and SQL suppressed.
+                    failures.append(f"{label}: {exc}")
+            if failures:
+                raise GateBlocked("BLOCKED_AUTH_ONLY: " + "; ".join(failures))
+            print("PASS_AUTHENTICATED_IDENTITY_ONLY: pinned DB, role and verified TLS; no DDL")
+            return
         check_source(src, workspace)
         check_target(dst, workspace)
         if mode == "readiness_only":
