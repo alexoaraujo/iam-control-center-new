@@ -118,21 +118,21 @@ jobs:
               --env "PGOPTIONS=-c statement_timeout=60000 -c lock_timeout=10000" \
               postgres:18-bookworm psql -X -w -q -f /dev/null \
               >/dev/null 2>"$output_file"; then
-              echo "::error::BLOCKED_PG18_LIBPQ_label_UNEXPECTED_LOGIN: synthetic role authenticated"
+              echo "::error::BLOCKED_PG18_LIBPQ_${label}_UNEXPECTED_LOGIN: synthetic role authenticated"
               exit 1
             fi
             # Only an expected authentication denial demonstrates libpq reached
             # authentication after certificate and hostname checks succeeded.
             if grep -Eqi 'no password supplied|password authentication failed|role .* does not exist' "$output_file"; then
-              echo "PASS_PG18_LIBPQ_TLS_label: verified CA and hostname; authentication refused as expected"
+              echo "PASS_PG18_LIBPQ_TLS_${label}: verified CA and hostname; authentication refused as expected"
             elif grep -Eqi 'certificate|sslrootcert|ssl error|sslmode|tlsv1' "$output_file"; then
-              echo "::error::BLOCKED_PG18_LIBPQ_TLS_label: certificate, CA trust store or handshake failed"
+              echo "::error::BLOCKED_PG18_LIBPQ_TLS_${label}: certificate, CA trust store or handshake failed"
               exit 1
             elif grep -Eqi 'could not translate host name|connection refused|timed out|network is unreachable' "$output_file"; then
-              echo "::error::BLOCKED_PG18_LIBPQ_NETWORK_label: endpoint not reachable"
+              echo "::error::BLOCKED_PG18_LIBPQ_NETWORK_${label}: endpoint not reachable"
               exit 1
             else
-              echo "::error::BLOCKED_PG18_LIBPQ_label_UNCLASSIFIED: unexpected response; details redacted"
+              echo "::error::BLOCKED_PG18_LIBPQ_${label}_UNCLASSIFIED: unexpected response; details redacted"
               exit 1
             fi
           done
