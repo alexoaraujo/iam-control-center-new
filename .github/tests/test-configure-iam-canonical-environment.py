@@ -60,8 +60,6 @@ class SecureConfigTests(unittest.TestCase):
         calls = []
         def reply(*args, input_value=None):
             calls.append((args, input_value))
-            if args[2] == config.ENV_API and args[:2] == ("api", "-X"):
-                return protected(77)
             if "deployment-branch-policies" in args[1]:
                 return {"branch_policies": [{"name": "main", "type": "branch"}]}
             return protected(77)
@@ -79,9 +77,9 @@ class SecureConfigTests(unittest.TestCase):
         args, kwargs = mock.call_args
         self.assertEqual(kwargs, {"input_value": value})
         self.assertNotIn(value, str(args))
-        self.assertEqual(args[0][0], "secret")
-        self.assertEqual(args[0][1], "set")
-        self.assertIn("--env", args[0])
+        self.assertEqual(args[0], "secret")
+        self.assertEqual(args[1], "set")
+        self.assertIn("--env", args)
 
     def test_unknown_secret_name_is_rejected(self):
         with patch.object(config, "gh") as mock:
