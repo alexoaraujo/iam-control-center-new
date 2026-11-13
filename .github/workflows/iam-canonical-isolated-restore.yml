@@ -95,6 +95,14 @@ jobs:
             fi
           done
           echo "PASS_PUBLIC_TLS_ONLY: no database authentication, SQL, credentials or DDL"
+      - name: Build PostgreSQL 18 client with system CA roots (no credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull --file database/tests/fixtures/pg18-system-ca.Dockerfile \
+            --tag iam-pg18-system-ca:local database/tests/fixtures
+          docker run --rm --entrypoint sh iam-pg18-system-ca:local \
+            -ec 'test -s /etc/ssl/certs/ca-certificates.crt; test "$SSL_CERT_FILE" = /etc/ssl/certs/ca-certificates.crt'
       - name: Verify PG18 libpq system CA and hostname before auth (no credentials or SQL)
         shell: bash
         run: |
@@ -116,7 +124,7 @@ jobs:
               --env "PGSSLMODE=verify-full" --env "PGSSLROOTCERT=system" \
               --env "PGCONNECT_TIMEOUT=15" \
               --env "PGOPTIONS=-c statement_timeout=60000 -c lock_timeout=10000" \
-              postgres:18-bookworm psql -X -w -q -f /dev/null \
+              iam-pg18-system-ca:local psql -X -w -q -f /dev/null \
               >/dev/null 2>"$output_file"; then
               echo "::error::BLOCKED_PG18_LIBPQ_${label}_UNEXPECTED_LOGIN: synthetic role authenticated"
               exit 1
@@ -166,6 +174,11 @@ jobs:
           set -euo pipefail
           umask 077
           python3 database/scripts/guard-canonical-restore-target.py
+          # Build only from a fixture-only context; no protected env or data is sent to Docker.
+          docker build --pull --file database/tests/fixtures/pg18-system-ca.Dockerfile \
+            --tag iam-pg18-system-ca:local database/tests/fixtures
+          docker run --rm --entrypoint sh iam-pg18-system-ca:local \
+            -ec 'test -s /etc/ssl/certs/ca-certificates.crt; test "$SSL_CERT_FILE" = /etc/ssl/certs/ca-certificates.crt'
           python3 database/scripts/canonical-isolated-operation.py "$IAM_CANONICAL_OPERATION"
       - name: Record final scope of the run
         if: success()
@@ -176,7 +189,7 @@ jobs:
             echo "- Operation: $IAM_CANONICAL_OPERATION"
             echo "- Source: twilight-fire-88497009 / main / iam_database (read-only role)"
             echo "- Target: tiny-rice-70320263 / br-sweet-union-b6j80a7j / iam_canonical_validation"
-            echo "- PostgreSQL 18 direct TLS: verify-full; CA=system"
+            echo "- PostgreSQL 18 direct TLS: verify-full; CA=system (container Debian ca-certificates)"
             echo "- No change to Production, main DATABASE_URL, Auth0 or Vercel settings"
             echo "- Does not approve the six remaining PEOS release/cutover gates"
           } >> "$GITHUB_STEP_SUMMARY"
