@@ -87,6 +87,25 @@ class RevokerTest(TestCase):
             self.assertEqual(len(calls), 1)
             self.assertNotIn("REVOKE MAINTAIN", calls[0][1])
 
+    def test_preflight_rejects_partial_or_inconsistent_lease(self):
+        for counts in ((1, 0), (0, 1), (22, 3), (23, 2), (24, 3)):
+            fake, calls = fake_runner((0,
+                f"READER_SECURITY|1|23|{counts[0]}|{counts[1]}|0|0\\n"))
+            with self.subTest(counts=counts), self.assertRaisesRegex(
+                m.GateBlocked, "partial or inconsistent export lease"
+            ):
+                m.execute("preflight", "", supplied(), fake)
+            self.assertEqual(len(calls), 1)
+            self.assertNotIn("REVOKE MAINTAIN", calls[0][1])
+
+    def test_preflight_accepts_full_lease_only_as_read_only_probe(self):
+        fake, calls = fake_runner((0, "READER_SECURITY|1|23|23|3|0|0\\n"))
+        self.assertEqual(
+            m.execute("preflight", "", supplied(), fake),
+            "PASS_REVOKER_PREFLIGHT_ONLY_NO_DDL",
+        )
+        self.assertEqual(len(calls), 1)
+
     def test_workflow_is_manual_main_only_with_separate_environment(self):
         workflow = (SCRIPT.parents[1] / "workflows" /
                     "iam-export-emergency-revoke.yml").read_text(encoding="utf8")
