@@ -373,8 +373,18 @@ def execute(mode: str) -> None:
         src = pg_env(source)
         dst = pg_env(target)
         if mode == "auth_only":
-            check_authentication_only(src, mod.SOURCE_DATABASE, mod.SOURCE_ROLE, workspace)
-            check_authentication_only(dst, mod.TARGET_DATABASE, mod.TARGET_ROLE, workspace)
+            failures = []
+            for label, credentials, database, role in (
+                ("SOURCE", src, mod.SOURCE_DATABASE, mod.SOURCE_ROLE),
+                ("TARGET", dst, mod.TARGET_DATABASE, mod.TARGET_ROLE),
+            ):
+                try:
+                    check_authentication_only(credentials, database, role, workspace)
+                except GateBlocked as exc:
+                    # No raw SQL, passwords or stderr; collect source and target outcomes.
+                    failures.append(f"{label}: {exc}")
+            if failures:
+                raise GateBlocked("BLOCKED_AUTH_ONLY: " + "; ".join(failures))
             print("PASS_AUTHENTICATED_IDENTITY_ONLY: pinned source/target roles, DB and TLS; no DDL")
             return
         check_source(src, workspace)
