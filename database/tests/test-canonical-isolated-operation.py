@@ -78,6 +78,7 @@ class IsolatedRunnerContract(unittest.TestCase):
              patch.object(module, "check_source"), patch.object(module, "check_target"), \
              patch.object(module, "check_restored"), \
              patch.object(module, "check_restore_acl_principals"), \
+             patch.object(module, "check_runtime_role_contract"), \
              patch.object(module, "docker_run", side_effect=self.simulated_docker(calls)):
             module.execute("restore_isolated")
         self.assertEqual(len(calls), 4)
@@ -141,6 +142,17 @@ class IsolatedRunnerContract(unittest.TestCase):
         with patch.object(module, "scalar", side_effect=["", "iam_owner"]):
             with self.assertRaises(module.GateBlocked):
                 module.check_restore_acl_principals({}, {}, Path("/tmp"))
+
+    def test_role_attributes_drift_blocks_restoration(self):
+        legacy = ("iam_app_runtime_login|t|f|f|f\n"
+                  "iam_migrator_login|t|f|f|f\n"
+                  "iam_worker_login|t|f|f|f")
+        target = "iam_app_runtime_login|t|t|f|f"
+        with patch.object(module, "scalar", side_effect=[legacy, target]):
+            with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_ROLE_ATTRIBUTES"):
+                module.check_runtime_role_contract({}, {}, Path("/tmp"))
+        with patch.object(module, "scalar", side_effect=[legacy, legacy]):
+            module.check_runtime_role_contract({}, {}, Path("/tmp"))
 
     def test_expired_branch_fails_before_credential_use(self):
         from datetime import datetime, timezone
