@@ -119,11 +119,21 @@ def check_authentication_only(creds: dict[str, str],
                               expected_database: str, expected_role: str,
                               workspace: Path) -> None:
     """Read only session identity and server TLS status; never IAM business data."""
+    # PostgreSQL psql unaligned output uses the default field separator "|".
+    # The auth-only contract must not infer that TLS is false from a parser
+    # mismatch, and must never print identities or raw server responses.
+    # Deliberate one-row result; internal Neon SQL Editor is NOT external TLS proof.
     sql = """SELECT current_database(), current_user, session_user,
       (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid())"""
-    expected = [expected_database, expected_role, expected_role, "t"]
-    if scalar(sql, creds, workspace).split("|") != expected:
-        raise GateBlocked("BLOCKED_AUTH_IDENTITY: source/target DB, role or TLS mismatch")
+    got = scalar(sql, creds, workspace).split("|")
+    if len(got) != 4:
+        raise GateBlocked("BLOCKED_AUTH_OUTPUT_SHAPE: expected four scalar columns")
+    if got[0] != expected_database:
+        raise GateBlocked("BLOCKED_AUTH_DATABASE: connected database differs from allowlist")
+    if got[1] != expected_role or got[2] != expected_role:
+        raise GateBlocked("BLOCKED_AUTH_ROLE: effective/session identity differs from allowlist")
+    if got[3] != "t":
+        raise GateBlocked("BLOCKED_AUTH_TLS: external connection did not prove PostgreSQL TLS")
 
 
 def check_source(creds: dict[str, str], workspace: Path) -> None:
