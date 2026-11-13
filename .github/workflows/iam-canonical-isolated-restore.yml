@@ -10,6 +10,7 @@ on:
         default: preflight_only
         options:
           - preflight_only
+          - tls_probe_only
           - export_only
           - restore_isolated
       confirm_isolated_ddl:
@@ -33,7 +34,7 @@ jobs:
     if: >-
       github.repository == 'alexoaraujo/iam-control-center-new' &&
       github.ref == 'refs/heads/main' &&
-      (inputs.operation == 'preflight_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
+      (inputs.operation == 'preflight_only' || inputs.operation == 'tls_probe_only' || inputs.operation == 'export_only' || inputs.operation == 'restore_isolated')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -60,6 +61,40 @@ jobs:
       - name: Summarize safe preflight
         run: |
           echo "PASS_PREFLIGHT_ONLY: only offline security tests ran; no database operation"
+
+
+  public-tls-probe:
+    needs: preflight-offline
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.operation == 'tls_probe_only'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    steps:
+      - name: Verify pinned Neon PostgreSQL public certificates (no credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Fixed allowlist: no URL/host input and no credentials or protected environment.
+          for entry in \
+            "SOURCE:ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech" \
+            "TARGET:ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech"; do
+            label="${entry%%:*}"
+            host="${entry#*:}"
+            if timeout 25 openssl s_client -starttls postgres \
+              -connect "${host}:5432" -servername "${host}" \
+              -verify_hostname "${host}" -verify_return_error \
+              -brief </dev/null >/dev/null 2>&1; then
+              echo "PASS_PUBLIC_TLS_${label}: trusted CA, hostname, and TLS handshake verified"
+            else
+              echo "::error::BLOCKED_PUBLIC_TLS_${label}: public certificate, hostname, or network verification failed"
+              exit 1
+            fi
+          done
+          echo "PASS_PUBLIC_TLS_ONLY: no database authentication, SQL, credentials or DDL"
 
   authenticated-export-and-optional-restore:
     needs: preflight-offline

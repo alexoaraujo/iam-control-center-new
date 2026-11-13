@@ -77,9 +77,16 @@ def docker_run(args: list[str], creds: dict[str, str], workspace: Path) -> str:
             stderr = result.stderr.lower()
             if "password authentication failed" in stderr or "no password supplied" in stderr:
                 category = "AUTHENTICATION"
-            elif ("certificate verify failed" in stderr or "root certificate" in stderr
-                  or "ssl error" in stderr or "sslmode" in stderr):
-                category = "TLS"
+            elif ("certificate verify failed" in stderr
+                  or "server certificate for" in stderr
+                  or "hostname mismatch" in stderr):
+                category = "TLS_CERT_VERIFY"
+            elif ("root certificate" in stderr or "sslrootcert" in stderr
+                  or "certificate store" in stderr):
+                category = "TLS_TRUST_STORE"
+            elif ("ssl error" in stderr or "sslmode" in stderr
+                  or "tlsv1 alert" in stderr):
+                category = "TLS_HANDSHAKE"
             elif ("permission denied" in stderr or "must be owner" in stderr
                   or "insufficient privilege" in stderr):
                 category = "PRIVILEGE"

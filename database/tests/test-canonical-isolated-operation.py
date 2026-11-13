@@ -55,7 +55,13 @@ class IsolatedRunnerContract(unittest.TestCase):
              "PG18_SCHEMA_EXPORT_PRIVILEGE"),
             (["pg_restore", "--list"], "neondb_owner",
              "SSL error SECRET",
-             "PG18_ARCHIVE_INSPECTION_TLS"),
+             "PG18_ARCHIVE_INSPECTION_TLS_HANDSHAKE"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "SSL error: certificate verify failed PRIVATE HOST",
+             "PG18_SOURCE_PREFLIGHT_TLS_CERT_VERIFY"),
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "root certificate file PRIVATE PATH is missing",
+             "PG18_SOURCE_PREFLIGHT_TLS_TRUST_STORE"),
             (["pg_restore", "--single-transaction"], "neondb_owner",
              "sensitive SQL statement here",
              "PG18_SCHEMA_RESTORE_UNCLASSIFIED"),
@@ -74,6 +80,27 @@ class IsolatedRunnerContract(unittest.TestCase):
                     self.assertNotIn("SECRET", message)
                     self.assertNotIn("secret_table", message)
                     self.assertNotIn("sensitive SQL", message)
+
+    def test_tls_probe_is_credential_free_and_not_restoration(self):
+        workflow = (HERE.parent.parent / ".github" / "workflows" /
+                    "iam-canonical-isolated-restore.yml").read_text(encoding="utf8")
+        self.assertIn("          - tls_probe_only", workflow)
+        self.assertIn("inputs.operation == 'tls_probe_only'", workflow)
+        public = workflow.split("\n  public-tls-probe:", 1)[1].split(
+            "\n  authenticated-export-and-optional-restore:", 1
+        )[0]
+        self.assertIn("needs: preflight-offline", public)
+        self.assertIn("-starttls postgres", public)
+        self.assertIn("-verify_hostname", public)
+        self.assertIn("-verify_return_error", public)
+        self.assertIn("ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech", public)
+        self.assertIn("ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech", public)
+        self.assertNotIn("secrets.", public)
+        self.assertNotIn("environment:", public)
+        self.assertNotIn("IAM_CANONICAL_SOURCE_URL", public)
+        self.assertNotIn("IAM_CANONICAL_TARGET_URL", public)
+        self.assertNotIn("pg_dump", public)
+        self.assertNotIn("pg_restore", public)
 
     def test_no_operator_approval_blocks_before_docker(self):
         with self.env(), patch.object(module, "docker_run") as d:
