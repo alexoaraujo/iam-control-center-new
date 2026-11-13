@@ -85,7 +85,7 @@ jobs:
           set -euo pipefail
           # Fixed allowlist: no URL/host input and no credentials or protected environment.
           for entry in \
-            "SOURCE:ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech" \
+            "SOURCE:ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech" \
             "TARGET:ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech"; do
             label="${entry%%:*}"
             host="${entry#*:}"
@@ -118,7 +118,7 @@ jobs:
           # Match the production pg_env options inside the exact PostgreSQL 18 image.
           # A deliberately nonexistent role has no password; successful auth fails closed.
           for entry in \
-            "SOURCE:ep-twilight-shadow-b618ef5h.c-2.sa-east-1.aws.neon.tech:iam_database" \
+            "SOURCE:ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech:iam_database" \
             "TARGET:ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech:iam_canonical_validation"; do
             IFS=: read -r label host database <<< "$entry"
             : > "$output_file"
@@ -192,7 +192,7 @@ jobs:
           {
             echo "### IAM canonical Neon isolated operation"
             echo "- Operation: $IAM_CANONICAL_OPERATION"
-            echo "- Source: twilight-fire-88497009 / main / iam_database (read-only role)"
+            echo "- Source: tiny-rice-70320263 / development / br-ancient-term-b6mmx5ol / iam_database (reader role pending)"
             echo "- Target: tiny-rice-70320263 / br-sweet-union-b6j80a7j / iam_canonical_validation"
             echo "- PostgreSQL 18 direct TLS: verify-full; CA=system (container Debian ca-certificates)"
             echo "- No change to Production, main DATABASE_URL, Auth0 or Vercel settings"
