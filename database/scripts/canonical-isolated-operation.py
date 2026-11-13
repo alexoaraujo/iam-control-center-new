@@ -185,6 +185,23 @@ def check_restore_acl_principals(source_creds: dict[str, str],
         )
 
 
+def check_runtime_role_contract(source_creds: dict[str, str],
+                                target_creds: dict[str, str],
+                                workspace: Path) -> None:
+    """A restored RLS schema is not canonical with a divergent login inheritance."""
+    sql = """SELECT rolname, rolcanlogin, rolinherit, rolbypassrls, rolsuper
+      FROM pg_roles
+     WHERE rolname IN ('iam_app_runtime_login','iam_migrator_login','iam_worker_login')
+     ORDER BY rolname"""
+    source = scalar(sql, source_creds, workspace).strip()
+    target = scalar(sql, target_creds, workspace).strip()
+    if not source or source != target:
+        raise GateBlocked(
+            "BLOCKED_ROLE_ATTRIBUTES: source and destination IAM login roles differ; "
+            "roles are Neon branch-wide and must be reviewed independently before DDL"
+        )
+
+
 def execute(mode: str) -> None:
     if mode not in ("export_only", "restore_isolated"):
         raise GateBlocked("unrecognized operation")
@@ -229,6 +246,7 @@ def execute(mode: str) -> None:
             return
         # Inventory ACL recipients before any extension, CREATE or restore DDL.
         check_restore_acl_principals(src, dst, workspace)
+        check_runtime_role_contract(src, dst, workspace)
         # Scope is the exact isolated database, NEVER inherited iam_database.
         # CREATE EXTENSION may remain if restore fails; other DDL is one transaction.
         docker_run([
