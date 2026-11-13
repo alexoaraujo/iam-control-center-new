@@ -40,6 +40,39 @@ class IsolatedRunnerContract(unittest.TestCase):
         self.assertEqual(e["PGDATABASE"], "iam_database")
         self.assertNotIn("IAM_CANONICAL_SOURCE_URL", module.no_trust_env())
 
+    def test_safe_failure_stage_and_category_without_stderr_leakage(self):
+        import subprocess
+        import tempfile
+        failures = [
+            (["psql", "-c", "SELECT 1"], "iam_schema_export_reader",
+             "FATAL: password authentication failed for user SECRET_USER",
+             "PG18_SOURCE_PREFLIGHT_AUTHENTICATION"),
+            (["psql", "-c", "SELECT 1"], "neondb_owner",
+             "could not translate host name SECRET_HOST",
+             "PG18_TARGET_PREFLIGHT_NETWORK"),
+            (["pg_dump", "--schema-only"], "iam_schema_export_reader",
+             "ERROR: permission denied for table secret_table",
+             "PG18_SCHEMA_EXPORT_PRIVILEGE"),
+            (["pg_restore", "--list"], "neondb_owner",
+             "SSL error SECRET",
+             "PG18_ARCHIVE_INSPECTION_TLS"),
+            (["pg_restore", "--single-transaction"], "neondb_owner",
+             "sensitive SQL statement here",
+             "PG18_SCHEMA_RESTORE_UNCLASSIFIED"),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            for args, role, stderr, expected in failures:
+                completed = subprocess.CompletedProcess(args, 1, "", stderr)
+                with self.subTest(expected=expected), \\
+                     patch.object(module.subprocess, "run", return_value=completed):
+                    with self.assertRaises(module.GateBlocked) as exc:
+                        module.docker_run(args, {"PGUSER": role}, Path(tmp))
+                    message = str(exc.exception)
+                    self.assertIn(expected, message)
+                    self.assertNotIn("SECRET", message)
+                    self.assertNotIn("secret_table", message)
+                    self.assertNotIn("sensitive SQL", message)
+
     def test_no_operator_approval_blocks_before_docker(self):
         with self.env(), patch.object(module, "docker_run") as d:
             with self.assertRaises(module.GateBlocked):
