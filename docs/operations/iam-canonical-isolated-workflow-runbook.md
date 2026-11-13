@@ -20,6 +20,28 @@ Select **Run workflow**, branch **main**, then one operation:
 
 The workflow **does not export or restore application rows**. The custom-format archive stays in the ephemeral Actions runner; SHA-256 is printed, never the SQL dump, passwords, login data, keys or plaintext PII. `pg_restore` uses a transaction and aborts on an error. If pgcrypto is missing, `CREATE EXTENSION` can persist even when restore fails; do not classify this as a completed rollback.
 
+## Configure and verify all three environment secrets (secure local CLI)
+
+The GitHub ChatGPT connector has **no GitHub Environment/Actions Secret write operations**, and the GitHub REST read adapter excludes administration and secrets endpoints. Accordingly an agent cannot truthfully report these three secrets as set through that connector.
+
+On your *own authenticated administrator workstation*, install/authenticate GitHub CLI and run the reviewed non-logging configurator from this PR:
+
+```bash
+gh auth status
+git fetch origin test/canonical-restore-guard-20261113
+git switch test/canonical-restore-guard-20261113
+python3 .github/scripts/configure-iam-canonical-environment.py
+```
+
+The script configures the environment through GitHub REST **only after validating** the repository, independent reviewer \`alexoaraujo83\`, public visibility and branch \`main\`. It then prompts privately for the **direct** source and target PostgreSQL connection URLs, runs the same deny-by-default URL allowlist, encrypts each value locally using \`gh secret set --env IAM-Canonical-Isolated-Restore\` with **stdin only**, and verifies three environment-secret **names** via metadata (never reads back values). It configures \`IAM_CANONICAL_OPERATOR_APPROVAL\` as the static execution latch after the environment protections pass.
+
+**The static latch string is not a security authorization**: the GitHub Environment required-reviewers gate with prevent-self-review, explicit manual \`restore_isolated\` confirmation and production separation are authoritative. On an existing environment with extra deployment branch policies the configurator refuses to write secrets rather than silently bypass other branch restrictions.
+
+To obtain the two URLs without exposing them in chat or files: open Neon Console → the exact project and branch listed below → **Connection Details**. Choose **direct** (non-pooled), select the exact role and database, and ensure URI query params are exactly \`sslmode=verify-full&sslrootcert=system\`. Never use \`sslmode=require\` as a substitute or place the password in the shell command line. The source is \`iam_schema_export_reader\` on legacy \`main\`; the target is \`neondb_owner\` for \`iam_canonical_validation\`.
+
+This interactive script requires authenticated \`gh\` with repository Administration write access. The connected GitHub tool cannot operate these endpoints, and no secret has been added just by merging the script.
+
+
 ## Create / protect the GitHub environment (administrator)
 
 Environment: **`IAM-Canonical-Isolated-Restore`**.
@@ -43,7 +65,7 @@ A GitHub workflow referencing a nonexistent environment may automatically create
 - Legacy source project `twilight-fire-88497009`, branch `br-little-fire-b6adup9f` (`main`), database `iam_database`. Dedicated export reader is non-BYPASSRLS, no table-data/ledger SELECT.
 - NEW isolated target project `tiny-rice-70320263`, branch `br-sweet-union-b6j80a7j` (`validation/iam-canonical-restore-20261113`), database `iam_canonical_validation`. TTL **2026-11-20T09:12:00Z**, compute 0.25 CU. This branch is a child of Development; all its other databases (including inherited `iam_database`) are **out of scope**.
 - External SSL must be verified in the runner with `sslmode=verify-full` and `sslrootcert=system`. Internal Neon connector `pg_stat_ssl=false` is not a TLS test.
-- The old six-grant ACL remediator for NEW Development is **not applicable** to the new database (0 future grants to runtime).
+- **Known restore blocker, as verified read-only on 2026-11-13:** source schema ACLs grant privileges to `iam_schema_export_reader`, which is **absent** from the isolated destination branch. The runner now fails before any DDL with `BLOCKED_SOURCE_ACL_PRINCIPALS`. Creating even a NOLOGIN role is **branch-wide**, not database-only, and needs a separate approval and schema/role lifecycle plan. Do not use `--no-acl` merely to hide the discrepancy. The old six-grant ACL remediator for NEW Development is **not applicable** to the new database (0 future grants to runtime).
 - The source has **1 historical ledger row**, the new destination is **schema-only/0 ledger rows**. Do **not** insert a fake legacy marker or claim lineage complete.
 
 ## Remaining required acceptance after running
