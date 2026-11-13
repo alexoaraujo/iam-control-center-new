@@ -382,12 +382,36 @@ class IsolatedRunnerContract(unittest.TestCase):
                 module.check_runtime_role_contract({}, {}, Path("/tmp"))
 
     def test_schema_lock_guard_fails_before_any_dump(self):
-        for value in ("23|0", "23|22", ""):
-            with self.subTest(value=value), patch.object(module, "scalar", return_value=value):
-                with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES"):
+        # IAM tables, MAINTAIN covered, broad grants, schemas, USAGE, CREATE.
+        for raw in (
+            "23|0|0|3|0|0", "23|22|0|3|3|0", "23|23|0|3|2|0",
+            "22|22|0|3|3|0", "23|23|0|2|2|0",
+            "", "23|no|0|3|3|0", "23|23|0|3|3", "-1|23|0|3|3|0",
+        ):
+            with self.subTest(raw=raw), patch.object(module, "scalar", return_value=raw):
+                with self.assertRaisesRegex(
+                    module.GateBlocked, "BLOCKED_SOURCE_SCHEMA_LOCK_PRIVILEGES"
+                ):
                     module.check_schema_export_lock_permissions({}, Path("/tmp"))
-        with patch.object(module, "scalar", return_value="23|23"):
+        for raw in (
+            "23|23|1|3|3|0", "23|23|23|3|3|0", "23|23|0|3|3|1",
+        ):
+            with self.subTest(raw=raw), patch.object(module, "scalar", return_value=raw):
+                with self.assertRaisesRegex(
+                    module.GateBlocked, "BLOCKED_SOURCE_SCHEMA_EXCESS_PRIVILEGES"
+                ):
+                    module.check_schema_export_lock_permissions({}, Path("/tmp"))
+        with patch.object(module, "scalar", return_value="23|23|0|3|3|0"):
             module.check_schema_export_lock_permissions({}, Path("/tmp"))
+
+    def test_schema_lock_guard_sql_requires_maintain_but_rejects_select(self):
+        with patch.object(module, "scalar", return_value="23|23|0|3|3|0") as query:
+            module.check_schema_export_lock_permissions({}, Path("/tmp"))
+        sql = query.call_args.args[0]
+        self.assertIn("has_table_privilege(current_user,c.oid,'MAINTAIN')", sql)
+        self.assertIn("has_table_privilege(current_user,c.oid,'SELECT')", sql)
+        self.assertIn("has_schema_privilege(current_user,n.oid,'USAGE')", sql)
+        self.assertIn("has_schema_privilege(current_user,n.oid,'CREATE')", sql)
 
     def test_migrator_owner_set_membership_must_match_on_both_branches(self):
         with patch.object(module, "scalar", side_effect=["f|f|t", "f|f|t"]):
