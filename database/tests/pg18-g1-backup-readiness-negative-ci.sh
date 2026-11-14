@@ -27,6 +27,7 @@ REVOKE USAGE ON SCHEMA iam,audit,app_private FROM iam_schema_export_reader;
 DROP ROLE iam_schema_export_reader;
 REVOKE iam_migrator FROM iam_migrator_login;
 DROP ROLE iam_migrator_login;
+REVOKE iam_owner FROM iam_migrator;
 REVOKE iam_worker FROM iam_worker_login;
 DROP ROLE iam_worker_login;
 SQL
@@ -45,6 +46,7 @@ BEGIN;
 CREATE ROLE iam_schema_export_reader LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 CREATE ROLE iam_migrator_login LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 CREATE ROLE iam_worker_login LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+GRANT iam_owner TO iam_migrator WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
 GRANT iam_migrator TO iam_migrator_login WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
 GRANT iam_worker TO iam_worker_login WITH INHERIT TRUE, SET TRUE, ADMIN FALSE;
 GRANT USAGE ON SCHEMA iam,audit,app_private TO iam_schema_export_reader;
@@ -89,6 +91,18 @@ mutated="$(mutate_with_rollback 'GRANT CREATE ON SCHEMA iam TO iam_schema_export
 assert_gate READER_CREATE_DENIED "$mutated" PASS PASS BLOCKED
 mutated="$(mutate_with_rollback 'GRANT iam_migrator TO iam_schema_export_reader WITH INHERIT FALSE, SET FALSE, ADMIN FALSE;')"
 assert_gate READER_MEMBERSHIP_DENIED "$mutated" PASS PASS BLOCKED
+mutated="$(mutate_with_rollback 'ALTER ROLE iam_app_runtime_login NOLOGIN;')"
+assert_gate RUNTIME_NOLOGIN_DENIED "$mutated" PASS BLOCKED PASS
+mutated="$(mutate_with_rollback 'ALTER ROLE iam_worker_login BYPASSRLS;')"
+assert_gate WORKER_BYPASSRLS_DENIED "$mutated" PASS BLOCKED PASS
+mutated="$(mutate_with_rollback 'REVOKE iam_worker FROM iam_worker_login;')"
+assert_gate WORKER_MEMBERSHIP_DENIED "$mutated" PASS BLOCKED PASS
+mutated="$(mutate_with_rollback 'REVOKE iam_migrator FROM iam_migrator_login;')"
+assert_gate MIGRATOR_MEMBERSHIP_DENIED "$mutated" PASS BLOCKED PASS
+mutated="$(mutate_with_rollback 'REVOKE iam_owner FROM iam_migrator;')"
+assert_gate MIGRATOR_OWNER_MEMBERSHIP_DENIED "$mutated" PASS BLOCKED PASS
+mutated="$(mutate_with_rollback 'ALTER ROLE iam_schema_export_reader CREATEROLE;')"
+assert_gate READER_CRTROLE_DENIED "$mutated" PASS PASS BLOCKED
 [[ "$(readiness)" == "$baseline" ]] || { echo 'BLOCKED_G1_READINESS_POST_ROLLBACK' >&2; exit 9; }
 echo 'PASS_G1_READINESS_POST_ROLLBACK_PARITY'
 echo 'PASS_G1_READINESS_NEGATIVE_BEHAVIORAL_CI_ONLY'
