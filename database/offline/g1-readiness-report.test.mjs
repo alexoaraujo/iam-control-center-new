@@ -22,10 +22,10 @@ function contractEvidence() {
     },
     target: {
       branch_id: "br-sweet-union-b6j80a7j", database: "iam_canonical_validation",
-      scoped_relations: 0, scoped_schemas: 0,
+      scoped_relations: 0, scoped_schemas: 0, all_non_system_relations: 0, inherited_database: "iam_database",
       roles: [], memberships: [],
     },
-    catalog_sha256: { source: "a".repeat(64), target: "a".repeat(64) },
+    catalog_sha256: { source: "a".repeat(64), inherited_shadow: "a".repeat(64) },
   };
 }
 const full = () => {
@@ -73,6 +73,7 @@ test("fail closed on destination confusion, production and forbidden cross-org p
     (e) => { e.project_id = "twilight-fire-88497009"; },
     (e) => { e.target.branch_id = "br-muddy-snow-b63cepcv"; },
     (e) => { e.target.database = "iam_database"; },
+    (e) => { e.target.inherited_database = "iam_canonical_validation"; },
     (e) => { e.source.branch_id = "br-muddy-snow-b63cepcv"; },
   ]) {
     const evidence = full(); mutation(evidence);
@@ -99,7 +100,7 @@ test("reject excess permissions, unexpected principals, duplicates and bypass", 
 
 test("reject malformed input, fake hashes, unexpected fields and polluted manifests", () => {
   for (const mutation of [
-    (e) => { e.catalog_sha256.target = "not-a-sha"; },
+    (e) => { e.catalog_sha256.inherited_shadow = "not-a-sha"; },
     (e) => { e.source.reader.maintain_tables = "23"; },
     (e) => { e.source.roles[0].inherit = "t"; },
     (e) => { e.source.extra_payload = "SECRET"; },
@@ -110,13 +111,19 @@ test("reject malformed input, fake hashes, unexpected fields and polluted manife
   }
 });
 
-test("detect changed hashes, populated restore, and nonempty migrated ledger without fabrication", () => {
+test("detect changed inherited-schema hashes, populated restore, and nonempty migrated ledger without fabrication", () => {
   const evidence = full();
-  evidence.catalog_sha256.target = "b".repeat(64);
+  evidence.catalog_sha256.inherited_shadow = "b".repeat(64);
   evidence.target.scoped_relations = 1;
   evidence.source.ledger_rows = 1;
   const report = assessG1Readiness(evidence);
   for (const code of ["CATALOG_SHA256_DRIFT", "TARGET_NOT_EMPTY", "SOURCE_LEDGER_REVIEW_REQUIRED"]) {
     assert.ok(report.diagnostic_codes.includes(code));
   }
+});
+
+test("a public table in the isolated target blocks even with zero IAM schemas", () => {
+  const evidence = full();
+  evidence.target.all_non_system_relations = 1;
+  assert.ok(assessG1Readiness(evidence).diagnostic_codes.includes("TARGET_NOT_EMPTY"));
 });
