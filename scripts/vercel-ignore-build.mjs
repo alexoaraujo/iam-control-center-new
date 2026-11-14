@@ -16,14 +16,14 @@ export function hasBuildRelevantChanges(changedFiles) {
   return changedFiles.some((file) => BUILD_RELEVANT.some((pattern) => pattern.test(file)));
 }
 
-export function shouldBuild({ environment, previousSha, currentSha, changedFiles }) {
+export function shouldBuild({ environment, previousSha, currentSha, changedFiles, mergeParentChangedFiles = [] }) {
   // Production and non-Preview deployments must never be skipped.
   if (environment !== "preview") return true;
 
   // Fail closed: missing commit metadata means build rather than skip.
   if (!previousSha || !currentSha) return true;
 
-  return hasBuildRelevantChanges(changedFiles);
+  return hasBuildRelevantChanges(changedFiles) || hasBuildRelevantChanges(mergeParentChangedFiles);
 }
 
 function diffFiles(base, head) {
@@ -36,6 +36,32 @@ function diffFiles(base, head) {
     stdio: ["ignore", "pipe", "pipe"],
   });
   return output.split("\n").map((file) => file.trim()).filter(Boolean);
+}
+
+/**
+ * A Vercel update can be a merge of main into a long-lived PR. Comparing only
+ * VERCEL_GIT_PREVIOUS_SHA -> HEAD then sees main's database/docs changes,
+ * even while HEAD still contains unbuilt Auth0/web changes relative to main.
+ * Compare HEAD's TREE to each additional parent, too; missing parent objects
+ * fail closed in main() and cause a normal build rather than a skipped build.
+ */
+function diffFilesAgainstAdditionalMergeParents(head) {
+  const gitRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  const commitHeader = execFileSync("git", ["-C", gitRoot, "cat-file", "-p", head], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  }).split("\n\n", 1)[0];
+  const parents = commitHeader.split("\n")
+    .filter((line) => /^parent [a-f0-9]{40}$/.test(line))
+    .map((line) => line.slice(7));
+  if (parents.length < 2) return [];
+  return parents.slice(1).flatMap((parent) => {
+    const output = execFileSync("git", ["-C", gitRoot, "diff", "--name-only", parent, head], {
+      encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+    });
+    return output.split("\n").map((file) => file.trim()).filter(Boolean);
+  });
 }
 
 function main() {
@@ -74,6 +100,7 @@ function main() {
         previousSha,
         currentSha,
         changedFiles: diffFiles(previousSha, currentSha),
+        mergeParentChangedFiles: diffFilesAgainstAdditionalMergeParents(currentSha),
       });
     }
   } catch {
