@@ -159,7 +159,7 @@ jobs:
   sync-auth0-preview:
     name: sync-auth0-preview
     # Only validated Auth0 callback branches can receive browser credentials.
-    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true' && needs.quality.outputs.preview_required == 'true' && needs.sync-auth0-preview.outputs.auth0_ready == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true' && needs.quality.outputs.preview_required == 'true' && github.event.pull_request.head.repo.full_name == github.repository
     needs:
       - quality
       - preview-deployment
@@ -206,7 +206,7 @@ jobs:
     # Always schedule E2E when a Preview is required and E2E is enabled.
     # Unsupported branches/forks fail closed in the binding preflight rather than
     # silently reporting CI green with auth0-e2e SKIPPED.
-    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true' && needs.quality.outputs.preview_required == 'true'
+    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true' && needs.quality.outputs.preview_required == 'true' && needs.sync-auth0-preview.outputs.auth0_ready == 'true'
     needs:
       - quality
       - preview-deployment

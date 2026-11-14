@@ -59,3 +59,16 @@ test("never syncs protected Vercel variables from a forked pull request", () => 
  assert.ok(workflow.includes("github.event.pull_request.head.repo.full_name == github.repository"));
  assert.ok(workflow.includes("scope: ${{ steps.sync.outputs.scope }}"));
 });
+
+test("preflight has no self-dependency and E2E is gated by verified preflight output", () => {
+ const sync = workflow.split("\n  sync-auth0-preview:\n")[1]?.split("\n  auth0-e2e:\n")[0];
+ const e2e = workflow.split("\n  auth0-e2e:\n")[1];
+ assert.ok(sync && e2e, "both jobs must exist");
+ const syncIf = sync.match(/^    if: (.+)$/m)?.[1];
+ const e2eIf = e2e.match(/^    if: (.+)$/m)?.[1];
+ assert.ok(syncIf?.includes("needs.quality.outputs.preview_required == 'true'"));
+ assert.ok(syncIf?.includes("github.event.pull_request.head.repo.full_name == github.repository"));
+ assert.ok(!syncIf?.includes("needs.sync-auth0-preview"), "job cannot reference its own outputs");
+ assert.ok(e2eIf?.includes("needs.sync-auth0-preview.outputs.auth0_ready == 'true'"));
+ assert.ok(!e2eIf?.includes("github.event.pull_request.head.repo.full_name == github.repository") || e2e.includes("sync-auth0-preview"), "E2E requires verified preflight");
+});
