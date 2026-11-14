@@ -71,3 +71,41 @@ The read-only source dump is pinned in `database/baselines/legacy-source-candida
 | New Neon Production IAM schema / cutover | **NOT CONFIGURED / BLOCKED** |
 
 This report was prepared without modifying Production or claiming a merge authorization.
+
+## 6. PEOS 2026-11-13 — fixture substituta RBAC/Auth0 no plano gratuito
+
+A antiga fixture `br-shy-scene-b67zm2v7` expirou em 12/11/2026 e foi arquivada pelo Neon.
+No teste real [CI #43535594089](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/43535594089),
+o fluxo Auth0 de login/callback/logout e o TTL da sessão passaram; o RBAC HTTP falhou
+**antes de mutações**, na primeira query com `password authentication failed for user 'neondb_owner'`.
+A credencial é um bloqueio independente da expiração: não atribuir o erro exclusivamente ao TTL.
+
+Nova child isolada confirmada diretamente no Neon:
+
+| Controle | Valor autorizado para a fixture |
+|---|---|
+| Projeto | `iam-database-delivery` / `tiny-rice-70320263` |
+| Parent | `validation/iam-cutover-audit-20261110` / `br-muddy-bar-b63ksdy7` |
+| Child | `validation/pr-41-auth0-rbac-e2e-20261113` / `br-royal-dream-b6di0p2w` |
+| Banco | `iam_database`, owner `neondb_owner` |
+| Host Direct | `ep-shiny-pond-b6zifpoo.c-2.sa-east-1.aws.neon.tech` |
+| Expiração automática | `2026-11-16T23:00:00Z` |
+| Isolamento | 23 tabelas, 41 policies, 20 FORCE RLS, uma chave de contexto ativa; fixture reservada 0/6, ledger 0 |
+
+Alterações desta PR sincronizam a allowlist do teste `.github/e2e/auth0-rbac.spec.cjs` com
+`E2E_RBAC_BRANCH_ID` em `.github/workflows/quality.yml` e adicionam testes
+estáticos para impedir o retorno silencioso ao ID expirado. Não criam nem armazenam
+credenciais em Git.
+
+**Ação separada necessária no GitHub → Settings → Environments → Preview → Secrets:**
+substituir `NEON_RBAC_TEST_OWNER_DATABASE_URL` por uma **conexão nova, restrita à child**.
+Use somente a string Direct gerada para `br-royal-dream-b6di0p2w`, role `neondb_owner`,
+DB `iam_database`, SSL habilitado. Nunca reutilize Production, cole senha em issue, commit,
+log ou variável não secreta. O E2E deve bloquear na allowlist de host/ID antes de qualquer DML
+caso a credential continue antiga, e verificar `current_setting('neon.branch_id',true)` via
+SELECT antes de criar a fixture. Verificar depois autorização HTTP 200/403 e cleanup 0.
+
+A proteção de branch Neon é indisponível no plano gratuito desta conta; **não tentar
+ativá-la nem exigir upgrade**. Preservar Production via segregação operacional,
+branch de teste com TTL, segredos protegidos, GitHub Rulesets e gates fail-closed.
+Nenhuma alteração de privilégio, migration, merge ou cutover é autorizada por este registro.

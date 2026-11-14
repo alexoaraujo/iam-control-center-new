@@ -191,7 +191,7 @@ jobs:
       # Preview-only branch-scoped SQL connection is injected solely in E2E step.
       E2E_RBAC_HTTP_ENABLED: ${{ github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && 'true' || 'false' }}
       E2E_RBAC_PROJECT_ID: tiny-rice-70320263
-      E2E_RBAC_BRANCH_ID: br-shy-scene-b67zm2v7
+      E2E_RBAC_BRANCH_ID: br-royal-dream-b6di0p2w
       VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
       VERCEL_TEAM_SLUG: aoa4
       VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
