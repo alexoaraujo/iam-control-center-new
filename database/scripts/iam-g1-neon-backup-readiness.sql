@@ -43,6 +43,9 @@ WITH app_tables AS (
        AS canonical_login_membership_count,
     (SELECT count(*) FROM pg_auth_members m JOIN pg_roles member ON member.oid=m.member
        WHERE member.rolname='iam_migrator') AS migrator_membership_count,
+    (SELECT count(*) FROM pg_auth_members m JOIN pg_roles member ON member.oid=m.member
+       WHERE member.rolname IN ('iam_owner','iam_app_runtime','iam_worker'))
+       AS unexpected_group_membership_count,
     (SELECT count(*) FROM pg_auth_members m
        JOIN pg_roles member ON member.oid=m.member
        JOIN pg_roles granted ON granted.oid=m.roleid
@@ -91,6 +94,7 @@ SELECT database_name,
   CASE WHEN login_roles_present=2 AND canonical_login_role_count=3
        AND login_membership_count=3 AND canonical_login_membership_count=3
        AND migrator_membership_count=1 AND canonical_migrator_membership_count=1
+       AND unexpected_group_membership_count=0
        AND runtime_inherit IS TRUE
        AND runtime_membership_count=1 AND runtime_member_inherit IS TRUE
        AND runtime_member_admin IS FALSE AND runtime_can_set IS FALSE
@@ -108,6 +112,7 @@ SELECT database_name,
     'canonical_login_role_count',canonical_login_role_count,
     'login_memberships',login_membership_count,
     'canonical_login_memberships',canonical_login_membership_count,
+    'unexpected_group_memberships',unexpected_group_membership_count,
     'migrator_memberships',migrator_membership_count,
     'canonical_migrator_memberships',canonical_migrator_membership_count,
     'reader_maintain',reader_maintain_count,'reader_usage',reader_usage_count,
