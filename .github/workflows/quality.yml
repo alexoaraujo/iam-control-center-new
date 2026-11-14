@@ -156,15 +156,61 @@ jobs:
           echo "::error::No exact-SHA READY Vercel Preview deployment was found for ${COMMIT_SHA}."
           exit 1
 
+  sync-auth0-preview:
+    name: sync-auth0-preview
+    # Only validated Auth0 callback branches can receive browser credentials.
+    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true' && needs.quality.outputs.preview_required == 'true'
+    needs:
+      - quality
+      - preview-deployment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment:
+      name: Preview
+    permissions:
+      contents: read
+    outputs:
+      auth0_ready: ${{ steps.sync.outputs.auth0_ready }}
+      scope: ${{ steps.sync.outputs.scope }}
+      callback_host: ${{ steps.sync.outputs.callback_host }}
+      callback_branch: ${{ steps.sync.outputs.callback_branch }}
+      app_base_url: ${{ steps.sync.outputs.app_base_url }}
+      auth0_domain: ${{ steps.sync.outputs.auth0_domain }}
+    steps:
+      - name: Checkout full PR history for reliable file-scope detection
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Synchronize Auth0 and Vercel Preview settings before E2E binding
+        id: sync
+        env:
+          PR_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
+          E2E_DEPLOYMENT_HOST: ${{ needs.preview-deployment.outputs.preview_host }}
+          VERCEL_TEAM_SLUG: aoa4
+          VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+        run: node scripts/sync-auth0-e2e-preview.mjs
+
   auth0-e2e:
     name: auth0-e2e
     # Always schedule E2E when a Preview is required and E2E is enabled.
     # Unsupported branches/forks fail closed in the binding preflight rather than
     # silently reporting CI green with auth0-e2e SKIPPED.
-    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true' && needs.quality.outputs.preview_required == 'true'
+    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true' && needs.quality.outputs.preview_required == 'true' && needs.sync-auth0-preview.outputs.auth0_ready == 'true'
     needs:
       - quality
       - preview-deployment
+      - sync-auth0-preview
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Must match the GitHub Actions environment configured in Vercel Trusted Sources.
@@ -183,7 +229,10 @@ jobs:
       E2E_IDENTITY_SYNC: ${{ github.event.pull_request.head.ref == 'feat/auth0-neon-identity-sync-20261111' && 'true' || 'false' }}
       # Fixed user-approved callback alias. Branch is derived from the verified
       # Vercel project-domain binding for each run, never from a stale fallback.
-      E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
+      E2E_CALLBACK_HOST: ${{ needs.sync-auth0-preview.outputs.callback_host }}
+      E2E_CALLBACK_BRANCH: ${{ needs.sync-auth0-preview.outputs.callback_branch }}
+      APP_BASE_URL: ${{ needs.sync-auth0-preview.outputs.app_base_url }}
+      AUTH0_DOMAIN: ${{ needs.sync-auth0-preview.outputs.auth0_domain }}
       VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
       VERCEL_TEAM_SLUG: aoa4
       VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
