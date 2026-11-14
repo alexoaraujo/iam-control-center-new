@@ -20,7 +20,6 @@ spec.loader.exec_module(config)
 def protected(review_id=325264810, *, allow=("main",), self_review=True):
     return {
         "name": config.ENVIRONMENT,
-        "can_admins_bypass": False,
         "deployment_branch_policy": {
             "protected_branches": False, "custom_branch_policies": True
         },
@@ -69,7 +68,7 @@ class SecureConfigTests(unittest.TestCase):
         payloads = [json.loads(value) for _, value in calls if value is not None]
         self.assertEqual(payloads[0]["reviewers"], [{"type":"User","id":77}])
         self.assertTrue(payloads[0]["prevent_self_review"])
-        self.assertIs(payloads[0]["can_admins_bypass"], False)
+        self.assertNotIn("can_admins_bypass", payloads[0])
         self.assertTrue(payloads[0]["deployment_branch_policy"]["custom_branch_policies"])
 
     def test_configure_secret_streams_value_only_via_stdin(self):
@@ -189,12 +188,17 @@ class SecureConfigTests(unittest.TestCase):
         mutate.assert_not_called()
         write.assert_not_called()
 
-    def test_environment_admin_bypass_is_explicitly_forbidden(self):
-        compromised = protected(77)
-        compromised["can_admins_bypass"] = True
-        with patch.object(config, "gh_json", return_value=compromised):
-            with self.assertRaisesRegex(RuntimeError, "administrator bypass"):
-                config.verify_environment(77)
+    def test_documented_rest_environment_response_has_no_admin_bypass_field(self):
+        # GitHub REST GET/PUT environment schemas do not expose this UI toggle.
+        def read(*args, **kwargs):
+            if "deployment-branch-policies" in args[1]:
+                return {"branch_policies": [{"name": "main", "type": "branch"}]}
+            value = protected(77)
+            self.assertNotIn("can_admins_bypass", value)
+            return value
+        with patch.object(config, "gh_json", side_effect=read):
+            config.verify_environment(77)
+
 
     def test_protect_only_updates_policy_not_existing_secrets(self):
         with patch.object(config.sys, "argv", ["script.py", "--protect-only"]), \
