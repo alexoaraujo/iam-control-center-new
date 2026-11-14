@@ -13,7 +13,7 @@ const hostPattern = /^[A-Za-z0-9-]+\.vercel\.app$/;
 
 export function isAuth0CriticalFile(file) {
   return /^(apps\/web\/|packages\/|\.github\/e2e\/|database\/migrations\/|database\/tests\/api-authorization)/.test(file) ||
-    /^scripts\/(bind-e2e-preview|verify-preview-alias|neon-rbac-fixture-binding|auth0-preview-contract)/.test(file);
+    /^scripts\/(bind-e2e-preview|verify-preview-alias|neon-rbac-fixture-binding)/.test(file);
 }
 export function decideScope(env, domain, paths) {
   if (env.PR_HEAD_REPOSITORY !== repo ||

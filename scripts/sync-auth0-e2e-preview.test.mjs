@@ -19,7 +19,7 @@ test("authorized exact-branch scope proceeds without changing aliases",()=>{
 });
 test("PR70 governance changes remain explicitly NOT RUN if shared callback belongs to PR41",()=>{
  const e={...env,PR_HEAD_BRANCH:"fix/vercel-production-exact-sha-release-gate-20261114"};
- assert.deepEqual(decideScope(e,domain,["scripts/vercel-ignore-build.mjs",".github/workflows/quality.yml","scripts/sync-auth0-e2e-preview.mjs"]),{ready:false,reason:"BRANCH_NOT_BOUND_TO_CALLBACK"});
+ assert.deepEqual(decideScope(e,domain,["scripts/vercel-ignore-build.mjs",".github/workflows/quality.yml","scripts/sync-auth0-e2e-preview.mjs","scripts/auth0-preview-contract.test.mjs"]),{ready:false,reason:"BRANCH_NOT_BOUND_TO_CALLBACK"});
 });
 test("unbound Auth0, web, E2E or migrations changes cannot skip",()=>{
  const e={...env,PR_HEAD_BRANCH:"feature-other"};
