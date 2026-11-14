@@ -46,3 +46,10 @@ Before any PR is merged, independently configure and verify a **primary deployme
 This PR is a **defense-in-depth candidate only** until branch tracking and a real negative deployment-policy test are demonstrated; approval of `quality` alone is insufficient. After any change to branch tracking, re-evaluate Preview aliases, Auth0 callback and GitHub OIDC trust boundaries before proceeding. No production setting was changed by this PR.
 
 Official references: https://vercel.com/kb/guide/how-do-i-use-the-ignored-build-step-field-on-vercel and https://vercel.com/docs/git#customizing-the-production-branch.
+
+
+## PEOS security-gate — supplemental required check (14/11/2026)
+
+A PR Draft #71 adiciona o job `security-gate` com `if: always()`, exigindo `quality`, Preview exact-SHA, preflight Auth0 e E2E real quando há mudança de código. Docs-only recebe exceção somente após rechecagem de `git diff --no-renames`. O job falha no resultado `SKIPPED`/ `FAILURE` de qualquer etapa crítica. O job não recebe segredos de Preview.
+
+**Importante:** o ruleset GitHub `protect-main` #26988310 ainda exige apenas `quality`. O novo `security-gate` só será obrigatório para merge depois que o administrador atualizar o ruleset, confirmar o contexto exato e testar negativa/positivamente as regras, sem bypass. Este commit não altera regras do GitHub nem Production.
