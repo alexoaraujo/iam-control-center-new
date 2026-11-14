@@ -7,6 +7,7 @@ This does not run a workflow, migrate schemas, or alter Neon databases.
 """
 from __future__ import annotations
 
+import argparse
 import getpass
 import importlib.util
 import json
@@ -116,12 +117,51 @@ def set_environment_secret(name: str, value: str) -> None:
     gh("secret", "set", name, "--env", ENVIRONMENT,
        "--repo", REPOSITORY, input_value=value)
 
-def verify_secret_metadata() -> None:
+def present_secret_names() -> set[str]:
+    """Only GitHub secret *metadata*. Secret values are never read or printed."""
     rows = gh_json("api", f"{ENV_API}/secrets?per_page=100")
-    present = {x.get("name") for x in rows.get("secrets", [])}
+    return {x.get("name") for x in rows.get("secrets", [])
+            if isinstance(x.get("name"), str)}
+
+def verify_secret_metadata() -> None:
+    present = present_secret_names()
     missing = sorted(set(SECRET_NAMES) - present)
     if missing:
         fail("required environment secrets are missing: " + ", ".join(missing))
+
+def sync_target_only(review_id: int) -> None:
+    """Set only a MISSING target URL, without rotating source or approval."""
+    verify_environment(review_id)
+    present = present_secret_names()
+    required = {"IAM_CANONICAL_SOURCE_URL", "IAM_CANONICAL_OPERATOR_APPROVAL"}
+    missing = sorted(required - present)
+    if missing:
+        fail("existing source/approval secret metadata missing: " + ", ".join(missing))
+    if "IAM_CANONICAL_TARGET_URL" in present:
+        # An existing value cannot be attested via GitHub secret metadata.
+        print("SKIPPED_TARGET_EXISTS: no overwrite; value is NOT verified")
+        print("Run the protected auth_only workflow to attest the actual credentials")
+        return
+    if not sys.stdin.isatty():
+        fail("target-only secret setup requires a private interactive terminal")
+    target = getpass.getpass("Paste TARGET URL (iam_canonical_validation), hidden: ")
+    guard = guard_module()
+    try:
+        guard.parse_approved_url(
+            target,
+            host=guard.TARGET_HOST,
+            database=guard.TARGET_DATABASE,
+            role=guard.TARGET_ROLE,
+        )
+    except guard.GateBlocked as exc:
+        fail(f"target URL allowlist rejected: {exc}")
+    # No source or approval secret is accessed, read, or overwritten.
+    set_environment_secret("IAM_CANONICAL_TARGET_URL", target)
+    verify_secret_metadata()
+    verify_environment(review_id)
+    print("PASS_TARGET_SECRET_METADATA: only target written to protected environment")
+    print("NOT_ATTESTED: source and approval secret values cannot be read by GitHub")
+    print("NEXT_GATE: protected auth_only; do not run readiness/export/restore yet")
 
 def guard_module():
     path = (Path(__file__).resolve().parents[2] / "database" / "scripts"
@@ -136,8 +176,28 @@ def guard_module():
     return module
 
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Fail-closed GitHub Environment secret metadata or interactive setup"
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--verify-only", action="store_true",
+                      help="Check environment policy and all 3 secret names; never read values")
+    mode.add_argument("--target-only", action="store_true",
+                      help="Write only a missing target secret; preserve source/approval")
+    args = parser.parse_args()
     try:
         review_id = verify_account_and_repo()
+        if args.verify_only:
+            verify_environment(review_id)
+            verify_secret_metadata()
+            print("PASS_METADATA_ONLY: protected main, reviewer, 3 secret names")
+            print("NOT_ATTESTED: URL values, TLS auth, privileges, or restore")
+            return 0
+        if args.target_only:
+            sync_target_only(review_id)
+            return 0
+        # Historical full-configuration mode is unchanged; it explicitly
+        # requires the operator to provide and validate BOTH secret URLs.
         ensure_protected_environment(review_id)
         print("PASS_ENVIRONMENT_POLICY: independent reviewer, self-review denied, main only")
         guard = guard_module()
