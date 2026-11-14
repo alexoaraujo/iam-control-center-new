@@ -21,6 +21,49 @@ describe("Next.js 16 Auth0 proxy", () => {
     expect(await response.text()).toBe("Auth0 handled");
   });
 
+  it("redirects the public PR #41 Preview alias to the Auth0 cookie origin before middleware", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("VERCEL_GIT_COMMIT_REF", "feat/iam-api-rbac-lineage-20261110");
+    vi.stubEnv("APP_BASE_URL", "https://iam-control-center-new-ci-preview.vercel.app");
+    try {
+      const response = await proxy(new Request("https://iam-control-center-new-preview.vercel.app/protected?next=%2F"));
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toBe("https://iam-control-center-new-ci-preview.vercel.app/protected?next=%2F");
+      expect(middleware).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("does not redirect Production or a different Preview branch", async () => {
+    for (const [environment, branch] of [["production", "main"], ["preview", "other-branch"]]) {
+      middleware.mockClear();
+      vi.stubEnv("VERCEL_ENV", environment);
+      vi.stubEnv("VERCEL_GIT_COMMIT_REF", branch);
+      vi.stubEnv("APP_BASE_URL", "https://iam-control-center-new-ci-preview.vercel.app");
+      const response = await proxy(new Request("https://iam-control-center-new-preview.vercel.app/auth/login"));
+      expect(await response.text()).toBe("Auth0 handled");
+      expect(middleware).toHaveBeenCalledOnce();
+    }
+    vi.unstubAllEnvs();
+  });
+
+  it("does not redirect an unrelated or non-TLS host, nor when the canonical app origin differs", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("VERCEL_GIT_COMMIT_REF", "feat/iam-api-rbac-lineage-20261110");
+    vi.stubEnv("APP_BASE_URL", "https://iam-control-center-new-ci-preview.vercel.app");
+    for (const url of ["https://untrusted.example/auth/login", "http://iam-control-center-new-preview.vercel.app/auth/login"]) {
+      middleware.mockClear();
+      const response = await proxy(new Request(url));
+      expect(await response.text()).toBe("Auth0 handled");
+      expect(middleware).toHaveBeenCalledOnce();
+    }
+    vi.stubEnv("APP_BASE_URL", "https://different-preview.vercel.app");
+    const response = await proxy(new Request("https://iam-control-center-new-preview.vercel.app/auth/login"));
+    expect(await response.text()).toBe("Auth0 handled");
+    vi.unstubAllEnvs();
+  });
+
   it("keeps the SDK matcher broad while excluding framework assets and metadata", () => {
     expect(config.matcher).toEqual([
       "/((?!api/health(?:/|$)|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
