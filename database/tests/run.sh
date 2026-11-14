@@ -10,6 +10,9 @@ BOOTSTRAP_TEST_PASSWORD="${BOOTSTRAP_TEST_PASSWORD:-$(openssl rand -hex 32)}"
 MIGRATOR_TEST_PASSWORD="${MIGRATOR_TEST_PASSWORD:-$(openssl rand -hex 32)}"
 export BOOTSTRAP_TEST_PASSWORD MIGRATOR_TEST_PASSWORD
 
+echo "Testing fail-closed IAM canonical role graph diagnostics (offline; no Neon credentials)..."
+python3 database/tests/test-canonical-isolated-operation.py
+
 echo "Preparing a non-superuser database-owner fixture for the role bootstrap..."
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v bootstrap_password="$BOOTSTRAP_TEST_PASSWORD" <<'SQL'
 CREATE ROLE iam_bootstrap_admin
