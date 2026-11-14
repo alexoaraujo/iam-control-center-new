@@ -70,8 +70,6 @@ def verify_environment(review_id: int) -> None:
     info = gh_json("api", ENV_API)
     if info.get("name") != ENVIRONMENT:
         fail("environment identity mismatch")
-    if info.get("can_admins_bypass") is not False:
-        fail("administrator bypass must be disabled on the protected environment")
     bp = info.get("deployment_branch_policy") or {}
     if bp.get("protected_branches") is not False or bp.get("custom_branch_policies") is not True:
         fail("environment branch policy is not custom-only")
@@ -94,7 +92,6 @@ def verify_environment(review_id: int) -> None:
 def ensure_protected_environment(review_id: int) -> None:
     payload = json.dumps({
         "wait_timer": 0,
-        "can_admins_bypass": False,
         "prevent_self_review": True,
         "reviewers": [{"type": "User", "id": review_id}],
         "deployment_branch_policy": {
@@ -188,14 +185,15 @@ def main() -> int:
     mode.add_argument("--target-only", action="store_true",
                       help="Write only a missing target secret; preserve source/approval")
     mode.add_argument("--protect-only", action="store_true",
-                      help="Configure independent reviewer, prevent self-review and disable admin bypass; never touch secrets")
+                      help="Configure reviewer, self-review deny and main-only via documented REST API; admin bypass must be disabled in GitHub UI")
     args = parser.parse_args()
     try:
         review_id = verify_account_and_repo()
         if args.verify_only:
             verify_environment(review_id)
             verify_secret_metadata()
-            print("PASS_METADATA_ONLY: protected main, reviewer, 3 secret names")
+            print("PASS_REST_METADATA_ONLY: main, independent reviewer, 3 secret names")
+            print("ADMIN_BYPASS_UNATTESTED: verify OFF in GitHub Settings UI; REST omits this control")
             print("NOT_ATTESTED: URL values, TLS auth, privileges, or restore")
             return 0
         if args.target_only:
@@ -204,9 +202,10 @@ def main() -> int:
         if args.protect_only:
             ensure_protected_environment(review_id)
             verify_secret_metadata()
-            print("PASS_PROTECTION_ONLY: main-only, independent reviewer, no admin bypass")
+            print("PASS_REST_PROTECTION_ONLY: main-only, independent reviewer, self-review denied")
+            print("ADMIN_BYPASS_UNATTESTED: deselect in GitHub Settings UI and obtain independent evidence")
             print("NO_SECRET_WRITE: existing source, target and approval values preserved")
-            print("NEXT_GATE: run --verify-only; then reviewed main auth_only / NO_DDL")
+            print("NEXT_GATE: verify Settings UI, run --verify-only, then reviewed main auth_only / NO_DDL")
             return 0
         # Historical full-configuration mode is unchanged; it explicitly
         # requires the operator to provide and validate BOTH secret URLs.
@@ -229,7 +228,8 @@ def main() -> int:
         verify_secret_metadata()
         verify_environment(review_id)
         print("PASS_SECRET_METADATA: all three names exist in protected environment")
-        print("No credentials printed; no Neon DDL, export or restore executed")
+        print("ADMIN_BYPASS_UNATTESTED: check OFF in GitHub Settings UI; REST omits this control")
+    print("No credentials printed; no Neon DDL, export or restore executed")
         print("Verify actual reviewer approval for each run in GitHub Environments")
         return 0
     except RuntimeError as exc:
