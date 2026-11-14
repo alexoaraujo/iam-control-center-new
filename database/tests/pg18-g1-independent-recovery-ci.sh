@@ -92,7 +92,7 @@ grep -Eq 'TABLE DATA.+synthetic_document' "$scratch/toc" || {
 grep -Eq 'POLICY.+read_synthetic' "$scratch/toc" || {
   echo BLOCKED_G1_BACKUP_NO_POLICY >&2; exit 7;
 }
-pg_dumpall --globals-only --no-role-passwords -w -f "$scratch/globals.sql"
+pg_dumpall --globals-only --no-role-passwords -w --dbname="$origin" -f "$scratch/globals.sql"
 grep -Fq "$role" "$scratch/globals.sql" || {
   echo BLOCKED_G1_BACKUP_NO_ROLE >&2; exit 8;
 }
