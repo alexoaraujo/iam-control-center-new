@@ -6,7 +6,7 @@ const APPROVED_PROJECT = "prj_OnuwD1iarOsXh6FFGkSpK4A5mj80";
 const APPROVED_REPO = "alexoaraujo/iam-control-center-new";
 const hostname = /^[a-zA-Z0-9-]+\.vercel\.app$/;
 
-export function verifyPreviewBinding(env, domain, alias, deployment) {
+export function verifyPreviewBinding(env, domain, alias, deployment, previewAlias) {
   const { PR_HEAD_BRANCH: branch, PR_HEAD_SHA: sha, PR_HEAD_REPOSITORY: repository,
     E2E_CALLBACK_HOST: callback, E2E_DEPLOYMENT_HOST: preview } = env;
   if (repository !== APPROVED_REPO) throw Error("Untrusted PR repository");
@@ -31,7 +31,12 @@ export function verifyPreviewBinding(env, domain, alias, deployment) {
       meta.githubOrg !== "alexoaraujo" || meta.githubRepo !== "iam-control-center-new") {
     throw Error("Callback alias deployment does not match the exact PR SHA");
   }
-  if (deployment.url !== preview && !deployment.alias?.includes(preview)) {
+  // Vercel can omit manually reassigned aliases from deployment.alias. Verify
+  // the actual Preview alias's live mapping independently against the SAME
+  // SHA-verified deployment; never trust a cached alias array as proof.
+  if (deployment.url !== preview &&
+      (previewAlias?.alias !== preview || previewAlias.projectId !== APPROVED_PROJECT ||
+       previewAlias.deploymentId !== deployment.id)) {
     throw Error("Callback deployment is not the exact-SHA verified Preview");
   }
   return { callbackHost: callback, callbackBranch: branch, callbackUrl: `https://${callback}` };
@@ -55,7 +60,14 @@ export async function bindPreview(env, fetcher = fetch) {
   const alias = await get(`/v4/aliases/${APPROVED_ALIAS}`);
   if (!alias?.deploymentId) throw Error("Vercel callback alias has no deployment");
   const deployment = await get(`/v13/deployments/${encodeURIComponent(alias.deploymentId)}`);
-  const result = verifyPreviewBinding(env, domain, alias, deployment);
+  // Independently verify the host reported by Vercel's exact-SHA PR check.
+  // Some Vercel API responses do not list aliases added after deployment.
+  if (!hostname.test(env.E2E_DEPLOYMENT_HOST ?? "")) {
+    throw Error("Invalid verified Preview hostname");
+  }
+  const previewAlias = env.E2E_DEPLOYMENT_HOST === deployment.url ? null
+    : await get(`/v4/aliases/${encodeURIComponent(env.E2E_DEPLOYMENT_HOST)}`);
+  const result = verifyPreviewBinding(env, domain, alias, deployment, previewAlias);
   appendFileSync(env.GITHUB_ENV, [
     `E2E_CALLBACK_HOST=${result.callbackHost}`,
     `E2E_CALLBACK_BRANCH=${result.callbackBranch}`,

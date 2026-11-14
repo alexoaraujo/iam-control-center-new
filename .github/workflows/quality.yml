@@ -179,11 +179,19 @@ jobs:
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
+      # Reviewed Auth0 user digest; never store the raw subject in the workflow.
+      AUTH0_E2E_EXPECTED_SUB_SHA256: e8cd8b1bf515f595a4531fb01ed6ae3d42c8929d28a50416759789376423a9f0
+      # Preview-only session-expiry regression control.
+      AUTH0_E2E_SESSION_ABSOLUTE_SECONDS: '45'
       # Positive write E2E is limited to isolated PR42 Preview.
       E2E_IDENTITY_SYNC: ${{ github.event.pull_request.head.ref == 'feat/auth0-neon-identity-sync-20261111' && 'true' || 'false' }}
       # Fixed user-approved callback alias. Branch is derived from the verified
       # Vercel project-domain binding for each run, never from a stale fallback.
       E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
+      # Preview-only branch-scoped SQL connection is injected solely in E2E step.
+      E2E_RBAC_HTTP_ENABLED: ${{ github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && 'true' || 'false' }}
+      E2E_RBAC_PROJECT_ID: tiny-rice-70320263
+      E2E_RBAC_BRANCH_ID: br-royal-dream-b6di0p2w
       VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
       VERCEL_TEAM_SLUG: aoa4
       VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
@@ -216,7 +224,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/playwright"
           cd "$RUNNER_TEMP/playwright"
           npm init -y >/dev/null
-          npm install --save-exact --no-audit --no-fund @playwright/test@1.64.1
+          npm install --save-exact --no-audit --no-fund @playwright/test@1.64.1 @neondatabase/serverless@1.2.0
           npm audit --audit-level=high
 
       - name: Install Chromium
@@ -269,6 +277,15 @@ jobs:
           if (!audience.includes("https://github.com/alexoaraujo")) throw new Error("Unexpected OIDC audience.");
           if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
           NODE
+
+      - name: Verify callback and Preview are the same exact-SHA deployment
+        env:
+          E2E_DEPLOYMENT_HOST: ${{ needs.preview-deployment.outputs.preview_host }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/verify-preview-alias.mjs
 
       - name: Preflight Vercel Deployment Protection (negative and positive controls)
         shell: bash
@@ -337,6 +354,9 @@ jobs:
           NODE
 
       - name: Run Auth0 end-to-end flow
+        env:
+          # Branch-scoped credential (never Neon API key); only this step can read it.
+          NEON_RBAC_TEST_OWNER_DATABASE_URL: ${{ secrets.NEON_RBAC_TEST_OWNER_DATABASE_URL }}
         run: |
           NODE_PATH="$RUNNER_TEMP/playwright/node_modules" \
             "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" test \

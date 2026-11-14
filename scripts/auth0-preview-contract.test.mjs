@@ -10,6 +10,10 @@ test("Auth0 Preview callback is resolved from live Vercel binding for every PR",
   assert.ok(workflow.includes("iam-control-center-new-ci-preview.vercel.app"));
   assert.ok(workflow.includes("VERCEL_API_TOKEN"));
   assert.ok(workflow.includes("node scripts/bind-e2e-preview.mjs"));
+  assert.ok(workflow.includes("node scripts/verify-preview-alias.mjs"));
+  assert.ok(workflow.includes("AUTH0_E2E_EXPECTED_SUB_SHA256:"));
+  assert.ok(workflow.includes("AUTH0_E2E_SESSION_ABSOLUTE_SECONDS:"));
+  assert.ok(!workflow.includes("E2E_CALLBACK_BRANCH: feat/iam-api-rbac-lineage-20261110"));
   assert.ok(workflow.includes("PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}"));
   assert.ok(!workflow.includes("ci/optimize-pr-checks-20261110"));
 });

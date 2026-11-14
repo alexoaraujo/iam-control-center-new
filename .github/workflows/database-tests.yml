@@ -195,5 +195,6 @@ jobs:
                 psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f database/tests/rbac-grant-revoke-rollback.sql
                 bash database/tests/test-migration-lock-concurrency.sh
                 bash database/tests/pg18-schema-only-maintain-ci.sh
+                psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f database/tests/api-authorization-effective-permissions.sql
               '
 

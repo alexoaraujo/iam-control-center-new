@@ -2,7 +2,7 @@ const { defineConfig } = require("@playwright/test");
 
 module.exports = defineConfig({
   testDir: __dirname,
-  testMatch: "auth0.spec.cjs",
+  testMatch: ["auth0.spec.cjs", "auth0-expiry.spec.cjs", "auth0-rbac.spec.cjs"],
   fullyParallel: false,
   workers: 1,
   retries: 0,
