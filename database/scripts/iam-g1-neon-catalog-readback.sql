@@ -26,7 +26,7 @@ SELECT current_database() AS database_name,
           'name',rolname,'login',rolcanlogin,'inherit',rolinherit,
           'superuser',rolsuper,'bypassrls',rolbypassrls,'createrole',rolcreaterole)
           ORDER BY rolname), '[]'::jsonb)
-        FROM pg_roles WHERE rolname LIKE 'iam_%') AS iam_role_attributes,
+        FROM pg_roles WHERE left(rolname,4) = 'iam_') AS iam_role_attributes,
        (SELECT COALESCE(jsonb_agg(jsonb_build_object(
           'member',member.rolname,'role',granted.rolname,
           'admin',m.admin_option,'inherit',m.inherit_option,'set',m.set_option)
@@ -34,7 +34,7 @@ SELECT current_database() AS database_name,
         FROM pg_auth_members m
         JOIN pg_roles member ON member.oid=m.member
         JOIN pg_roles granted ON granted.oid=m.roleid
-        WHERE member.rolname LIKE 'iam_%' OR granted.rolname LIKE 'iam_%')
+        WHERE left(member.rolname,4) = 'iam_' OR left(granted.rolname,4) = 'iam_')
         AS iam_memberships,
        (SELECT COALESCE(jsonb_agg(jsonb_build_object(
           'name',nspname,'owner',nspowner::regrole::text,
