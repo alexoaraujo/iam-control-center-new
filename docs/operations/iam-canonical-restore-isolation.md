@@ -39,17 +39,21 @@ Do not enable paid automated Neon backup schedules or purchase mandatory service
 
 PEOS specialist prompts: 2009 (GitHub Actions governance), 2010 (repository security), 1102 (CI/CD pipeline), and PMU-004 (controlled continuity). **Use GitHub environment secrets, not repository-level Actions variables.**
 
-Environment: [IAM-Canonical-Isolated-Restore](https://github.com/alexoaraujo/iam-control-center-new/settings/environments/27182774301/edit). The three required **environment secret names** are `IAM_CANONICAL_SOURCE_URL`, `IAM_CANONICAL_TARGET_URL`, `IAM_CANONICAL_OPERATOR_APPROVAL`. GitHub exposes names and timestamps, **not values**, through its Secrets API. Source and approval must not be overwritten merely because target is missing.
+Environment: [IAM-Canonical-Isolated-Restore](https://github.com/alexoaraujo/iam-control-center-new/settings/environments/27182774301/edit). The three required **environment secret names** are `IAM_CANONICAL_SOURCE_URL`, `IAM_CANONICAL_TARGET_URL`, `IAM_CANONICAL_OPERATOR_APPROVAL`. **The operator's GitHub Settings UI (14/11/2026) displays all 3 names, each with last updated 13/11/2026.** This confirms metadata only: GitHub hides secret values. Do not overwrite any existing value from metadata alone. The same UI displays `Required reviewers` **off**, `Prevent self-review` **off**, and admin bypass **on**; `main` is the only allowed branch. **Fix protection policy first; neither Auth0 nor recovery authorization is implied.**
 
 The repository provides a **minimal-change, interactive local administrative CLI** to preserve the two existing values. This CLI never sends passwords into Git commits, stdout, workflow inputs, or issue text:
 
 ```bash
 gh auth login
-python3 .github/scripts/configure-iam-canonical-environment.py --target-only
+# No secrets are written in this step. Requires repository admin and an independent reviewer.
+python3 .github/scripts/configure-iam-canonical-environment.py --protect-only
+# Read only: verify policy, all 3 secret names, and that administrators cannot bypass.
 python3 .github/scripts/configure-iam-canonical-environment.py --verify-only
+# Only when the target name is confirmed missing; otherwise do NOT overwrite it:
+# python3 .github/scripts/configure-iam-canonical-environment.py --target-only
 ```
 
-Run from a trusted clone containing the reviewed script; GitHub CLI must be authenticated with enough permissions to inspect the environment and set an environment secret. The `--target-only` mode checks the required independent reviewer (`alexoaraujo83`), `prevent_self_review=true`, and an exact `main` branch allowlist. It verifies that existing SOURCE and APPROVAL secrets are present **by name**, prompts privately for the missing target URL, validates it with the pinned guard, and sets **only** `IAM_CANONICAL_TARGET_URL`. It refuses non-TTY execution, invalid TLS or a wrong destination/role, and skips any existing target secret without overwriting it. The `--verify-only` mode makes **no mutations** and checks names/policy, not the stored values.
+Run from a trusted clone containing the reviewed script; GitHub CLI must be authenticated with enough permissions to inspect the environment and set an environment secret. The `--protect-only` mode sets reviewer `alexoaraujo83` (distinct from the triggering actor), requires `prevent_self_review=true`, **sets `can_admins_bypass=false`**, and restricts deployments to `main`, without reading or updating any secret. The `--target-only` mode checks the required independent reviewer (`alexoaraujo83`), `prevent_self_review=true`, and an exact `main` branch allowlist. It verifies that existing SOURCE and APPROVAL secrets are present **by name**, prompts privately for the missing target URL, validates it with the pinned guard, and sets **only** `IAM_CANONICAL_TARGET_URL`. It refuses non-TTY execution, invalid TLS or a wrong destination/role, and skips any existing target secret without overwriting it. The `--verify-only` mode makes **no mutations** and checks names/policy, including disabled administrator bypass, **not the stored values**. If all names exist already, `--target-only` intentionally skips overwrite; live URL correctness is established only by an approved `auth_only` run on reviewed `main`.
 
 Build the target URL *privately*, from the approved Neon Direct connection with database `iam_canonical_validation`, branch `br-sweet-union-b6j80a7j`, host `ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech`, role `neondb_owner`, and URL parameters `sslmode=verify-full&sslrootcert=system`. Do **not** use the inherited `iam_database`, the Production branch, a pooled host, or the legacy cross-org Neon project. Do not paste the full URL in chat, shell history, PR, issue, or Actions input.
 
