@@ -14,11 +14,11 @@
 Ferramenta **offline e sem conexão**:
 `node database/offline/g1-readiness-report.mjs /caminho/restrito/inventario-sanitizado.json`
 
-O JSON usa `format: "peos/g1-catalog-observation/v1"`, os IDs de projeto e branch permitidos, três roles LOGIN e quatro memberships esperadas de cada lado, contagens do reader, estado vazio do destino e hashes SHA-256 externos para o catálogo. Nunca incluir URI de conexão, dados pessoais, senhas, JWT, chaves ou dumps no JSON.
+O JSON usa `format: "peos/g1-catalog-observation/v1"`, os IDs de projeto e branch permitidos, três roles LOGIN e quatro memberships esperadas de cada lado, contagens do reader, estado vazio do destino (inclusive relações de usuário fora dos schemas IAM) e hashes SHA-256 externos para o catálogo `iam_database` na SOURCE e no banco `iam_database` **herdado** pela branch TARGET (chaves `catalog_sha256.source` e `catalog_sha256.inherited_shadow`). **Não comparar hashes de schema da origem com o banco isolado vazio `iam_canonical_validation`: os objetos não deveriam ser iguais antes do restore.** Nunca incluir URI de conexão, dados pessoais, senhas, JWT, chaves ou dumps no JSON.
 
 A ferramenta rejeita troca de projetos, Production, banco herdado, `BYPASSRLS`, `SET ROLE` excessivo, grants administrativos, principals extras, falta de `MAINTAIN`/schema `USAGE`, `SELECT`/DML extra, origem com ledger inesperado, destino não vazio e hashes malformados/divergentes.
 
-**Limitação deliberada:** o documento JSON é **não confiável**. Os hashes recebidos não são calculados nem autenticados pelo script; a leitura do catálogo precisa ter evidência independente de TLS, role, origem, integridade, ownership, ACL e aprovação. O script **nunca** emite `PASS` operacional, mesmo se toda a entrada parecer conforme; estado máximo `INDEPENDENT_REVIEW_REQUIRED`; CLI sempre encerra com código 2. Isso impede usar artificialmente a ferramenta como gate de liberação.
+**Limitação deliberada:** o documento JSON é **não confiável**. Os hashes recebidos (source versus inherited-shadow, ambos `iam_database`) não são calculados nem autenticados pelo script; a leitura do catálogo precisa ter evidência independente de TLS, role, origem, integridade, ownership, ACL e aprovação. O script **nunca** emite `PASS` operacional, mesmo se toda a entrada parecer conforme; estado máximo `INDEPENDENT_REVIEW_REQUIRED`; CLI sempre encerra com código 2. Isso impede usar artificialmente a ferramenta como gate de liberação.
 
 Teste offline, independente de secrets e Neon:
 `node --test database/offline/g1-readiness-report.test.mjs`
