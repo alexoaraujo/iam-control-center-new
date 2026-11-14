@@ -80,6 +80,10 @@ pg_restore --list "$SECURE_PRIVATE_DIR/iam-canonical-data-and-schema.dump" \
 
 Os comandos acima são **proposta para revisão**, não execução deste PR, e não podem ser usados com a identidade export reader. Antes de usar, validar privilégio efetivo para ler todas as linhas sem falhas RLS e garantir que dump/TOC/manifest não sejam publicados em logs.
 
+### Pré-requisito de extensão PostgreSQL — bloqueio adicional
+
+Um readback adicional confirmou: na SOURCE `pgcrypto` está **instalada no schema `public`**; no banco isolado vazio `iam_canonical_validation`, `pgcrypto` está **disponível no servidor mas NÃO instalada**, e `plpgsql` está instalada. `pg_dump -n iam -n audit -n app_private` **não inclui necessariamente a definição da extensão instalada fora do escopo das schemas filtradas**. Assim, **não considerar o arquivo do subconjunto de schemas autocontido**. Antes de tentar restore, coletar o manifesto de extensões por database e examinar dependências; qualquer `CREATE EXTENSION` no banco destino exige aprovação DDL específica e pré-validação do banco alvo vazio. Nunca instalar extensões automaticamente no banco herdado ou Production. O requisito de `pgcrypto` no destino é **BLOCKED** até revisão operacional.
+
 ## 5. Lease `MAINTAIN`/`USAGE` com privilégio mínimo — contrato
 
 Conceder à identidade `iam_schema_export_reader` **somente se existir backup integral previamente restaurado e revisão operacional específica**:
