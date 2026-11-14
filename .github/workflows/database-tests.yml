@@ -196,5 +196,6 @@ jobs:
                 bash database/tests/test-migration-lock-concurrency.sh
                 bash database/tests/pg18-schema-only-maintain-ci.sh
                 bash database/tests/pg18-role-lease-postcommit-revocation-ci.sh
+                bash database/tests/pg18-g1-independent-recovery-ci.sh
               '
 
