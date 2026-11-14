@@ -10,6 +10,12 @@ BOOTSTRAP_TEST_PASSWORD="${BOOTSTRAP_TEST_PASSWORD:-$(openssl rand -hex 32)}"
 MIGRATOR_TEST_PASSWORD="${MIGRATOR_TEST_PASSWORD:-$(openssl rand -hex 32)}"
 export BOOTSTRAP_TEST_PASSWORD MIGRATOR_TEST_PASSWORD
 
+# PEOS G1 role-graph diagnostics and canonical restore contract (offline).
+python3 database/tests/test-canonical-isolated-operation.py
+
+# PEOS G1 independent, non-authorizing role/recovery preflight (offline).
+node --test database/offline/g1-readiness-report.test.mjs
+
 echo "Preparing a non-superuser database-owner fixture for the role bootstrap..."
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v bootstrap_password="$BOOTSTRAP_TEST_PASSWORD" <<'SQL'
 CREATE ROLE iam_bootstrap_admin

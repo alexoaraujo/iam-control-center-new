@@ -639,6 +639,96 @@ class IsolatedRunnerContract(unittest.TestCase):
         self.assertIn("IAM_CANONICAL_CONFIRMATION: ${{ inputs.confirm_isolated_ddl }}", auth)
         self.assertIn("IAM_CANONICAL_OPERATION: ${{ inputs.operation }}", auth)
 
+    def test_role_contract_diagnostics_are_strict_and_redacted(self):
+        canonical = ("iam_app_runtime_login|t|t|f|f\n"
+                     "iam_migrator_login|t|f|f|f\n"
+                     "iam_worker_login|t|f|f|f")
+        self.assertEqual(
+            module.safe_role_contract_deltas(canonical, canonical, "SOURCE"),
+            []
+        )
+        missing = "iam_app_runtime_login|t|t|f|f"
+        flags = module.safe_role_contract_deltas(missing, canonical, "SOURCE")
+        self.assertIn("SOURCE:iam_migrator_login:MISSING", flags)
+        self.assertIn("SOURCE:iam_worker_login:MISSING", flags)
+        wrong_runtime = canonical.replace(
+            "iam_app_runtime_login|t|t|f|f", "iam_app_runtime_login|t|f|f|f"
+        )
+        self.assertEqual(
+            module.safe_role_contract_deltas(wrong_runtime, canonical, "TARGET"),
+            ["TARGET:iam_app_runtime_login:OPTIONS_DRIFT"]
+        )
+        bad = canonical + "\nSECRET_PROBE_ROLE|t|t|f|f"
+        msg = str(module.safe_role_contract_deltas(bad, canonical, "SOURCE"))
+        self.assertIn("UNEXPECTED_CATALOG_OR_ORDER", msg)
+        self.assertNotIn("SECRET_PROBE_ROLE", msg)
+        for unexpected in (canonical + "\n" + canonical.splitlines()[0],
+                           "\n".join(reversed(canonical.splitlines())),
+                           canonical.replace("|f|f", "|PRIVATE_TOKEN|f")):
+            self.assertTrue(
+                module.safe_role_contract_deltas(
+                    unexpected, canonical, "SOURCE"
+                )
+            )
+            self.assertNotIn(
+                "PRIVATE_TOKEN",
+                str(module.safe_role_contract_deltas(
+                    unexpected, canonical, "SOURCE"
+                ))
+            )
+
+    def test_member_contract_diagnostics_detect_set_role_escalation(self):
+        required = ("iam_app_runtime_login|iam_app_runtime|f|t|f\n"
+                    "iam_migrator_login|iam_migrator|f|f|t\n"
+                    "iam_worker_login|iam_worker|f|t|t")
+        current = required.replace(
+            "iam_app_runtime_login|iam_app_runtime|f|t|f",
+            "iam_app_runtime_login|iam_app_runtime|f|t|t"
+        )
+        self.assertEqual(
+            module.safe_role_contract_deltas(
+                current, required, "TARGET", key_columns=2
+            ),
+            ["TARGET:iam_app_runtime_login:iam_app_runtime:OPTIONS_DRIFT"]
+        )
+        reduced = required.splitlines()[0]
+        self.assertIn(
+            "SOURCE:iam_migrator_login:iam_migrator:MISSING",
+            module.safe_role_contract_deltas(
+                reduced, required, "SOURCE", key_columns=2
+            )
+        )
+
+    def test_branch_topology_changes_remain_blocked_without_dump(self):
+        canonical = ("iam_app_runtime_login|t|t|f|f\n"
+                     "iam_migrator_login|t|f|f|f\n"
+                     "iam_worker_login|t|f|f|f")
+        drifting_source = "iam_app_runtime_login|t|t|f|f"
+        drifting_target = canonical.replace(
+            "iam_app_runtime_login|t|t|f|f",
+            "iam_app_runtime_login|t|f|f|f"
+        )
+        with patch.object(
+            module, "scalar", side_effect=[drifting_source, drifting_target]
+        ):
+            with self.assertRaisesRegex(
+                module.GateBlocked, "BLOCKED_ROLE_ATTRIBUTES"
+            ) as err:
+                module.check_runtime_role_contract({}, {}, Path("/tmp"))
+        self.assertIn("SOURCE:iam_worker_login:MISSING", str(err.exception))
+        self.assertIn(
+            "TARGET:iam_app_runtime_login:OPTIONS_DRIFT", str(err.exception)
+        )
+
+    def test_migrator_owner_missing_on_source_not_silenced(self):
+        with patch.object(module, "scalar", side_effect=["", "f|f|t"]):
+            with self.assertRaisesRegex(
+                module.GateBlocked, "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP"
+            ) as err:
+                module.check_migrator_owner_membership({}, {}, Path("/tmp"))
+        self.assertIn("SOURCE:MISSING", str(err.exception))
+        self.assertNotIn("TARGET:OPTIONS_DRIFT", str(err.exception))
+
     def test_expired_branch_fails_before_credential_use(self):
         from datetime import datetime, timezone
         with patch.object(module, "EXPIRES", datetime(2000, 1, 1, tzinfo=timezone.utc)), \
