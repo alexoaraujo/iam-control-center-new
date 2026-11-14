@@ -70,6 +70,8 @@ def verify_environment(review_id: int) -> None:
     info = gh_json("api", ENV_API)
     if info.get("name") != ENVIRONMENT:
         fail("environment identity mismatch")
+    if info.get("can_admins_bypass") is not False:
+        fail("administrator bypass must be disabled on the protected environment")
     bp = info.get("deployment_branch_policy") or {}
     if bp.get("protected_branches") is not False or bp.get("custom_branch_policies") is not True:
         fail("environment branch policy is not custom-only")
@@ -92,6 +94,7 @@ def verify_environment(review_id: int) -> None:
 def ensure_protected_environment(review_id: int) -> None:
     payload = json.dumps({
         "wait_timer": 0,
+        "can_admins_bypass": False,
         "prevent_self_review": True,
         "reviewers": [{"type": "User", "id": review_id}],
         "deployment_branch_policy": {
@@ -184,6 +187,8 @@ def main() -> int:
                       help="Check environment policy and all 3 secret names; never read values")
     mode.add_argument("--target-only", action="store_true",
                       help="Write only a missing target secret; preserve source/approval")
+    mode.add_argument("--protect-only", action="store_true",
+                      help="Configure independent reviewer, prevent self-review and disable admin bypass; never touch secrets")
     args = parser.parse_args()
     try:
         review_id = verify_account_and_repo()
@@ -195,6 +200,13 @@ def main() -> int:
             return 0
         if args.target_only:
             sync_target_only(review_id)
+            return 0
+        if args.protect_only:
+            ensure_protected_environment(review_id)
+            verify_secret_metadata()
+            print("PASS_PROTECTION_ONLY: main-only, independent reviewer, no admin bypass")
+            print("NO_SECRET_WRITE: existing source, target and approval values preserved")
+            print("NEXT_GATE: run --verify-only; then reviewed main auth_only / NO_DDL")
             return 0
         # Historical full-configuration mode is unchanged; it explicitly
         # requires the operator to provide and validate BOTH secret URLs.
