@@ -101,6 +101,8 @@ mutated="$(mutate_with_rollback 'REVOKE iam_migrator FROM iam_migrator_login;')"
 assert_gate MIGRATOR_MEMBERSHIP_DENIED "$mutated" PASS BLOCKED PASS
 mutated="$(mutate_with_rollback 'REVOKE iam_owner FROM iam_migrator;')"
 assert_gate MIGRATOR_OWNER_MEMBERSHIP_DENIED "$mutated" PASS BLOCKED PASS
+mutated="$(mutate_with_rollback 'GRANT iam_owner TO iam_app_runtime WITH INHERIT TRUE, SET TRUE, ADMIN FALSE;')"
+assert_gate RUNTIME_TRANSITIVE_OWNER_MEMBERSHIP_DENIED "$mutated" PASS BLOCKED PASS
 mutated="$(mutate_with_rollback 'ALTER ROLE iam_schema_export_reader CREATEROLE;')"
 assert_gate READER_CRTROLE_DENIED "$mutated" PASS PASS BLOCKED
 [[ "$(readiness)" == "$baseline" ]] || { echo 'BLOCKED_G1_READINESS_POST_ROLLBACK' >&2; exit 9; }
