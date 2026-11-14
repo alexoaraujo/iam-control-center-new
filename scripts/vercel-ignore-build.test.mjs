@@ -51,16 +51,43 @@ test("builds Preview when shared dependencies or workspace config changes", () =
   );
 });
 
-test("never skips Production", () => {
+test("denies any unapproved Production Git push, including docs-only changes", () => {
   assert.equal(
     shouldBuild({
-      environment: "production",
-      previousSha: "base",
-      currentSha: "head",
+      environment: "production", gitRef: "main", currentSha: "a".repeat(40),
       changedFiles: ["docs/only.md"],
     }),
+    false,
+  );
+});
+
+test("permits Production only for an exact reviewed 40-hex SHA on main", () => {
+  const sha = "a".repeat(40);
+  assert.equal(
+    shouldBuild({ environment: "production", gitRef: "main", currentSha: sha,
+      approvedProductionSha: sha, changedFiles: [] }),
     true,
   );
+  for (const input of [
+    { currentSha: "b".repeat(40), approvedProductionSha: sha, gitRef: "main" },
+    { currentSha: sha, approvedProductionSha: "b".repeat(40), gitRef: "main" },
+    { currentSha: sha, approvedProductionSha: sha, gitRef: "feature" },
+    { currentSha: sha, approvedProductionSha: sha, gitRef: "" },
+    { currentSha: sha, approvedProductionSha: "a".repeat(39), gitRef: "main" },
+    { currentSha: "a".repeat(39), approvedProductionSha: sha, gitRef: "main" },
+  ]) {
+    assert.equal(shouldBuild({ environment: "production", ...input, changedFiles: ["apps/web/src/app/page.tsx"] }), false);
+  }
+});
+
+test("release approval does not bypass Preview impact detection", () => {
+  const sha = "a".repeat(40);
+  assert.equal(shouldBuild({ environment: "preview", previousSha: "old",
+    currentSha: sha, approvedProductionSha: sha, gitRef: "main",
+    changedFiles: ["docs/only.md"] }), false);
+  assert.equal(shouldBuild({ environment: "preview", previousSha: "old",
+    currentSha: sha, approvedProductionSha: sha, gitRef: "main",
+    changedFiles: ["apps/web/src/app/page.tsx"] }), true);
 });
 
 test("fails closed when commit metadata is missing", () => {

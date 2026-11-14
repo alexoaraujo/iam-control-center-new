@@ -4,7 +4,38 @@ import { checkPermission, validPermission, validSelector } from "../../../../lib
 
 export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "no-store" };
+const MAX_BODY_BYTES = 4096;
 const deny = () => NextResponse.json({ allowed: false }, { status: 403, headers });
+
+/**
+ * Parse only a bounded number of actual UTF-8 bytes. Request.text() would
+ * first buffer an untrusted, potentially unbounded stream in memory.
+ */
+async function readBoundedJson(request: Request): Promise<unknown> {
+  const reader = request.body?.getReader();
+  if (!reader) throw new Error("missing_json_body");
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let bytesRead = 0;
+  let payload = "";
+  let complete = false;
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        complete = true;
+        break;
+      }
+      bytesRead += chunk.value.byteLength;
+      if (bytesRead > MAX_BODY_BYTES) throw new Error("json_body_too_large");
+      payload += decoder.decode(chunk.value, { stream: true });
+    }
+    payload += decoder.decode();
+    return JSON.parse(payload);
+  } finally {
+    if (!complete) void reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
 
 /**
  * POST /api/authorization/check
@@ -22,14 +53,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401, headers });
   }
   if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") return deny();
-  const length = Number(request.headers.get("content-length") || "0");
-  if (!Number.isFinite(length) || length > 4096) return deny();
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength !== null &&
+      (!/^(0|[1-9][0-9]*)$/.test(declaredLength) ||
+       Number(declaredLength) > MAX_BODY_BYTES)) return deny();
 
   let body: unknown;
   try {
-    const payload = await request.text();
-    if (payload.length > 4096) return deny();
-    body = JSON.parse(payload);
+    body = await readBoundedJson(request);
   } catch {
     return deny();
   }
