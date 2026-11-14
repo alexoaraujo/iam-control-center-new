@@ -111,8 +111,14 @@ export async function syncPreview(env, fetcher = fetch, changedFiles = prFiles) 
   const domain = await get("/v9/projects/" + project + "/domains/" + callback);
   const decision = decideScope(env,domain,paths);
   if (!decision.ready) {
+    // A change to the E2E policy or workflow itself is never an ordinary
+    // governance skip. Fail the separate preflight check until the combined
+    // code is tested on a verified callback-bound branch.
+    if (decision.reason === "SECURITY_REVIEW_REQUIRED") {
+      throw new Error("AUTH0_GATE_REVIEW_REQUIRED: callback-bound E2E and independent review required; refusing silent skip");
+    }
     appendFileSync(env.GITHUB_OUTPUT,"auth0_ready=false\nscope=not-authorized\n");
-    console.log("::warning::Auth0 E2E NOT RUN: " + decision.reason + ". Gate changes need independent security review; no credentials or alias modified.");
+    console.log("::notice::Auth0 E2E NOT RUN: " + decision.reason + ". No credentials or alias modified.");
     return decision;
   }
   const {envs} = await get("/v10/projects/" + project + "/env?decrypt=false");

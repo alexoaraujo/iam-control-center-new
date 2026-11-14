@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {decideScope,checkAppVariables,verifyDeployment,isAuth0CriticalFile,isAuth0GateFile} from "./sync-auth0-e2e-preview.mjs";
+import {decideScope,checkAppVariables,verifyDeployment,isAuth0CriticalFile,isAuth0GateFile,syncPreview} from "./sync-auth0-e2e-preview.mjs";
 const sha="a".repeat(40),branch="feat/iam-api-rbac-lineage-20261110";
 const host="iam-control-center-new-ci-preview.vercel.app",project="prj_OnuwD1iarOsXh6FFGkSpK4A5mj80";
 const env={PR_HEAD_REPOSITORY:"alexoaraujo/iam-control-center-new",PR_HEAD_BRANCH:branch,PR_HEAD_SHA:sha,VERCEL_PROJECT_ID:project,VERCEL_TEAM_SLUG:"aoa4",E2E_CALLBACK_HOST:host,E2E_DEPLOYMENT_HOST:"iam-control-center-abc-aoa4.vercel.app"};
@@ -53,4 +53,18 @@ test("exact-SHA Vercel deployment and active second alias are mandatory",()=>{
  assert.doesNotThrow(()=>verifyDeployment(env,a,dep,p));
  assert.throws(()=>verifyDeployment(env,a,dep,{...p,deploymentId:"other"}),/Live verified Preview/);
  assert.throws(()=>verifyDeployment(env,a,{...dep,meta:{...dep.meta,githubCommitSha:"b".repeat(40)}},p),/exact PR SHA/);
+});
+
+test("unbound security-gate changes fail the preflight job instead of silently skipping E2E",async()=>{
+ const unbound={...env,PR_HEAD_BRANCH:"integration/pr41-pr70-auth0-vercel-gates-20261114",VERCEL_API_TOKEN:"fixture-not-a-secret",GITHUB_OUTPUT:"fixture-does-not-write"};
+ const requests=[];
+ const fakeFetch=async url=>{
+  requests.push(url);
+  return {ok:true,json:async()=>domain};
+ };
+ await assert.rejects(
+  syncPreview(unbound,fakeFetch,()=>[".github/workflows/quality.yml"]),
+  /AUTH0_GATE_REVIEW_REQUIRED/
+ );
+ assert.equal(requests.length,1);
 });
