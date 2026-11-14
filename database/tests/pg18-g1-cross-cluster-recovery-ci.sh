@@ -36,12 +36,12 @@ docker run -d --name "$source" --network none \
   -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres -e POSTGRES_PASSWORD="$srcpass" postgres:18 >/dev/null
 source_started=1
 docker run -d --name "$target" --network none \
-  -e POSTGRES_USER=restore_admin -e POSTGRES_DB=postgres -e POSTGRES_PASSWORD="$dstpass" postgres:18 >/dev/null
+  -e POSTGRES_USER=postgres -e POSTGRES_DB=postgres -e POSTGRES_PASSWORD="$dstpass" postgres:18 >/dev/null
 target_started=1
 unset srcpass dstpass
 for container in "$source" "$target"; do
   principal=postgres
-  if [[ "$container" == "$target" ]]; then principal=restore_admin; fi
+  # Both disposable clusters bootstrap a local postgres superuser; no shared data.
   ready=0
   for i in $(seq 1 60); do
     if docker exec "$container" pg_isready -q -U "$principal" -d postgres; then ready=1; break; fi
@@ -50,7 +50,7 @@ for container in "$source" "$target"; do
   if [[ "$ready" != 1 ]]; then echo BLOCKED_G1_DOCKER_PG18_READY >&2; exit 3; fi
 done
 src() { docker exec -i "$source" psql -X -U postgres -d "$db" -v ON_ERROR_STOP=1 "$@"; }
-dst() { docker exec -i "$target" psql -X -U restore_admin -d "$db" -v ON_ERROR_STOP=1 "$@"; }
+dst() { docker exec -i "$target" psql -X -U postgres -d "$db" -v ON_ERROR_STOP=1 "$@"; }
 docker exec "$source" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE $db"
 src -q <<'SQL'
 CREATE ROLE g1_owner NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
@@ -78,15 +78,22 @@ echo PASS_G1_PG18_CROSS_CLUSTER_BACKUP
 src -qc "UPDATE g1_iam.synthetic_data SET synthetic_label='G1_SYNTHETIC_CHANGED' WHERE id=1"
 changed="$(src -Atc "SELECT md5(string_agg(id::text||':'||synthetic_label,',' ORDER BY id)) FROM g1_iam.synthetic_data")"
 if [[ "$baseline" == "$changed" ]]; then echo BLOCKED_G1_COMMIT_NOT_OBSERVED >&2; exit 4; fi
-before="$(docker exec "$target" psql -X -U restore_admin -d postgres -Atc "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'g1_%'")"
+before="$(docker exec "$target" psql -X -U postgres -d postgres -Atc "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'g1_%'")"
 if [[ "$before" != 0 ]]; then echo BLOCKED_G1_TARGET_ROLE_COLLISION >&2; exit 5; fi
-docker exec -i "$target" psql -X -U restore_admin -d postgres -v ON_ERROR_STOP=1 -q \
-  <"$scratch/globals.sql" >"$scratch/global.log" 2>"$scratch/global.err" || {
+# Restore only the four synthetic roles/membership from the globals backup.
+# Never replay the built-in cluster/bootstrap principal on a different cluster.
+grep -E '^(CREATE ROLE ("?)g1_|ALTER ROLE ("?)g1_|GRANT ("?)g1_)' "$scratch/globals.sql" >"$scratch/synthetic_globals.sql"
+count="$(grep -Ec '^CREATE ROLE ("?)g1_' "$scratch/synthetic_globals.sql")"
+if [[ "$count" != 4 ]] || ! grep -Eq '^GRANT ("?)g1_runtime("?) TO ' "$scratch/synthetic_globals.sql"; then
+  echo BLOCKED_G1_GLOBALS_SYNTHETIC_ALLOWLIST >&2; exit 6
+fi
+docker exec -i "$target" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -q \
+  <"$scratch/synthetic_globals.sql" >"$scratch/global.log" 2>"$scratch/global.err" || {
     grep -E 'ERROR:|FATAL:' "$scratch/global.err" | head -n 2 | sed -E 's/(PASSWORD|password)[^ ]*/[REDACTED]/g' >&2 || true
     echo BLOCKED_G1_GLOBAL_RESTORE >&2; exit 6;
   }
-docker exec "$target" psql -X -U restore_admin -d postgres -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE $db"
-docker exec -i "$target" pg_restore -U restore_admin -d "$db" --exit-on-error --single-transaction \
+docker exec "$target" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE $db"
+docker exec -i "$target" pg_restore -U postgres -d "$db" --exit-on-error --single-transaction \
   <"$scratch/data.dump" >"$scratch/restore.log" 2>"$scratch/restore.err" || {
     echo BLOCKED_G1_ARCHIVE_RESTORE >&2; exit 7;
   }
