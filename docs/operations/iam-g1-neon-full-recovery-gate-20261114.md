@@ -25,6 +25,20 @@ Destino herdado `iam_database`: mesma contagem estrutural **23/41/20**, ledger 0
 
 O `neondb_owner` na origem tem `BYPASSRLS=true`; `iam_owner` e export reader têm `BYPASSRLS=false`. **Esta distinção exige controle especial para exportação de dados**: `pg_dump` normalmente desliga RLS para extrair todas as linhas; `--enable-row-security` pode criar dump parcial, inválido como backup integral. Consultar [PostgreSQL 18 — pg_dump](https://www.postgresql.org/docs/18/app-pgdump.html). Não dar BYPASSRLS ao reader.
 
+### Gate automatizado de prontidão — fail-closed
+
+O novo [`database/scripts/iam-g1-neon-backup-readiness.sql`](../../database/scripts/iam-g1-neon-backup-readiness.sql) retorna **somente status/catálogo**, nunca linhas da aplicação. Foi executado na SOURCE e no banco herdado da TARGET:
+
+| Teste | SOURCE Development | TARGET `iam_database` herdado |
+| --- | --- | --- |
+| PostgreSQL 18 | PASS | PASS |
+| Contrato estrutural 23/41/20 + owner | PASS | PASS |
+| Login roles + runtime `INHERIT/SET` canônicos | **BLOCKED** (2 LOGIN ausentes) | **BLOCKED** (`INHERIT/SET` drift) |
+| Privilégios do reader `MAINTAIN=23/USAGE=3` sem SELECT | **BLOCKED** (0/0) | **BLOCKED** (reader `LOGIN=false`, 0/0) |
+| Backup **integral** autenticado e restaurado | `NOT_EVALUATED_NO_ARCHIVE_OR_RESTORE` | `NOT_EVALUATED_NO_ARCHIVE_OR_RESTORE` |
+
+Esta consulta **não** usa credenciais de exportação, não valida se o cliente `pg_dump` poderia contornar RLS e **não** concede qualquer autorização operacional.
+
 ## 3. Ensaio real no clone — escopo sintético, já executado
 
 No clone `br-shy-night-b638k9e7` foi criado exclusivamente o schema `peos_g1_recovery_fixture_20261114` e a tabela `backup_probe`, com **uma linha fabricada**, SEM usar dados das tabelas IAM. Foram executados `GRANT MAINTAIN` na tabela sintética e `GRANT USAGE` no schema sintético para o reader existente da branch. Uma nova consulta **após COMMIT** comprovou `MAINTAIN=true`, `USAGE=true`, `SELECT=false` e o registro sintético. Em outra transação, `REVOKE MAINTAIN`, `REVOKE USAGE` e remoção **somente** do schema de fixture foram confirmados. Readback subsequente: **0 schemas fixture, 0 objetos fixture, 23 tabelas IAM, 41 policies, 20 FORCE RLS, ledger 0**.
