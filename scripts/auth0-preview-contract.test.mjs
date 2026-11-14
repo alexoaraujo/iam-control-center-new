@@ -50,3 +50,8 @@ test("uses live Vercel domain and branch-scoped variables before credentialed Au
  assert.ok(workflow.includes("PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}"));
  assert.ok(workflow.includes("PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}"));
 });
+
+test("never syncs protected Vercel variables from a forked pull request", () => {
+ assert.ok(workflow.includes("github.event.pull_request.head.repo.full_name == github.repository"));
+ assert.ok(workflow.includes("scope: ${{ steps.sync.outputs.scope }}"));
+});
