@@ -112,6 +112,8 @@ has_table_privilege('g1_reader','g1_iam.synthetic_data','SELECT'),
 (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid='g1_iam.synthetic_data'::regclass))")"
 if [[ "$restored" != "$baseline" || "$restored" == "$changed" ||
       "$contract" != '4|true:false:false|true:true:false|false:true:false|1|true|true|true|false|postgres' ]]; then
+  echo "G1_SYNTHETIC_DATA_EQUAL=$([[ "$restored" == "$baseline" ]] && echo true || echo false)" >&2
+  echo "G1_SYNTHETIC_ROLE_ACL_RLS_CONTRACT=$contract" >&2
   echo BLOCKED_G1_CROSS_CLUSTER_RESTORE_MISMATCH >&2; exit 8
 fi
 echo PASS_G1_PG18_CROSS_CLUSTER_RESTORE_GLOBALS_DATA_RLS_ACL_OWNER
