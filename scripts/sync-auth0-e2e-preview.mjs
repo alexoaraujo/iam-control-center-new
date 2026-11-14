@@ -15,6 +15,14 @@ export function isAuth0CriticalFile(file) {
   return /^(apps\/web\/|packages\/|\.github\/e2e\/|database\/migrations\/|database\/tests\/api-authorization)/.test(file) ||
     /^scripts\/(bind-e2e-preview|verify-preview-alias|neon-rbac-fixture-binding)/.test(file);
 }
+// Changes to the E2E authorization gate itself require a separate security
+// review. They must never be described as ordinary governance-only SKIPs.
+export function isAuth0GateFile(file) {
+  return file === ".github/workflows/quality.yml" ||
+    file === "scripts/sync-auth0-e2e-preview.mjs" ||
+    file === "scripts/sync-auth0-e2e-preview.test.mjs" ||
+    file === "scripts/auth0-preview-contract.test.mjs";
+}
 export function decideScope(env, domain, paths) {
   if (env.PR_HEAD_REPOSITORY !== repo ||
       !shaPattern.test(env.PR_HEAD_SHA ?? "") ||
@@ -30,6 +38,9 @@ export function decideScope(env, domain, paths) {
   if (domain.gitBranch !== env.PR_HEAD_BRANCH) {
     if (paths.some(isAuth0CriticalFile)) {
       throw Error("Auth0-sensitive changes require a separately authorized callback branch; refusing to skip E2E");
+    }
+    if (paths.some(isAuth0GateFile)) {
+      return { ready: false, reason: "SECURITY_REVIEW_REQUIRED" };
     }
     return { ready: false, reason: "BRANCH_NOT_BOUND_TO_CALLBACK" };
   }
@@ -101,7 +112,7 @@ export async function syncPreview(env, fetcher = fetch, changedFiles = prFiles) 
   const decision = decideScope(env,domain,paths);
   if (!decision.ready) {
     appendFileSync(env.GITHUB_OUTPUT,"auth0_ready=false\nscope=not-authorized\n");
-    console.log("::notice::Auth0 E2E NOT RUN: fixed callback is assigned to another PR branch. No credentials or alias modified.");
+    console.log("::warning::Auth0 E2E NOT RUN: " + decision.reason + ". Gate changes need independent security review; no credentials or alias modified.");
     return decision;
   }
   const {envs} = await get("/v10/projects/" + project + "/env?decrypt=false");
