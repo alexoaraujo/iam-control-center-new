@@ -1,6 +1,6 @@
 # IAM canonical restoration — isolated target guard
 
-> **SUPERSEDING CONTROL-PLANE SCOPE — 2026-11-13.** The operator explicitly excludes the legacy cross-organization Neon project `twilight-fire-88497009`. The active authorized project is `tiny-rice-70320263` in organization `alexoaraujo`. Source candidate: `development` / `br-ancient-term-b6mmx5ol` / `iam_database` / direct `ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech`; destination: disposable `br-sweet-union-b6j80a7j` / `iam_canonical_validation`. The SOURCE role `iam_schema_export_reader` is **not provisioned in Development**, so authenticated export is **BLOCKED**. The historical source table and legacy restoration rationale below are retained as a snapshot only, NOT a current authorization. Require a new independent source-identity/least-privilege review before any authenticated schema operation; no Production modification.
+> **SUPERSEDING CONTROL-PLANE SCOPE — 2026-11-13.** The operator explicitly excludes the legacy cross-organization Neon project `twilight-fire-88497009`. The active authorized project is `tiny-rice-70320263` in organization `alexoaraujo`. Source candidate: `development` / `br-ancient-term-b6mmx5ol` / `iam_database` / direct `ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech`; destination: disposable `br-sweet-union-b6j80a7j` / `iam_canonical_validation`. Control-plane and authenticated read-only SQL on 2026-11-14 confirm SOURCE role `iam_schema_export_reader` **exists and authenticates** with `BYPASSRLS=false`, but currently has `MAINTAIN=0/23` tables and `USAGE=0/3` scoped schemas; therefore authenticated schema export remains **BLOCKED** until least-privilege review and evidence. The historical source table and legacy restoration rationale below are retained as a snapshot only, NOT a current authorization. Require a new independent source-identity/least-privilege review before any authenticated schema operation; no Production modification.
 
 **State: DRAFT / REVIEW ONLY.** This is not permission to perform a schema restore, write data, fix ACLs in Development or Production, update main, or cut over. It is an executable guard for credentials and targets, tested entirely offline with synthetic passwords.
 
@@ -34,3 +34,24 @@ The destination is a **separate empty database in a disposable child of NEW Deve
 Do not enable paid automated Neon backup schedules or purchase mandatory services. On Free, snapshots are limited and may incur storage charges; this work has **not** created snapshots. Prefer approved portable PostgreSQL 18 `pg_dump -Fc` / `pg_restore` with protected ephemeral output and a retention/deletion policy, with security review for any business data.
 
 **STOP criteria:** missing credentials, inability to independently attest endpoint/branch, wrong database or role, TLS not verified, source export not current, role mismatch, ledger checksum mismatch, non-empty target, missing independent approval, absent rollback evidence or expired branch. All are BLOCKED, never implicitly waived.
+
+## Syncing protected GitHub environment secrets (2026-11-14)
+
+PEOS specialist prompts: 2009 (GitHub Actions governance), 2010 (repository security), 1102 (CI/CD pipeline), and PMU-004 (controlled continuity). **Use GitHub environment secrets, not repository-level Actions variables.**
+
+Environment: [IAM-Canonical-Isolated-Restore](https://github.com/alexoaraujo/iam-control-center-new/settings/environments/27182774301/edit). The three required **environment secret names** are `IAM_CANONICAL_SOURCE_URL`, `IAM_CANONICAL_TARGET_URL`, `IAM_CANONICAL_OPERATOR_APPROVAL`. GitHub exposes names and timestamps, **not values**, through its Secrets API. Source and approval must not be overwritten merely because target is missing.
+
+The repository provides a **minimal-change, interactive local administrative CLI** to preserve the two existing values. This CLI never sends passwords into Git commits, stdout, workflow inputs, or issue text:
+
+```bash
+gh auth login
+python3 .github/scripts/configure-iam-canonical-environment.py --target-only
+python3 .github/scripts/configure-iam-canonical-environment.py --verify-only
+```
+
+Run from a trusted clone containing the reviewed script; GitHub CLI must be authenticated with enough permissions to inspect the environment and set an environment secret. The `--target-only` mode checks the required independent reviewer (`alexoaraujo83`), `prevent_self_review=true`, and an exact `main` branch allowlist. It verifies that existing SOURCE and APPROVAL secrets are present **by name**, prompts privately for the missing target URL, validates it with the pinned guard, and sets **only** `IAM_CANONICAL_TARGET_URL`. It refuses non-TTY execution, invalid TLS or a wrong destination/role, and skips any existing target secret without overwriting it. The `--verify-only` mode makes **no mutations** and checks names/policy, not the stored values.
+
+Build the target URL *privately*, from the approved Neon Direct connection with database `iam_canonical_validation`, branch `br-sweet-union-b6j80a7j`, host `ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech`, role `neondb_owner`, and URL parameters `sslmode=verify-full&sslrootcert=system`. Do **not** use the inherited `iam_database`, the Production branch, a pooled host, or the legacy cross-org Neon project. Do not paste the full URL in chat, shell history, PR, issue, or Actions input.
+
+**After metadata confirmation, run only** `preflight_only` and then `auth_only` with `confirm_isolated_ddl=NO_DDL` on [the pinned workflow](https://github.com/alexoaraujo/iam-control-center-new/actions/workflows/iam-canonical-isolated-restore.yml), from reviewed `main` with explicit protected-environment reviewer approval. `auth_only` is evidence for actual login; secret metadata is not. Remain fail-closed on `readiness_only`, `export_only`, `restore_isolated` until reader privileges, recovery point, migration ledger and independent change approval are resolved.
+
