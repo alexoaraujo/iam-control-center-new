@@ -82,6 +82,7 @@ before="$(docker exec "$target" psql -X -U restore_admin -d postgres -Atc "SELEC
 if [[ "$before" != 0 ]]; then echo BLOCKED_G1_TARGET_ROLE_COLLISION >&2; exit 5; fi
 docker exec -i "$target" psql -X -U restore_admin -d postgres -v ON_ERROR_STOP=1 -q \
   <"$scratch/globals.sql" >"$scratch/global.log" 2>"$scratch/global.err" || {
+    grep -E 'ERROR:|FATAL:' "$scratch/global.err" | head -n 2 | sed -E 's/(PASSWORD|password)[^ ]*/[REDACTED]/g' >&2 || true
     echo BLOCKED_G1_GLOBAL_RESTORE >&2; exit 6;
   }
 docker exec "$target" psql -X -U restore_admin -d postgres -v ON_ERROR_STOP=1 -q -c "CREATE DATABASE $db"
