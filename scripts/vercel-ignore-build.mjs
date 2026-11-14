@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
+import { isApprovedProductionRelease } from "./production-deploy-approval.mjs";
 
 const BUILD_RELEVANT = [
   /^\.github\/workflows\/quality\.yml$/,
@@ -16,8 +17,17 @@ export function hasBuildRelevantChanges(changedFiles) {
   return changedFiles.some((file) => BUILD_RELEVANT.some((pattern) => pattern.test(file)));
 }
 
-export function shouldBuild({ environment, previousSha, currentSha, changedFiles, mergeParentChangedFiles = [] }) {
-  // Production and non-Preview deployments must never be skipped.
+export function shouldBuild({
+  environment, previousSha, currentSha, changedFiles,
+  mergeParentChangedFiles = [], approvedProductionSha, gitRef,
+}) {
+  // Auxiliary ignored-build protection: production is never implicitly
+  // approved by merging into main. Independently gate releases in Vercel.
+  if (environment === "production") {
+    return isApprovedProductionRelease({
+      commitSha: currentSha, approvedSha: approvedProductionSha, ref: gitRef,
+    });
+  }
   if (environment !== "preview") return true;
 
   // Fail closed: missing commit metadata means build rather than skip.
@@ -99,7 +109,14 @@ function main() {
   try {
     const previousSha = process.env.VERCEL_GIT_PREVIOUS_SHA;
     const currentSha = process.env.VERCEL_GIT_COMMIT_SHA;
-    if (process.env.VERCEL_ENV === "preview" && previousSha && currentSha) {
+    if (process.env.VERCEL_ENV === "production") {
+      build = shouldBuild({
+        environment: "production",
+        currentSha,
+        approvedProductionSha: process.env.IAM_APPROVED_PRODUCTION_SHA,
+        gitRef: process.env.VERCEL_GIT_COMMIT_REF,
+      });
+    } else if (process.env.VERCEL_ENV === "preview" && previousSha && currentSha) {
       build = shouldBuild({
         environment: process.env.VERCEL_ENV,
         previousSha,
@@ -109,8 +126,10 @@ function main() {
       });
     }
   } catch {
-    // A git/diff failure must fall back to a normal build.
-    build = true;
+    // Preview metadata failures build normally. Production failures do not
+    // authorize a build, though Vercel's own command-failure behavior means
+    // this script must NEVER be treated as the primary release gate.
+    build = process.env.VERCEL_ENV !== "production";
   }
 
   // Vercel's ignored-build command convention: 0 skips, non-zero builds.
