@@ -27,7 +27,7 @@ const MEMBERSHIP_CONTRACT = new Map([
 ]);
 const ROLE_KEYS = new Set(["name", "login", "inherit", "bypassrls", "superuser"]);
 const MEMBER_KEYS = new Set(["member", "role", "admin", "inherit", "set"]);
-const OBS_KEYS = new Set(["branch_id", "database", "roles", "memberships", "ledger_rows", "tables", "reader", "scoped_schemas", "scoped_relations"]);
+const OBS_KEYS = new Set(["branch_id", "database", "roles", "memberships", "ledger_rows", "tables", "reader", "scoped_schemas", "scoped_relations", "all_non_system_relations", "inherited_database"]);
 const READER_KEYS = new Set(["login", "bypassrls", "maintain_tables", "broad_tables", "usage_schemas", "create_schemas"]);
 
 function plainObject(value, allowed, kind) {
@@ -101,7 +101,8 @@ export function assessG1Readiness(observation) {
   plainObject(observation.source, OBS_KEYS, "SOURCE");
   plainObject(observation.target, OBS_KEYS, "TARGET");
   if (observation.source.branch_id !== SOURCE_BRANCH || observation.source.database !== "iam_database" ||
-      observation.target.branch_id !== TARGET_BRANCH || observation.target.database !== "iam_canonical_validation") {
+      observation.target.branch_id !== TARGET_BRANCH || observation.target.database !== "iam_canonical_validation" ||
+      observation.target.inherited_database !== "iam_database") {
     throw new Error("INVALID_SOURCE_OR_ISOLATED_TARGET");
   }
   const blockers = new Set();
@@ -110,7 +111,8 @@ export function assessG1Readiness(observation) {
   if (count(observation.source.tables, "SOURCE_TABLES") !== 23) blockers.add("SOURCE_TABLE_COUNT_DRIFT");
   if (count(observation.source.ledger_rows, "SOURCE_LEDGER") !== 0) blockers.add("SOURCE_LEDGER_REVIEW_REQUIRED");
   if (count(observation.target.scoped_relations, "TARGET_RELATIONS") !== 0 ||
-      count(observation.target.scoped_schemas, "TARGET_SCHEMAS") !== 0) blockers.add("TARGET_NOT_EMPTY");
+      count(observation.target.scoped_schemas, "TARGET_SCHEMAS") !== 0 ||
+      count(observation.target.all_non_system_relations, "TARGET_NON_SYSTEM_RELATIONS") !== 0) blockers.add("TARGET_NOT_EMPTY");
   plainObject(observation.source.reader, READER_KEYS, "READER");
   const reader = observation.source.reader;
   if (!bool(reader.login, "READER_LOGIN") || bool(reader.bypassrls, "READER_BYPASSRLS")) {
@@ -121,11 +123,12 @@ export function assessG1Readiness(observation) {
   }
   if (count(reader.maintain_tables, "READER_MAINTAIN") !== 23 ||
       count(reader.usage_schemas, "READER_USAGE") !== 3) blockers.add("SOURCE_READER_INSUFFICIENT_LOCK_PRIVILEGES");
-  plainObject(observation.catalog_sha256, new Set(["source", "target"]), "CATALOG_HASHES");
-  if (!SHA256.test(observation.catalog_sha256.source) || !SHA256.test(observation.catalog_sha256.target)) {
+  plainObject(observation.catalog_sha256, new Set(["source", "inherited_shadow"]), "CATALOG_HASHES");
+  if (!SHA256.test(observation.catalog_sha256.source) || !SHA256.test(observation.catalog_sha256.inherited_shadow)) {
     throw new Error("INVALID_CATALOG_SHA256");
   }
-  if (observation.catalog_sha256.source !== observation.catalog_sha256.target) blockers.add("CATALOG_SHA256_DRIFT");
+  /* Compare source Development with inherited iam_database, NOT empty restore DB. */
+  if (observation.catalog_sha256.source !== observation.catalog_sha256.inherited_shadow) blockers.add("CATALOG_SHA256_DRIFT");
   // Never elevate self-reported snapshots or a perfectly matching role graph
   // into independent attestation, authorization, restore or rollback evidence.
   const diagnostics = [...blockers].sort();
