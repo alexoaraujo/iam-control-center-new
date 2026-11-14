@@ -229,7 +229,7 @@ def main() -> int:
         verify_environment(review_id)
         print("PASS_SECRET_METADATA: all three names exist in protected environment")
         print("ADMIN_BYPASS_UNATTESTED: check OFF in GitHub Settings UI; REST omits this control")
-    print("No credentials printed; no Neon DDL, export or restore executed")
+        print("No credentials printed; no Neon DDL, export or restore executed")
         print("Verify actual reviewer approval for each run in GitHub Environments")
         return 0
     except RuntimeError as exc:
