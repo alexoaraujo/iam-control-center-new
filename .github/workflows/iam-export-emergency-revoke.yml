@@ -1,0 +1,58 @@
+name: IAM export emergency REVOKE (manual, independent)
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Independent emergency action: preflight or REVOKE only; NEVER GRANT"
+        type: choice
+        options:
+          - preflight
+          - revoke
+        default: preflight
+        required: true
+      confirm_revoke:
+        description: "For revoke enter the exact protected latch; preflight use NO_DDL"
+        type: string
+        default: "NO_DDL"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-export-emergency-revoke
+  cancel-in-progress: false
+
+jobs:
+  emergency-revocation:
+    # Never run from an unreviewed branch, PR, or pull_request_target.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: IAM-Canonical-Revocation
+    steps:
+      - name: Checkout vetted main
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Validate independent revoke-only utility offline
+        run: |
+          set -euo pipefail
+          python3 .github/tests/test-iam-export-lease-emergency-revoke.py
+          chmod +x .github/scripts/psql
+      - name: Pinned PostgreSQL 18 library and emergency revocation
+        shell: bash
+        env:
+          IAM_EXPORT_REVOKER_URL: ${{ secrets.IAM_EXPORT_REVOKER_URL }}
+          IAM_EXPORT_REVOKER_APPROVAL: ${{ secrets.IAM_EXPORT_REVOKER_APPROVAL }}
+          IAM_EXPORT_REVOKER_PROJECT_ID: ${{ vars.IAM_EXPORT_REVOKER_PROJECT_ID }}
+          IAM_EXPORT_REVOKER_BRANCH_ID: ${{ vars.IAM_EXPORT_REVOKER_BRANCH_ID }}
+          INPUT_OPERATION: ${{ inputs.operation }}
+          INPUT_CONFIRM: ${{ inputs.confirm_revoke }}
+        run: |
+          set -euo pipefail
+          export PATH="$GITHUB_WORKSPACE/.github/scripts:$PATH"
+          python3 .github/scripts/iam-export-lease-emergency-revoke.py \
+            --mode "$INPUT_OPERATION" --confirm "$INPUT_CONFIRM"
