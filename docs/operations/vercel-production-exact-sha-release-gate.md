@@ -36,3 +36,13 @@ This gate **only works if** Vercel Project → Settings → Git → Ignored Buil
 Before activation, close the PR — no Production setting has changed. After approved activation, remove the release SHA authorization to block new builds, while keeping the current Production deployment and alias intact. A rollback of an already promoted Production deployment requires the separate reviewed Vercel rollback runbook and verified database compatibility. **Do not** treat an ignored-build skip as a security approval or as proof of a released build.
 
 References: [Release gate #34](https://github.com/alexoaraujo/iam-control-center-new/issues/34), [Main protection #11](https://github.com/alexoaraujo/iam-control-center-new/issues/11), [Cutover gate #5](https://github.com/alexoaraujo/iam-control-center-new/issues/5).
+
+## Explicit limitations and primary boundary
+
+Vercel's Ignored Build Step is **not a security authorization mechanism**: exit code **0** skips a build, while any non-zero exit code continues a build. An unavailable script, misconfigured command, import failure or intentionally changed command can therefore permit the build to start. The script now treats an exception **inside its main function** as skip for Production, but cannot prevent top-level startup failures or a Project Settings override. Do not claim that this code guarantees Production immutability.
+
+Before any PR is merged, independently configure and verify a **primary deployment boundary**, for example Vercel Project Settings → Environments → Production → Branch Tracking to a reviewed `release/production` branch separate from `main`, if approved for the project and available on the current Free plan. Vercel documentation confirms branch tracking can be changed. Preserve the current Production deployment and custom domain while testing; changes to that project setting require separate release authorization. Additionally evaluate Deployment Checks / staged promotion if supported by the current account, without assuming a paid feature is free.
+
+This PR is a **defense-in-depth candidate only** until branch tracking and a real negative deployment-policy test are demonstrated; approval of `quality` alone is insufficient. After any change to branch tracking, re-evaluate Preview aliases, Auth0 callback and GitHub OIDC trust boundaries before proceeding. No production setting was changed by this PR.
+
+Official references: https://vercel.com/kb/guide/how-do-i-use-the-ignored-build-step-field-on-vercel and https://vercel.com/docs/git#customizing-the-production-branch.

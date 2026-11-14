@@ -95,8 +95,9 @@ function main() {
       });
     }
   } catch {
-    // A git/diff failure must fall back to a normal build.
-    build = true;
+    // Production release checks must never fail open on a runtime error.
+    // Preview diff failures still trigger a build rather than skipping it.
+    build = process.env.VERCEL_ENV !== "production";
   }
 
   // Vercel's ignored-build command convention: 0 skips, non-zero builds.
