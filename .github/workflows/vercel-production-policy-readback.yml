@@ -78,9 +78,10 @@ jobs:
           // policy and real negative deployment rehearsal are separate gates.
           if (!checks.project_identity || !checks.ignored_build_readback_available ||
               !checks.exact_shell_command || !checks.no_production_approved_sha ||
-              !checks.alias_unchanged || !checks.baseline_deployment_unchanged) {
+              !checks.alias_unchanged || !checks.baseline_deployment_unchanged ||
+              !checks.auto_assign_disabled) {
             throw Error("BLOCKED_VERCEL_RELEASE_READBACK");
           }
-          console.log("PASS_READBACK_ONLY: no Production build, alias change, or promotion executed");
-          console.log("RELEASE_GATE_BLOCKED: negative deployment test and primary boundary remain independently required");
+          console.log("PASS_READBACK_AND_AUTO_ASSIGN_DISABLED: no Production build, alias change, or promotion executed");
+          console.log("RELEASE_GATE_BLOCKED: negative deployment test, restore/rollback and formal release approval remain required");
           NODE
