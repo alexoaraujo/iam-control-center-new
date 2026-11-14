@@ -96,5 +96,96 @@ class SecureConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "secrets"):
                 config.verify_secret_metadata()
 
+    def test_target_only_writes_only_missing_target_and_preserves_source_approval(self):
+        from unittest.mock import MagicMock
+        url = ("postgresql://neondb_owner:synthetic_password"
+               "@ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech:5432"
+               "/iam_canonical_validation?sslmode=verify-full&sslrootcert=system")
+        before = {"IAM_CANONICAL_SOURCE_URL", "IAM_CANONICAL_OPERATOR_APPROVAL"}
+        with patch.object(config, "verify_environment") as gate, \
+             patch.object(config, "present_secret_names",
+                          side_effect=[before, {*before, "IAM_CANONICAL_TARGET_URL"}]), \
+             patch.object(config, "set_environment_secret") as write, \
+             patch.object(config.getpass, "getpass", return_value=url), \
+             patch.object(config.sys, "stdin", MagicMock(isatty=lambda: True)):
+            config.sync_target_only(77)
+        write.assert_called_once_with("IAM_CANONICAL_TARGET_URL", url)
+        self.assertEqual(gate.call_count, 2)
+
+    def test_target_only_never_overwrites_existing_secret_even_if_value_unknown(self):
+        before = set(config.SECRET_NAMES)
+        with patch.object(config, "verify_environment"), \
+             patch.object(config, "present_secret_names", return_value=before), \
+             patch.object(config, "set_environment_secret") as write, \
+             patch.object(config.getpass, "getpass") as prompt:
+            config.sync_target_only(77)
+        write.assert_not_called()
+        prompt.assert_not_called()
+
+    def test_target_only_blocks_missing_source_or_approval_metadata(self):
+        for present in [
+            {"IAM_CANONICAL_SOURCE_URL"},
+            {"IAM_CANONICAL_OPERATOR_APPROVAL"},
+            set(),
+        ]:
+            with self.subTest(present=present), \
+                 patch.object(config, "verify_environment"), \
+                 patch.object(config, "present_secret_names", return_value=present), \
+                 patch.object(config, "set_environment_secret") as write, \
+                 patch.object(config.getpass, "getpass") as prompt:
+                with self.assertRaisesRegex(RuntimeError, "source/approval"):
+                    config.sync_target_only(77)
+                write.assert_not_called()
+                prompt.assert_not_called()
+
+    def test_target_only_rejects_wrong_db_role_tls_and_pooler_before_secret_write(self):
+        from unittest.mock import MagicMock
+        base = ("postgresql://neondb_owner:synthetic_password"
+                "@ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech:5432"
+                "/iam_canonical_validation?sslmode=verify-full&sslrootcert=system")
+        candidates = [
+            base.replace("iam_canonical_validation", "iam_database"),
+            base.replace("neondb_owner:", "iam_app_runtime_login:"),
+            base.replace("verify-full", "require"),
+            base.replace("ep-crimson-smoke-", "ep-crimson-smoke-pooler-"),
+        ]
+        before = {"IAM_CANONICAL_SOURCE_URL", "IAM_CANONICAL_OPERATOR_APPROVAL"}
+        for value in candidates:
+            with self.subTest(value=value.replace("synthetic_password", "***")), \
+                 patch.object(config, "verify_environment"), \
+                 patch.object(config, "present_secret_names", return_value=before), \
+                 patch.object(config, "set_environment_secret") as write, \
+                 patch.object(config.getpass, "getpass", return_value=value), \
+                 patch.object(config.sys, "stdin", MagicMock(isatty=lambda: True)):
+                with self.assertRaisesRegex(RuntimeError, "target URL allowlist"):
+                    config.sync_target_only(77)
+                write.assert_not_called()
+
+    def test_target_only_rejects_noninteractive_invocations(self):
+        from unittest.mock import MagicMock
+        before = {"IAM_CANONICAL_SOURCE_URL", "IAM_CANONICAL_OPERATOR_APPROVAL"}
+        with patch.object(config, "verify_environment"), \
+             patch.object(config, "present_secret_names", return_value=before), \
+             patch.object(config, "set_environment_secret") as write, \
+             patch.object(config.getpass, "getpass") as prompt, \
+             patch.object(config.sys, "stdin", MagicMock(isatty=lambda: False)):
+            with self.assertRaisesRegex(RuntimeError, "interactive"):
+                config.sync_target_only(77)
+            write.assert_not_called()
+            prompt.assert_not_called()
+
+    def test_verify_only_does_not_mutate_environment_or_secrets(self):
+        with patch.object(config.sys, "argv", ["script.py", "--verify-only"]), \
+             patch.object(config, "verify_account_and_repo", return_value=77), \
+             patch.object(config, "verify_environment") as gate, \
+             patch.object(config, "verify_secret_metadata") as metadata, \
+             patch.object(config, "ensure_protected_environment") as mutate, \
+             patch.object(config, "set_environment_secret") as write:
+            self.assertEqual(config.main(), 0)
+        gate.assert_called_once_with(77)
+        metadata.assert_called_once()
+        mutate.assert_not_called()
+        write.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()
