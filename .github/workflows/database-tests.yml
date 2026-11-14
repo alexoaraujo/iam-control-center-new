@@ -199,3 +199,22 @@ jobs:
                 bash database/tests/pg18-g1-independent-recovery-ci.sh
               '
 
+
+  postgres-18-independent-cluster-recovery:
+    name: postgres-18-independent-cluster-recovery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout no credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Verify global roles and synthetic data restore across two offline PG18 clusters
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Both Docker containers run with --network none. No Neon secrets,
+          # no external PostgreSQL, no live application tables.
+          bash database/tests/pg18-g1-cross-cluster-recovery-ci.sh
