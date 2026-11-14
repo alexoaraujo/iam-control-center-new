@@ -50,3 +50,18 @@ The script is invoked by the existing `postgres-18-source-schema-restore` job in
 Após o backup, uma alteração é confirmada com `COMMIT` na tabela sintética de origem. A recuperação ocorre em um **database de teste diferente** (`peos_g1_recovery_verify`) por `pg_restore --single-transaction --exit-on-error`, usando conexão independente. O teste compara o hash de dados da restauração com o baseline anterior à alteração, verifica a RLS policy, `FORCE RLS`, os ACLs de schema/tabela e o atributo `NOBYPASSRLS`. Em falhas, o processo falha fechado e tenta remover o database, role e schema de teste, exigindo contagem final zero. A restauração não importa roles em outro cluster: o `pg_dumpall --globals-only` é **inventário**, não prova de restore de globals.
 
 Mesmo após os dois scripts passarem, isso prova apenas o funcionamento sintético de `pg_dump`/`pg_restore` e dos mecanismos de revogação no serviço CI. **Não prova backup de dados reais, PITR Neon, restauração de globais em cluster independente ou rollback de branch real**; os gates G1 de Development permanecem bloqueados.
+
+
+## Complemento — restauração em clusters PostgreSQL 18 independentes
+
+`database/tests/pg18-g1-cross-cluster-recovery-ci.sh` utiliza duas instâncias Docker PostgreSQL 18 com **data directories e catálogos globais independentes**, rede externa desabilitada (`--network none`), sem secrets Neon e sem dados de aplicação. Este teste cobre um limite das simulações anteriores: restaurar `pg_dumpall --globals-only --no-role-passwords` e `pg_dump -Fc` em um servidor diferente, não em outro database da mesma instância.
+
+- Cria roles puramente sintéticas `g1_*`, incluindo vínculos `ADMIN=false`, `INHERIT=true`, `SET=false`, e tabela sintética com ACL, RLS, `FORCE RLS`, MAINTAIN e duas linhas fabricadas.
+- O arquivo de globals é capturado inteiro, mas a restauração **extrai por allowlist apenas as quatro roles e seus vínculos `g1_*`**: não replica roles internas/provedor nem tenta criar o superusuário `postgres` do cluster de destino. Os dois clusters têm `postgres` local, mas seus diretórios de dados e catálogos são separados.
+- Após o backup, confirma um `UPDATE` na origem; o segundo cluster recebe as roles por `psql` e o arquivo `pg_dump` por `pg_restore --single-transaction --exit-on-error`.
+- Inspeciona o hash dos dados da baseline, as quatro roles sintéticas, atributos LOGIN/INHERIT/BYPASSRLS, membership, ownership da tabela, ACLs de schema e tabela, policy RLS e `FORCE RLS`.
+- Em `EXIT` remove os dois containers, falhando caso algum permaneça. Não há persistência ou upload dos dumps e nenhuma conexão Neon é aberta.
+
+**Evidência:** [database-schema-tests #43649066856](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/43649066856), job `132613239677`: `PASS_G1_PG18_CROSS_CLUSTER_BACKUP`, `PASS_G1_PG18_CROSS_CLUSTER_RESTORE_GLOBALS_DATA_RLS_ACL_OWNER`, `PASS_G1_PG18_CROSS_CLUSTER_CLEANUP`. O primeiro erro de grantor e a comparação de booleanos foram corrigidos no harness até obter a aprovação real da prova.
+
+**Limite obrigatório:** importar somente roles sintéticas para um segundo cluster não comprova que roles reais do Neon, provider grants, logins, credenciais, ledger, dados pessoais, dependências ou a reversão de alterações reais são recuperáveis. O plano Neon Free continua com 6 horas de histórico e sem snapshot de child branch comprovado. `readiness_only`, `export_only`, `restore_isolated`, grants/ALTER ROLE em Development e cutover permanecem **BLOCKED**.
