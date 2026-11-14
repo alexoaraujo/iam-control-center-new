@@ -75,6 +75,40 @@ O único projeto de referência é `tiny-rice-70320263`, com SOURCE `br-ancient-
 
 O procedimento de seis `ALTER DEFAULT PRIVILEGES` em `public` das PRs [#45](https://github.com/alexoaraujo/iam-control-center-new/pull/45) e [#47](https://github.com/alexoaraujo/iam-control-center-new/pull/47) trata permissões de **objetos futuros**; não corrige os locks das 23 tabelas existentes nem autoriza migração. A PR [#44](https://github.com/alexoaraujo/iam-control-center-new/pull/44) contém comparadores offline, não prova paridade operacional real.
 
+## Segurança e diagnóstico após os bloqueios reais de 13/11/2026
+
+As tentativas autenticadas de \`readiness_only\` da \`main@665b4100\` bloquearam
+com \`BLOCKED_ROLE_ATTRIBUTES\` e \`BLOCKED_MIGRATOR_OWNER_MEMBERSHIP\`.
+A nova classificação **não flexibiliza** nenhum guard: acrescenta códigos
+\`SOURCE:<role>:MISSING\`, \`TARGET:<role>:OPTIONS_DRIFT\` e
+\`UNEXPECTED_CATALOG_OR_ORDER\` usando apenas nomes canônicos, sem imprimir
+SQL bruto, credenciais ou identificadores de usuários finais.
+
+- Origem Development \`br-ancient-term-b6mmx5ol / iam_database\`:
+  \`iam_app_runtime_login\` = LOGIN + INHERIT; membership runtime
+  \`ADMIN=false, INHERIT=true, SET=false\`; faltam \`iam_migrator_login\`,
+  \`iam_worker_login\` e a aresta \`iam_migrator -> iam_owner\`.
+- Destino branch \`br-sweet-union-b6j80a7j\`: em \`iam_canonical_validation\`
+  runtime LOGIN é NOINHERIT e a membership permite SET ROLE; os outros logins
+  existem e a membership migrator-owner está presente. **Roles e memberships
+  são branch-wide**: uma mudança no destino afeta também o banco herdado
+  \`iam_database\` na mesma branch, não apenas o banco de restauração vazio.
+- O contrato pretendido é o \`database/bootstrap/0000_iam_roles.sql\`
+  complementado pelo worker P0. Não executar o bootstrap não-idempotente em
+  branch parcialmente configurada, nem copiar atributos da origem para o
+  destino. Não usar \`GRANT ALL\`, \`BYPASSRLS\` ou \`--no-acl\`.
+- Levantar contratos consumidores (runtime, migrator e worker), obter
+  aprovação de alteração de **roles em cada branch**, ensaiar em clone
+  descartável com rollback e isolamento A/B, comparar atributos
+  \`LOGIN/INHERIT/BYPASSRLS\`, \`ADMIN/INHERIT/SET\`, \`schema USAGE\`,
+  \`SECURITY DEFINER\` e ACL literal. Só depois executar \`readiness_only\`
+  autenticado com \`NO_DDL\`.
+- \`PASS_AUTHENTICATED_IDENTITY_ONLY\` confirma identidade/TLS, não a
+  preparação da exportação. \`MAINTAIN\` em 23/23 tabelas + \`USAGE\` nos
+  3 schemas exige lease temporário independente; \`SELECT\`/DML devem
+  continuar negados ao exportador. Sem \`pg_restore\` real e recuperação
+  auditável, mudanças em Development e cutover seguem bloqueados.
+
 ## Remaining required acceptance after running
 
 1. Obter revisão independente da proposta de identidade temporária exportadora, grafo de roles, privilégios mínimos e efeito sobre runtime. Não presumir que SOURCE e TARGET devam ter as mesmas roles sem uma decisão arquitetural.
