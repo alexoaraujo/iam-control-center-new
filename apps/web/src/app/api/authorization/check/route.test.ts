@@ -63,3 +63,54 @@ it("uses only authenticated subject + selectors; returns boolean without leaking
     "auth0|synthetic-user", selectors.tenantId, selectors.identityId, selectors.permission,
   );
 });
+
+it("rejects oversized streams even without a trusted Content-Length, without evaluating RBAC", async () => {
+  const overLimit = new Request("https://example.invalid/api/authorization/check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Content-Length": "0" },
+    body: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({ ...selectors, padding: "x".repeat(5000) })));
+        controller.close();
+      },
+    }),
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+  const response = await POST(overLimit);
+  expect(response.status).toBe(403);
+  expect(checkPermission).not.toHaveBeenCalled();
+});
+
+it("denies malformed UTF-8 and invalid content-length before authorization", async () => {
+  const invalidUtf8 = new Request("https://example.invalid/api/authorization/check", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: new Uint8Array([0xc3, 0x28]),
+  });
+  expect((await POST(invalidUtf8)).status).toBe(403);
+  const badLength = new Request("https://example.invalid/api/authorization/check", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Content-Length": "-1" },
+    body: JSON.stringify(selectors),
+  });
+  expect((await POST(badLength)).status).toBe(403);
+  expect(checkPermission).not.toHaveBeenCalled();
+});
+
+it("accepts valid streamed JSON split across chunks without trusting headers", async () => {
+  const chunks = [JSON.stringify(selectors).slice(0, 30), JSON.stringify(selectors).slice(30)];
+  const request = new Request("https://example.invalid/api/authorization/check", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
+        controller.close();
+      },
+    }),
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+  checkPermission.mockResolvedValue(true);
+  const response = await POST(request);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ allowed: true });
+  expect(checkPermission).toHaveBeenCalledTimes(1);
+});
