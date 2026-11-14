@@ -106,3 +106,16 @@ test("does not spend a Preview build for a docs-only main-sync merge", () => {
     false,
   );
 });
+
+test("redeploying the same Preview SHA never ignores updated environment settings", () => {
+  assert.equal(
+    shouldBuild({
+      environment: "preview",
+      previousSha: "35dd97edd08a92bb4dbc1b1a9c02e5a3c11627d4",
+      currentSha: "35dd97edd08a92bb4dbc1b1a9c02e5a3c11627d4",
+      changedFiles: [],
+      mergeParentChangedFiles: [],
+    }),
+    true,
+  );
+});

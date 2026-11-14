@@ -23,6 +23,11 @@ export function shouldBuild({ environment, previousSha, currentSha, changedFiles
   // Fail closed: missing commit metadata means build rather than skip.
   if (!previousSha || !currentSha) return true;
 
+  // A same-commit redeployment is normally requested for updated Preview
+  // environment settings. Git diffs are empty, but the new build must embed
+  // the current environment; skipping would keep the stale deployment.
+  if (previousSha === currentSha) return true;
+
   return hasBuildRelevantChanges(changedFiles) || hasBuildRelevantChanges(mergeParentChangedFiles);
 }
 
