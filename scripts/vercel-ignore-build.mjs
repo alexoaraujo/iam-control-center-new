@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
+import { isApprovedProductionRelease } from "./production-deploy-approval.mjs";
 
 const BUILD_RELEVANT = [
   /^\.github\/workflows\/quality\.yml$/,
@@ -16,11 +17,21 @@ export function hasBuildRelevantChanges(changedFiles) {
   return changedFiles.some((file) => BUILD_RELEVANT.some((pattern) => pattern.test(file)));
 }
 
-export function shouldBuild({ environment, previousSha, currentSha, changedFiles }) {
-  // Production and non-Preview deployments must never be skipped.
+export function shouldBuild({
+  environment, previousSha, currentSha, changedFiles, approvedProductionSha, gitRef,
+}) {
+  // A Git push to main must not implicitly authorize a Production build.
+  // Exact-SHA release authorization is supplied separately in Vercel Production.
+  if (environment === "production") {
+    return isApprovedProductionRelease({
+      commitSha: currentSha, approvedSha: approvedProductionSha, ref: gitRef,
+    });
+  }
+
+  // Keep Preview scope checks and other environments unchanged.
   if (environment !== "preview") return true;
 
-  // Fail closed: missing commit metadata means build rather than skip.
+  // Fail open for Preview builds when Git metadata is missing.
   if (!previousSha || !currentSha) return true;
 
   return hasBuildRelevantChanges(changedFiles);
@@ -68,7 +79,14 @@ function main() {
   try {
     const previousSha = process.env.VERCEL_GIT_PREVIOUS_SHA;
     const currentSha = process.env.VERCEL_GIT_COMMIT_SHA;
-    if (process.env.VERCEL_ENV === "preview" && previousSha && currentSha) {
+    if (process.env.VERCEL_ENV === "production") {
+      build = shouldBuild({
+        environment: "production",
+        currentSha,
+        approvedProductionSha: process.env.IAM_APPROVED_PRODUCTION_SHA,
+        gitRef: process.env.VERCEL_GIT_COMMIT_REF,
+      });
+    } else if (process.env.VERCEL_ENV === "preview" && previousSha && currentSha) {
       build = shouldBuild({
         environment: process.env.VERCEL_ENV,
         previousSha,
