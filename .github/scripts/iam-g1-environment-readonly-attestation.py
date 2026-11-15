@@ -25,7 +25,7 @@ class GateBlocked(RuntimeError):
     pass
 
 
-def verify_configuration(name: str, environment: dict, policies: dict) -> None:
+def verify_configuration(name: str, environment: dict, policies: dict, custom_rules: dict) -> None:
     """Validate metadata, rejecting unknown/bypassed protections."""
     if name not in ENVS:
         raise GateBlocked("UNKNOWN_ENVIRONMENT")
@@ -56,6 +56,12 @@ def verify_configuration(name: str, environment: dict, policies: dict) -> None:
     timers = [rule for rule in rules if rule.get("type") == "wait_timer"]
     if any(rule.get("wait_timer") != 0 for rule in timers):
         raise GateBlocked("UNEXPECTED_WAIT_TIMER")
+    # Custom GitHub App protection rules have their OWN REST endpoint; the
+    # environment.protection_rules collection alone is insufficient.
+    custom_list = custom_rules.get("custom_deployment_protection_rules")
+    if (custom_rules.get("total_count") != 0 or
+            not isinstance(custom_list, list) or len(custom_list) != 0):
+        raise GateBlocked("CUSTOM_DEPLOYMENT_PROTECTION_RULE_ACTIVE_OR_UNKNOWN")
     listed = policies.get("branch_policies")
     if (policies.get("total_count") != 1 or
             not isinstance(listed, list) or len(listed) != 1 or
@@ -96,7 +102,8 @@ def live_attest() -> None:
     for env in ENVS:
         read = get_json("/" + env, token)
         branch_rules = get_json("/" + env + "/deployment-branch-policies?per_page=100", token)
-        verify_configuration(env, read, branch_rules)
+        custom_rules = get_json("/" + env + "/deployment_protection_rules", token)
+        verify_configuration(env, read, branch_rules, custom_rules)
         print("PASS_G1_LIVE_ENV_PROTECTION_READONLY " + env)
     print("PASS_G1_LIVE_ENVIRONMENTS_BOTH_READONLY_NO_SECRETS")
 
