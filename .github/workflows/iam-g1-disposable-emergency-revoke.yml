@@ -1,0 +1,76 @@
+name: IAM G1 disposable Neon independent REVOKE (manual ONLY)
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "preflight (metadata only) or emergency revoke, NEVER GRANT"
+        type: choice
+        required: true
+        options: [preflight, revoke]
+        default: preflight
+      confirm_revoke:
+        description: "NO_DDL for preflight, exact REVOKE_G1_DISPOSABLE_LEASE_ONLY for revoke"
+        type: string
+        required: true
+        default: NO_DDL
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-g1-disposable-revoker-single-operator
+  cancel-in-progress: false
+
+jobs:
+  independently-protected-revocation:
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment:
+      name: IAM-G1-Disposable-Lease-Revocation
+    steps:
+      - name: Checkout reviewed exact main SHA without persistent Git credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Fail closed until independent environment reviewer approves SHA and branch TTL
+        shell: bash
+        env:
+          APPROVED_SHA: ${{ vars.IAM_G1_DISPOSABLE_REVOKER_APPROVED_SHA }}
+          TARGET_PROJECT: ${{ vars.IAM_G1_DISPOSABLE_PROJECT_ID }}
+          TARGET_BRANCH: ${{ vars.IAM_G1_DISPOSABLE_BRANCH_ID }}
+        run: |
+          set -euo pipefail
+          [[ "$APPROVED_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ "$APPROVED_SHA" == "$GITHUB_SHA" ]] || {
+            echo "::error::BLOCKED_G1_REVOKER_INDEPENDENT_SHA_REVIEW"; exit 2;
+          }
+          [[ "$TARGET_PROJECT" == "tiny-rice-70320263" ]] &&
+          [[ "$TARGET_BRANCH" == "br-spring-grass-b6gap6kp" ]] || {
+            echo "::error::BLOCKED_G1_REVOKER_BRANCH_IDENTITY"; exit 2;
+          }
+          [[ "$(date -u +%s)" -lt "$(date -u -d '2026-11-16T12:00:00Z' +%s)" ]] || {
+            echo "::error::BLOCKED_G1_DISPOSABLE_BRANCH_TTL_EXPIRED"; exit 2;
+          }
+          echo "PASS_G1_REVOKER_SHA_AND_TTL_CHECK"
+      - name: Validate independent revoke-only source offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/tests/test-iam-g1-disposable-emergency-revoke.py
+          chmod +x .github/scripts/psql
+      - name: PostgreSQL 18 independent operator (preflight or revoke)
+        shell: bash
+        env:
+          IAM_G1_DISPOSABLE_PROJECT_ID: ${{ vars.IAM_G1_DISPOSABLE_PROJECT_ID }}
+          IAM_G1_DISPOSABLE_BRANCH_ID: ${{ vars.IAM_G1_DISPOSABLE_BRANCH_ID }}
+          IAM_G1_DISPOSABLE_REVOKER_URL: ${{ secrets.IAM_G1_DISPOSABLE_REVOKER_URL }}
+          IAM_G1_DISPOSABLE_REVOKER_APPROVAL: ${{ secrets.IAM_G1_DISPOSABLE_REVOKER_APPROVAL }}
+          MODE: ${{ inputs.operation }}
+          CONFIRM: ${{ inputs.confirm_revoke }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export PATH="$GITHUB_WORKSPACE/.github/scripts:$PATH"
+          python3 .github/scripts/iam-g1-disposable-emergency-revoke.py \
+            --mode "$MODE" --confirm "$CONFIRM"
