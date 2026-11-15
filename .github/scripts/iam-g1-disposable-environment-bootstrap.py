@@ -60,6 +60,7 @@ def gh(args: list[str], data: dict | None = None) -> object:
 def expected_environment(actual: dict) -> bool:
     branch_policy = actual.get("deployment_branch_policy") or {}
     if (actual.get("name") != ENV
+            or actual.get("can_admins_bypass") is not False
             or branch_policy.get("protected_branches") is not False
             or branch_policy.get("custom_branch_policies") is not True):
         return False
@@ -86,10 +87,10 @@ def read_protection() -> None:
     environment = gh(["api", BASE])
     policies = gh(["api", BASE + "/deployment-branch-policies"])
     if not isinstance(environment, dict) or not expected_environment(environment):
-        raise Blocked("ENV_MISSING_INDEPENDENT_REVIEWER_OR_SELF_REVIEW_GUARD")
+        raise Blocked("ENV_MISSING_REVIEWER_NO_SELF_REVIEW_OR_ADMIN_BYPASS_DISABLED")
     if not isinstance(policies, dict) or not expected_policies(policies):
         raise Blocked("ENV_MISSING_EXCLUSIVE_MAIN_POLICY")
-    print("PASS_G1_GITHUB_ENV_INDEPENDENT_REVIEW_AND_MAIN_ONLY")
+    print("PASS_G1_GITHUB_ENV_INDEPENDENT_REVIEW_NO_ADMIN_BYPASS_MAIN_ONLY")
 
 
 def branch_not_expired() -> None:
@@ -118,6 +119,7 @@ def apply_environment() -> None:
     body = {
         "wait_timer": 0,
         "prevent_self_review": True,
+        "can_admins_bypass": False,
         "reviewers": [{"type": "User", "id": reviewer["id"]}],
         "deployment_branch_policy": {
             "protected_branches": False, "custom_branch_policies": True
