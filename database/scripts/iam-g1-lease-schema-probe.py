@@ -64,9 +64,27 @@ def validate_url(raw: str) -> dict[str, str]:
 
 
 def classify(stderr: str) -> str:
+    """Classify denied operation, never emit SQL, object names or raw stderr."""
     low = stderr.lower()
-    if any(part in low for part in ("permission denied", "must be owner",
-                                   "insufficient privilege", "not permitted")):
+    # PostgreSQL error text may contain object names or SQL: use ONLY static
+    # category codes. Schema, lock, table and sequence are diagnostically
+    # different but never disclose identifiers or credentials.
+    if "permission denied for schema" in low:
+        return "SCHEMA_USAGE_DENIED"
+    if "permission denied for sequence" in low:
+        return "SEQUENCE_PRIVILEGE_DENIED"
+    if "permission denied for view" in low:
+        return "VIEW_PRIVILEGE_DENIED"
+    if "permission denied for table" in low or "permission denied for relation" in low:
+        return "TABLE_PRIVILEGE_DENIED"
+    if ("permission denied to lock" in low or
+            "must have select privilege" in low or
+            "permission denied for lock" in low):
+        return "LOCK_PRIVILEGE_DENIED"
+    if "must be owner" in low:
+        return "OWNERSHIP_REQUIRED"
+    if any(part in low for part in ("permission denied", "insufficient privilege",
+                                   "not permitted")):
         return "PRIVILEGE_DENIED"
     if any(part in low for part in ("password authentication failed",
                                    "no password supplied", "role \"")):
