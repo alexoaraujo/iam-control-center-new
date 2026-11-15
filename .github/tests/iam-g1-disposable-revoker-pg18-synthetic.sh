@@ -18,7 +18,9 @@ docker exec "$container" pg_isready -U postgres -d postgres >/dev/null
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U postgres -d postgres <<'SQL'
 CREATE ROLE iam_schema_export_reader LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT;
 CREATE ROLE iam_runtime_test LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB;
-CREATE ROLE neondb_owner LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB;
+CREATE ROLE neondb_owner LOGIN NOSUPERUSER BYPASSRLS NOCREATEROLE NOCREATEDB;
+CREATE ROLE iam_owner NOLOGIN;
+GRANT iam_owner TO neondb_owner WITH INHERIT TRUE, SET TRUE;
 CREATE DATABASE iam_database OWNER neondb_owner;
 SQL
 
@@ -67,6 +69,31 @@ docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U postgres -d iam_dat
 INSERT INTO iam.tenants VALUES (1,'A'),(2,'B');
 INSERT INTO iam.memberships VALUES (1,'A'),(2,'B');
 SQL
+
+# Model Neon catalog more faithfully: all 23 tables and the view belong to
+# the NOLOGIN iam_owner role, while neondb_owner only INHERITs/SETs it.
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U neondb_owner -d iam_database <<'SQL'
+DO $ownership$
+DECLARE rel record;
+BEGIN
+  FOR rel IN
+    SELECT n.nspname,c.relname,c.relkind
+      FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname IN ('iam','audit','app_private')
+        AND c.relkind IN ('r','p','v')
+      ORDER BY n.nspname,c.relname
+  LOOP
+    IF rel.relkind='v' THEN
+      EXECUTE format('ALTER VIEW %I.%I OWNER TO iam_owner',rel.nspname,rel.relname);
+    ELSE
+      EXECUTE format('ALTER TABLE %I.%I OWNER TO iam_owner',rel.nspname,rel.relname);
+    END IF;
+  END LOOP;
+END $ownership$;
+SQL
+owned="$(docker exec "$container" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d iam_database   -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p','v') AND pg_get_userbyid(c.relowner)='iam_owner'" | tail -1)"
+test "$owned" = 24 || { echo 'BLOCKED_G1_PG18_OWNER_GRAPH'; exit 2; }
+echo 'PASS_G1_PG18_INHERITED_OWNER_ROLE_TOPOLOGY'
 
 python3 - <<'PY' > "$tmp/inventory.sql"
 import importlib.util
