@@ -1,0 +1,69 @@
+name: IAM G1 PG18 synthetic privilege lease and independent revoke
+
+on:
+  push:
+    branches:
+      - test/iam-g1-pg18-offline-lease-20261115
+    paths:
+      - ".github/workflows/iam-g1-pg18-lease-synthetic.yml"
+      - "database/tests/iam-g1-pg18-lease-synthetic.sh"
+      - "docs/operations/iam-g1-pg18-synthetic-lease-rehearsal-20261115.md"
+  pull_request:
+    paths:
+      - ".github/workflows/iam-g1-pg18-lease-synthetic.yml"
+      - "database/tests/iam-g1-pg18-lease-synthetic.sh"
+      - "docs/operations/iam-g1-pg18-synthetic-lease-rehearsal-20261115.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-g1-synthetic-lease-local
+  cancel-in-progress: false
+
+jobs:
+  pg18-ephemeral-lease:
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      (github.event_name == 'pull_request' ||
+       github.ref == 'refs/heads/test/iam-g1-pg18-offline-lease-20261115')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # NO environment, secrets, database URLs, Neon API keys, Production or external DB.
+    steps:
+      - name: Checkout unprivileged source (no retained credentials)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Fail closed if synthetic rehearsal contains external database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e .env
+          bash -n database/tests/iam-g1-pg18-lease-synthetic.sh
+          if grep -Eq 'neon[.]tech|IAM_EXPORT_LEASE_DATABASE_URL|IAM_CANONICAL_SOURCE_URL|IAM_CANONICAL_TARGET_URL|NEON_API_KEY|https://|postgresql://' database/tests/iam-g1-pg18-lease-synthetic.sh; then
+            echo "::error::BLOCKED_G1_SYNTHETIC_EXTERNAL_DATABASE_OR_URL"
+            exit 2
+          fi
+          grep -q 'docker run -d --rm.*--network none' database/tests/iam-g1-pg18-lease-synthetic.sh
+          grep -q 'postgres:18-bookworm' database/tests/iam-g1-pg18-lease-synthetic.sh
+          echo "PASS_G1_SYNTHETIC_CODE_NO_EXTERNAL_DB_ACCESS"
+      - name: Real PostgreSQL18 synthetic lease, RLS A/B and revoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 420 bash database/tests/iam-g1-pg18-lease-synthetic.sh
+      - name: No artifact, no data and no environment secret was used
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "### G1 PG18 synthetic temporary lease (NOT Neon)"
+            echo "- The PostgreSQL 18 server was ephemeral Docker with --network none"
+            echo "- Privilege changes affected only synthetic local fixture"
+            echo "- RLS A/B and no-context, no SELECT of synthetic keys"
+            echo "- Real PG18 schema-only dump only if synthetic lock/USAGE permissions sufficed"
+            echo "- Post-COMMIT independent role inventory and revoke re-denial"
+            echo "- No Neon credentials, GitHub environment, Production, data artifacts or approval bypass"
+            echo "- NOT evidence of real Neon pg_dump, role parity or isolated restore"
+          } >> "$GITHUB_STEP_SUMMARY"
