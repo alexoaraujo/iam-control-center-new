@@ -8,6 +8,8 @@ on:
       - ".github/workflows/iam-g1-lease-schema-probe.yml"
       - "database/scripts/iam-g1-lease-schema-probe.py"
       - "database/tests/test-iam-g1-lease-schema-probe.py"
+      - "database/scripts/iam-g1-role-parity-readonly.sql"
+      - "docs/operations/iam-g1-lease-pg18-authenticated-schema-probe-20261115.md"
   workflow_dispatch:
     inputs:
       confirmation:
