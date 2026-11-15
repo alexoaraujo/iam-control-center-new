@@ -16,7 +16,7 @@ Source: `database/tests/iam-g1-pg18-lease-synthetic.sh`, executed by
   no tenant context reads 0 rows. All verification from independent
   authenticated local PostgreSQL sessions with FORCE RLS.
 - A temporary local fixture lease grants `USAGE ON SCHEMA iam,audit,app_private`
-  and `MAINTAIN` only on three named synthetic tables.
+  and `MAINTAIN` only on three named synthetic tables **and one view**.
 - A real `pg_dump --schema-only --format=custom` with PostgreSQL 18 **succeeds
   on the synthetic fixture**. The TOC contains schema objects, no TABLE DATA
   or BLOB DATA. The temporary archive and all synthetic test data stay in the
@@ -27,15 +27,17 @@ Source: `database/tests/iam-g1-pg18-lease-synthetic.sh`, executed by
   invocable. This is a **documented risk**, not an acceptable consequence to
   ignore in Neon.
 - The fixture privilege lease is revoked and committed. A separate connection
-  verifies 0/3 schema USAGE, 0/3 table MAINTAIN, 0/3 table SELECT. A subsequent
+  verifies 0/3 schema USAGE, 0/4 relation MAINTAIN (including the view), 0/4 relation SELECT. A subsequent
   pg_dump is denied again; the synthetic SECURITY DEFINER function is no
   longer callable.
 
 ## Why this is NOT permission to perform a Neon grant
 
+The test initially exposed an incomplete REVOKE: the added view retained MAINTAIN and the independent parity check correctly failed. The corrective test updates REVOKE to include the view and requires a new CI PASS.
+
 The actual Neon PostgreSQL 18 branch `br-spring-grass-b6gap6kp` has **23**
 tables, **3** sequences and **1** view; the synthetic fixture has only three
-tables and an identity sequence. It cannot prove that every production-schema
+tables, an identity sequence and one view. It cannot prove that every production-schema
 object can be dumped under this privilege set.
 
 The actual Neon `app_private.context_keys` has a `secret bytea` column and
