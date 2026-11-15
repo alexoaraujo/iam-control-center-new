@@ -22,12 +22,12 @@ const check = ({ conclusion = "success", head = sha, workflowApp = "github-actio
   }],
 });
 const run = ({ head = sha, path = ".github/workflows/docs-preview-gate.yml",
-  conclusion = "success" } = {}) => ({
-  id: 123, path, head_sha: head, event: "pull_request", conclusion,
+  conclusion = "success", status = "completed" } = {}) => ({
+  id: 123, path, head_sha: head, event: "pull_request", status, conclusion,
 });
 
 function runEvidence({ files = ["README.md"], checks = check(), workflowRun = run(),
-  sourceRepo = "alexoaraujo/iam-control-center-new" } = {}) {
+  pendingRun = null, sourceRepo = "alexoaraujo/iam-control-center-new" } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "iam-docs-bridge-"));
   try {
     const fakeGh = join(directory, "gh");
@@ -35,7 +35,14 @@ function runEvidence({ files = ["README.md"], checks = check(), workflowRun = ru
 case "$*" in
   *"/pulls/"*"/files?per_page=100"*) cat "$MOCK_FILES" ;;
   *"/check-runs?per_page=100"*) cat "$MOCK_CHECKS" ;;
-  *"/actions/runs/"*) cat "$MOCK_RUN" ;;
+  *"/actions/runs/"*)
+    if [ -n "$MOCK_RUN_PENDING" ] && [ ! -e "$MOCK_RUN_SEEN" ]; then
+      : > "$MOCK_RUN_SEEN"
+      cat "$MOCK_RUN_PENDING"
+    else
+      cat "$MOCK_RUN"
+    fi
+    ;;
   *) exit 44 ;;
 esac
 `);
@@ -46,6 +53,9 @@ esac
     writeFileSync(filesPath, files.join("\n") + "\n");
     writeFileSync(checksPath, JSON.stringify(checks));
     writeFileSync(runPath, JSON.stringify(workflowRun));
+    const pendingPath = join(directory, "pending");
+    const seenPath = join(directory, "seen");
+    if (pendingRun) writeFileSync(pendingPath, JSON.stringify(pendingRun));
     const result = spawnSync("bash", ["-c", shell], {
       encoding: "utf8",
       timeout: 10000,
@@ -62,6 +72,8 @@ esac
         MOCK_FILES: filesPath,
         MOCK_CHECKS: checksPath,
         MOCK_RUN: runPath,
+        MOCK_RUN_PENDING: pendingRun ? pendingPath : "",
+        MOCK_RUN_SEEN: seenPath,
       },
     });
     assert.equal(result.error, undefined, String(result.error));
@@ -118,4 +130,22 @@ test("forked PRs cannot use the documentation exemption", () => {
   const result = runEvidence({ sourceRepo: "untrusted/repository" });
   assert.notEqual(result.status, 0);
   assert.match(result.output, /same-repository PR/);
+});
+
+test("keeps polling when the check succeeds before its workflow completes", () => {
+  for (const status of ["in_progress", "queued", "waiting"]) {
+    const result = runEvidence({ pendingRun: run({ status, conclusion: null }) });
+    assert.equal(result.status, 0, status + ": " + result.output);
+    assert.match(result.output, /Waiting for trusted docs workflow to finish/);
+    assert.match(result.output, /PASS: verified docs-preview-gate SUCCESS/);
+  }
+});
+
+test("a completed failed workflow or an unknown status blocks despite a successful job check", () => {
+  const failedRun = runEvidence({ workflowRun: run({ conclusion: "failure" }) });
+  assert.notEqual(failedRun.status, 0);
+  assert.match(failedRun.output, /completed without SUCCESS/);
+  const invalidState = runEvidence({ workflowRun: run({ status: "unknown" }) });
+  assert.notEqual(invalidState.status, 0);
+  assert.match(invalidState.output, /Unexpected trusted docs workflow status/);
 });
