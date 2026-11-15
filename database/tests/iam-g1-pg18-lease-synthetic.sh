@@ -124,7 +124,7 @@ echo "PASS_G1_SYNTHETIC_PG18_SCHEMA_ONLY_DUMP"
 
 # REVOKE is committed in a separate session; subsequent proof uses another.
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U postgres -d iam_database >/dev/null <<'SQL'
-REVOKE MAINTAIN ON TABLE iam.tenant_demo, audit.audit_event, app_private.context_keys
+REVOKE MAINTAIN ON TABLE iam.tenant_demo, iam.tenant_view, audit.audit_event, app_private.context_keys
   FROM iam_schema_export_reader;
 REVOKE USAGE ON SCHEMA iam, audit, app_private FROM iam_schema_export_reader;
 SQL
