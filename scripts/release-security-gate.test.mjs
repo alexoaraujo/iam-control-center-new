@@ -95,7 +95,12 @@ test("trusted docs evidence is in the required security-gate dependency chain", 
   assert.ok(bridge.includes('.head_sha == $sha'));
   assert.ok(bridge.includes('.app.slug == "github-actions"'));
   assert.ok(bridge.includes('.path == ".github/workflows/docs-preview-gate.yml"'));
-  assert.ok(bridge.includes('.conclusion == "success"'));
+  assert.ok(bridge.includes("run_status="));
+  assert.ok(bridge.includes("run_conclusion="));
+  assert.ok(bridge.includes('if [[ "${run_conclusion}" != success ]]'));
+  for (const status of ["completed", "queued", "in_progress", "pending", "waiting", "requested"]) {
+    assert.ok(bridge.includes(status), status);
+  }
   assert.ok(bridge.includes("README.md|SECURITY.md|docs/*"));
   assert.ok(gate.includes("      - docs-preview-evidence"));
   assert.ok(gate.includes("DOCS_PREVIEW_RESULT: ${{ needs.docs-preview-evidence.result }}"));
