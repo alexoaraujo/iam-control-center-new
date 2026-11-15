@@ -73,6 +73,9 @@ SQL
 # Model Neon catalog more faithfully: all 23 tables and the view belong to
 # the NOLOGIN iam_owner role, while neondb_owner only INHERITs/SETs it.
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U neondb_owner -d iam_database <<'SQL'
+ALTER SCHEMA iam OWNER TO iam_owner;
+ALTER SCHEMA audit OWNER TO iam_owner;
+ALTER SCHEMA app_private OWNER TO iam_owner;
 DO $ownership$
 DECLARE rel record;
 BEGIN
