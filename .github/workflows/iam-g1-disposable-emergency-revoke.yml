@@ -68,6 +68,7 @@ jobs:
             "${api}" > "${RUNNER_TEMP}/iam-g1-revoke-environment.json"
           jq -e '
             .name == "IAM-G1-Disposable-Lease-Revocation"
+            and .can_admins_bypass == false
             and .deployment_branch_policy.protected_branches == false
             and .deployment_branch_policy.custom_branch_policies == true
             and any(.protection_rules[]?;
@@ -75,7 +76,7 @@ jobs:
               and .prevent_self_review == true
               and any(.reviewers[]?; .type == "User" and .reviewer.login == "alexoaraujo83"))
           ' "${RUNNER_TEMP}/iam-g1-revoke-environment.json" >/dev/null || {
-            echo "::error::BLOCKED_G1_ENV_REVIEWER_OR_BRANCH_POLICY"; exit 2;
+            echo "::error::BLOCKED_G1_ENV_REVIEWER_BYPASS_OR_BRANCH_POLICY"; exit 2;
           }
           curl --fail --silent --show-error --max-time 15 \
             --header "Accept: application/vnd.github+json" \
