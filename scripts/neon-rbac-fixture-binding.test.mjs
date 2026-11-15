@@ -27,6 +27,7 @@ test("RBAC E2E denies cross-branch credentials before fixture writes", () => {
 
 test("RBAC credentials remain scoped to one protected Preview E2E step", () => {
   assert.match(workflow, /^\s+environment:\n\s+name: Preview$/m);
-  assert.match(workflow, /^\s+NEON_RBAC_TEST_OWNER_DATABASE_URL: \$\{\{ secrets\.NEON_RBAC_TEST_OWNER_DATABASE_URL \}\}$/m);
+  assert.ok(workflow.includes("NEON_RBAC_TEST_OWNER_DATABASE_URL: ${{ github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && secrets.NEON_RBAC_TEST_OWNER_DATABASE_URL || '' }}"));
+  assert.doesNotMatch(workflow, /^\\s+NEON_RBAC_TEST_OWNER_DATABASE_URL: \\$\\{\\{ secrets\\.NEON_RBAC_TEST_OWNER_DATABASE_URL \\}\\}$/m);
   assert.doesNotMatch(workflow, /NEON_API_KEY: \$\{\{ secrets\./);
 });
