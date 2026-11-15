@@ -1,0 +1,66 @@
+name: IAM required security gate — PostgreSQL 18 signed RLS
+
+# This job provides the exact "security-gate" context REQUIRED by the active
+# protect-main GitHub ruleset. It runs real behavioral checks, not a dummy pass.
+# Never changes Neon, Auth0, Vercel, environment secrets or production.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-required-security-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  security-gate:
+    name: security-gate
+    if: github.repository == 'alexoaraujo/iam-control-center-new'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: iam_source_restore_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d iam_source_restore_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres@localhost:5432/iam_source_restore_test
+      PGPASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout reviewed source without persisted Git credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run authenticated PostgreSQL 18 source restore, RLS A/B and rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
+            --workdir /workspace \
+            --env DATABASE_URL --env PGPASSWORD \
+            postgres:18-bookworm \
+            bash -euo pipefail -c '
+              test "$(psql -X -w -At -v ON_ERROR_STOP=1 "$DATABASE_URL" -c "SHOW server_version_num")" -ge 180000
+              bash database/tests/restore-source-schema.sh
+              bash database/tests/run-ci-runtime-login.sh
+              psql -X -w "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/runtime-rls-contract.sql
+              psql -X -w "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/iam-required-security-gate-assert.sql
+            '
+          echo "PASS_IAM_SECURITY_GATE_LOCAL_PG18_SIGNED_RLS_A_B_ROLLBACK"
+          echo "This gate does NOT replace live Auth0 E2E, Neon revoker preflight, approval, backup/restore or release checks." >> "$GITHUB_STEP_SUMMARY"
