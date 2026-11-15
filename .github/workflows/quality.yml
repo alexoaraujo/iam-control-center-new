@@ -481,13 +481,34 @@ jobs:
               jq -e --arg sha "${PR_HEAD_SHA}" '
                 .path == ".github/workflows/docs-preview-gate.yml" and
                 .head_sha == $sha and
-                .event == "pull_request" and .conclusion == "success"
+                .event == "pull_request"
               ' <<< "${run}" >/dev/null || {
                 echo "::error::SUCCESS check did not come from approved docs workflow and SHA"
                 exit 1
               }
-              echo "PASS: verified docs-preview-gate SUCCESS in trusted workflow at exact SHA"
-              exit 0
+              # A job can report success before the entire workflow is terminal.
+              # Do not incorrectly fail a legitimate in-progress workflow.
+              run_status="$(jq -r '.status // "missing"' <<< "${run}")"
+              run_conclusion="$(jq -r '.conclusion // "missing"' <<< "${run}")"
+              case "${run_status}" in
+                completed)
+                  if [[ "${run_conclusion}" != success ]]; then
+                    echo "::error::Trusted docs workflow completed without SUCCESS: ${run_conclusion}"
+                    exit 1
+                  fi
+                  echo "PASS: verified docs-preview-gate SUCCESS in trusted workflow at exact SHA"
+                  exit 0
+                  ;;
+                queued|in_progress|pending|waiting|requested)
+                  echo "Waiting for trusted docs workflow to finish: ${run_status}"
+                  sleep "${DOCS_PREVIEW_POLL_SECONDS:-10}"
+                  continue
+                  ;;
+                *)
+                  echo "::error::Unexpected trusted docs workflow status: ${run_status}"
+                  exit 1
+                  ;;
+              esac
             fi
             sleep "${DOCS_PREVIEW_POLL_SECONDS:-10}"
           done
