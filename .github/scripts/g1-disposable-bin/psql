@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# G1 branch-only revoker PostgreSQL 18 client with installed system CA.
+# Do not use the Development emergency wrapper, stock server image or PR secrets.
+set -euo pipefail
+exec docker run --rm -i --network host --read-only \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --tmpfs /tmp:rw,nosuid,nodev,size=16m \
+  --env PGHOST --env PGPORT --env PGDATABASE --env PGUSER \
+  --env PGPASSWORD --env PGSSLMODE --env PGSSLROOTCERT \
+  --env PGCONNECT_TIMEOUT --env PGAPPNAME --env PGOPTIONS \
+  iam-g1-pg18-system-ca:local psql "$@"
