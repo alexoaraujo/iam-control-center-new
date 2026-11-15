@@ -56,12 +56,16 @@ CREATE SEQUENCE audit.outbox_id_seq;
 CREATE SEQUENCE iam.security_events_id_seq;
 CREATE POLICY tenant_only ON iam.tenants USING (tenant = current_setting('app.tenant',true));
 CREATE POLICY membership_only ON iam.memberships USING (tenant = current_setting('app.tenant',true));
-INSERT INTO iam.tenants VALUES (1,'A'),(2,'B');
-INSERT INTO iam.memberships VALUES (1,'A'),(2,'B');
 CREATE FUNCTION iam.clear_tenant_context() RETURNS text LANGUAGE sql
  SECURITY DEFINER SET search_path TO pg_catalog AS $$ SELECT 'synthetic'::text $$;
 GRANT USAGE ON SCHEMA iam TO iam_runtime_test;
 GRANT SELECT ON iam.tenants,iam.memberships TO iam_runtime_test;
+SQL
+
+# Fixture seed by synthetic postgres superuser: do not bypass FORCE RLS as the app owner.
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U postgres -d iam_database <<'SQL'
+INSERT INTO iam.tenants VALUES (1,'A'),(2,'B');
+INSERT INTO iam.memberships VALUES (1,'A'),(2,'B');
 SQL
 
 python3 - <<'PY' > "$tmp/inventory.sql"
