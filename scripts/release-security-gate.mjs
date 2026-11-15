@@ -5,7 +5,7 @@ const sha = /^[a-f0-9]{40}$/;
 const docOnly = (file) => /^(docs\/|README\.md$|SECURITY\.md$)/.test(file);
 
 export function decideSecurityGate({
-  quality, previewRequired, preview, syncAuth0, auth0E2E, auth0Enabled, changedFiles,
+  quality, previewRequired, preview, syncAuth0, auth0E2E, auth0Enabled, docsPreview, changedFiles,
 }) {
   if (quality !== "success") return { pass: false, reason: "QUALITY_NOT_SUCCESS" };
   if (!Array.isArray(changedFiles) || changedFiles.length === 0 ||
@@ -15,7 +15,12 @@ export function decideSecurityGate({
   // Documentation-only changes have no runtime surface and do not require
   // browser credentials. Do not trust preview_required alone; recheck Git diff.
   if (previewRequired === "false" && changedFiles.every(docOnly)) {
-    return { pass: true, reason: "DOCUMENTATION_ONLY" };
+    // The separate docs workflow is not a required branch-protection check.
+    // Require a trusted, exact-SHA, successful docs-preview-gate readback.
+    if (docsPreview !== "success") {
+      return { pass: false, reason: "DOCS_PREVIEW_NOT_SUCCESS" };
+    }
+    return { pass: true, reason: "DOCUMENTATION_ONLY_PREVIEW_VERIFIED" };
   }
   // A false Preview hint with code, workflow or SQL changes is not a bypass.
   if (previewRequired !== "true") {
@@ -50,6 +55,7 @@ function main() {
     syncAuth0: process.env.SYNC_AUTH0_RESULT,
     auth0E2E: process.env.AUTH0_E2E_RESULT,
     auth0Enabled: process.env.AUTH0_E2E_ENABLED,
+    docsPreview: process.env.DOCS_PREVIEW_RESULT,
     changedFiles: files,
   });
   if (!result.pass) {
