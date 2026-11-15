@@ -137,6 +137,23 @@ class LeaseProbeContract(unittest.TestCase):
             self.assertNotIn(secret, str(exc.exception))
             self.assertFalse((Path(tmp) / "pg-secret.env").exists())
 
+    def test_role_audit_rejects_replication_enabled_iam_roles(self):
+        audit = (SCRIPT.parent / "iam-g1-role-parity-readonly.sql").read_text(encoding="utf8")
+        for enforced in (
+            "r.rolreplication IS DISTINCT FROM false",
+            "r.rolbypassrls IS DISTINCT FROM false",
+            "r.rolsuper IS DISTINCT FROM false",
+            "r.rolcreaterole IS DISTINCT FROM false",
+            "r.rolcreatedb IS DISTINCT FROM false",
+            "r.rolinherit IS DISTINCT FROM e.can_inherit",
+            "r.rolcanlogin IS DISTINCT FROM e.can_login",
+            "m.admin_option", "m.inherit_option", "m.set_option",
+        ):
+            self.assertIn(enforced, audit)
+        self.assertIn("canonical_role_graph_pass", audit)
+        self.assertNotIn("ALTER ROLE", audit.split("WITH expected_roles", 1)[1])
+        self.assertNotIn("GRANT ", audit.split("WITH expected_roles", 1)[1])
+
     def test_credentialed_workflow_does_not_reuse_development_url(self):
         content = (SCRIPT.parents[2] / ".github" / "workflows" /
                    "iam-g1-lease-schema-probe.yml").read_text(encoding="utf8")
