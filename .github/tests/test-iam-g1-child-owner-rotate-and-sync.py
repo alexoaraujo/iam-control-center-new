@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline contract tests for branch-only owner password rotation and secret sync."""
 import importlib.util
+import io
 from pathlib import Path
 from unittest import TestCase, main, mock
 
@@ -62,7 +63,8 @@ class Contracts(TestCase):
 
     def test_secret_set_via_stdin_never_argv(self):
         full_url = m.connection_url("synthetic-password")
-        with mock.patch.object(m, "gh", return_value="") as cli:
+        with mock.patch.object(m, "gh", return_value="") as cli, \
+             mock.patch("sys.stdout", new_callable=io.StringIO):
             m.sync_secret(full_url)
         cli.assert_called_once_with(
             ["secret", "set", m.SECRET, "--env", m.ENV, "--repo", m.REPO],
@@ -75,7 +77,8 @@ class Contracts(TestCase):
              mock.patch.object(m, "obtain_password",
                                return_value="synthetic-password") as get_pwd, \
              mock.patch.object(m, "sync_secret") as sync, \
-             mock.patch.object(m, "test_new_connection") as conn:
+             mock.patch.object(m, "test_new_connection") as conn, \
+             mock.patch("sys.stdout", new_callable=io.StringIO):
             m.execute("rotate", m.CONFIRM)
             get_pwd.assert_called_once_with("unit-key", "rotate")
             sync.assert_called_once_with(
