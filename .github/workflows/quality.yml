@@ -454,7 +454,7 @@ jobs:
           fi
           # The docs Preview gate lives in another workflow; poll its exact commit check.
           # Never accept a similarly named check from a different workflow or an older SHA.
-          for attempt in $(seq 1 84); do
+          for attempt in $(seq 1 "${DOCS_PREVIEW_POLL_ATTEMPTS:-84}"); do
             checks="$(gh api "repos/${REPOSITORY}/commits/${PR_HEAD_SHA}/check-runs?per_page=100")"
             check="$(jq -c --arg sha "${PR_HEAD_SHA}" '
               [.check_runs[] | select(
@@ -489,7 +489,7 @@ jobs:
               echo "PASS: verified docs-preview-gate SUCCESS in trusted workflow at exact SHA"
               exit 0
             fi
-            sleep 10
+            sleep "${DOCS_PREVIEW_POLL_SECONDS:-10}"
           done
           echo "::error::Required exact-SHA docs Preview check absent or timed out"
           exit 1
