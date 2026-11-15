@@ -432,12 +432,56 @@ class IsolatedRunnerContract(unittest.TestCase):
                 with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP"):
                     module.check_migrator_owner_membership({}, {}, Path("/tmp"))
 
-    def test_pgcrypto_requirement_is_source_installed_target_available(self):
-        with patch.object(module, "scalar", side_effect=["1", "1"]):
+    def test_pgcrypto_requires_preinstalled_public_extension_on_both_branches(self):
+        # A package available in pg_available_extensions is not installed:
+        # schema-only archives exclude CREATE EXTENSION in public.
+        with patch.object(module, "scalar", side_effect=["1", "1", "1"]) as query:
             module.check_pgcrypto_availability({}, {}, Path("/tmp"))
-        with patch.object(module, "scalar", side_effect=["1", "0"]):
-            with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_PGCRYPTO"):
-                module.check_pgcrypto_availability({}, {}, Path("/tmp"))
+        self.assertEqual(query.call_count, 3)
+        source_sql = query.call_args_list[0].args[0]
+        installed_sql = query.call_args_list[2].args[0]
+        self.assertEqual(source_sql, installed_sql)
+        self.assertIn("pg_extension", installed_sql)
+        self.assertIn("n.nspname='public'", installed_sql)
+        self.assertIn("pg_available_extensions", query.call_args_list[1].args[0])
+
+        for source, available, installed, expected in (
+            ("0", "1", "1", "BLOCKED_PGCRYPTO"),
+            ("1", "0", "1", "BLOCKED_PGCRYPTO"),
+            ("1", "1", "0", "BLOCKED_PGCRYPTO_TARGET_NOT_INSTALLED"),
+            ("1", "1", "", "BLOCKED_PGCRYPTO_TARGET_NOT_INSTALLED"),
+        ):
+            with self.subTest(source=source, available=available, installed=installed):
+                with patch.object(module, "scalar", side_effect=[
+                    source, available, installed
+                ]):
+                    with self.assertRaisesRegex(module.GateBlocked, expected):
+                        module.check_pgcrypto_availability({}, {}, Path("/tmp"))
+
+    def test_pgcrypto_target_not_installed_blocks_before_dump_and_ddl(self):
+        for mode, approval, confirmation in (
+            ("readiness_only", "", "NO_DDL"),
+            ("export_only", "", "NO_DDL"),
+            ("restore_isolated", module.APPROVAL, module.CONFIRMATION),
+        ):
+            with (
+                self.subTest(mode=mode),
+                self.env(approval=approval, confirm=confirmation),
+                patch.object(module, "check_source"),
+                patch.object(module, "check_target"),
+                patch.object(module, "check_restore_acl_principals"),
+                patch.object(module, "check_runtime_role_contract"),
+                patch.object(module, "check_migrator_owner_membership"),
+                patch.object(module, "check_schema_export_lock_permissions"),
+                patch.object(module, "scalar", side_effect=["1", "1", "0"]),
+                patch.object(module, "docker_run") as docker,
+            ):
+                with self.assertRaisesRegex(
+                    module.GateBlocked, "BLOCKED_PGCRYPTO_TARGET_NOT_INSTALLED"
+                ):
+                    module.execute(mode)
+                docker.assert_not_called()
+
 
     def test_auth_only_checks_two_pinned_roles_without_dump_restore_or_ddl(self):
         expected = [

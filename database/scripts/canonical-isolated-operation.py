@@ -434,14 +434,29 @@ def check_migrator_owner_membership(source_creds: dict[str, str],
 def check_pgcrypto_availability(source_creds: dict[str, str],
                                target_creds: dict[str, str],
                                workspace: Path) -> None:
-    source = scalar(
-        "SELECT count(*) FROM pg_extension WHERE extname='pgcrypto'",
-        source_creds, workspace).strip()
-    target = scalar(
+    """Fail before any dump/restore if the scoped schema needs missing pgcrypto.
+
+    pg_dump --schema=iam/audit/app_private excludes the public extension
+    definition. An available *package* is not an installed extension: the
+    target must already have pgcrypto installed in public under a separate,
+    independently approved DDL change. This guard never installs it.
+    """
+    installed_in_public = """SELECT count(*) FROM pg_extension e
+      JOIN pg_namespace n ON n.oid=e.extnamespace
+      WHERE e.extname='pgcrypto' AND n.nspname='public'"""
+    source = scalar(installed_in_public, source_creds, workspace).strip()
+    target_available = scalar(
         "SELECT count(*) FROM pg_available_extensions WHERE name='pgcrypto'",
         target_creds, workspace).strip()
-    if source != "1" or target != "1":
+    target_installed = scalar(
+        installed_in_public, target_creds, workspace).strip()
+    if source != "1" or target_available != "1":
         raise GateBlocked("BLOCKED_PGCRYPTO: source extension or target package missing")
+    if target_installed != "1":
+        raise GateBlocked(
+            "BLOCKED_PGCRYPTO_TARGET_NOT_INSTALLED: extension must be present "
+            "in public before schema-only restore; target DDL approval required"
+        )
 
 
 def check_authenticated_readiness(source_creds: dict[str, str],
