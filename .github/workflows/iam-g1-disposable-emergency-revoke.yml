@@ -58,7 +58,21 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/tests/test-iam-g1-disposable-emergency-revoke.py
-          chmod +x .github/scripts/psql
+          bash -n .github/scripts/g1-disposable-bin/psql
+          chmod +x .github/scripts/g1-disposable-bin/psql
+          grep -q 'iam-g1-pg18-system-ca:local psql' .github/scripts/g1-disposable-bin/psql
+          grep -q -- '--env PGOPTIONS' .github/scripts/g1-disposable-bin/psql
+          echo 'PASS_G1_REVOKER_INDEPENDENT_TLS_CLIENT_WRAPPER'
+      - name: Build PostgreSQL 18 client with system certificate authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull --file database/tests/fixtures/pg18-system-ca.Dockerfile \
+            --tag iam-g1-pg18-system-ca:local database/tests/fixtures
+          docker run --rm --network none --read-only \
+            --entrypoint sh iam-g1-pg18-system-ca:local \
+            -ec 'test -s /etc/ssl/certs/ca-certificates.crt && test "$SSL_CERT_FILE" = /etc/ssl/certs/ca-certificates.crt && command -v psql'
+          echo 'PASS_G1_REVOKER_CA_PROVISIONED_PG18_CLIENT'
       - name: PostgreSQL 18 independent operator (preflight or revoke)
         shell: bash
         env:
@@ -71,6 +85,6 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          export PATH="$GITHUB_WORKSPACE/.github/scripts:$PATH"
+          export PATH="$GITHUB_WORKSPACE/.github/scripts/g1-disposable-bin:$PATH"
           python3 .github/scripts/iam-g1-disposable-emergency-revoke.py \
             --mode "$MODE" --confirm "$CONFIRM"
