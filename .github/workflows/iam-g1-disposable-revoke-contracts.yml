@@ -60,5 +60,6 @@ jobs:
           docker build --pull --file database/tests/fixtures/pg18-system-ca.Dockerfile --tag iam-g1-pg18-system-ca:local database/tests/fixtures
           docker run --rm --network none --read-only --entrypoint sh iam-g1-pg18-system-ca:local -ec 'test -s /etc/ssl/certs/ca-certificates.crt && test "$SSL_CERT_FILE" = /etc/ssl/certs/ca-certificates.crt && psql --version | grep -Eq "psql \(PostgreSQL\) 18"'
           grep -q 'PASS_G1_ENV_PROTECTION_REVIEWERS_MAIN' .github/workflows/iam-g1-disposable-emergency-revoke.yml
+          grep -q 'and .can_admins_bypass == false' .github/workflows/iam-g1-disposable-emergency-revoke.yml
           grep -q 'BLOCKED_G1_REVOKER_INDEPENDENT_SHA_REVIEW' .github/workflows/iam-g1-disposable-emergency-revoke.yml
           echo "PASS_G1_CA_PROVISIONED_CLIENT_OFFLINE"
