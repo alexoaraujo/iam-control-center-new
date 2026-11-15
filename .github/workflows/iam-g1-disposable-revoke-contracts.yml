@@ -8,11 +8,17 @@ on:
       - ".github/scripts/iam-g1-disposable-emergency-revoke.py"
       - ".github/tests/test-iam-g1-disposable-emergency-revoke.py"
       - ".github/workflows/iam-g1-disposable-revoke-contracts.yml"
+      - ".github/workflows/iam-g1-disposable-emergency-revoke.yml"
+      - ".github/scripts/g1-disposable-bin/psql"
+      - "database/tests/fixtures/pg18-system-ca.Dockerfile"
   pull_request:
     paths:
       - ".github/scripts/iam-g1-disposable-emergency-revoke.py"
       - ".github/tests/test-iam-g1-disposable-emergency-revoke.py"
       - ".github/workflows/iam-g1-disposable-revoke-contracts.yml"
+      - ".github/workflows/iam-g1-disposable-emergency-revoke.yml"
+      - ".github/scripts/g1-disposable-bin/psql"
+      - "database/tests/fixtures/pg18-system-ca.Dockerfile"
 
 permissions:
   contents: read
@@ -32,3 +38,20 @@ jobs:
           python3 -m py_compile .github/scripts/iam-g1-disposable-emergency-revoke.py
           python3 .github/tests/test-iam-g1-disposable-emergency-revoke.py
           echo "PASS_G1_DISPOSABLE_REVOKER_OFFLINE_CONTRACTS"
+
+      - name: Verify dedicated operator client has OS CA and isolated wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n .github/scripts/g1-disposable-bin/psql
+          grep -q -- '--network host' .github/scripts/g1-disposable-bin/psql
+          grep -q -- '--read-only' .github/scripts/g1-disposable-bin/psql
+          grep -q -- '--env PGOPTIONS' .github/scripts/g1-disposable-bin/psql
+          grep -q 'iam-g1-pg18-system-ca:local psql' .github/scripts/g1-disposable-bin/psql
+          grep -q 'g1-disposable-bin:' .github/workflows/iam-g1-disposable-emergency-revoke.yml
+          if grep -Fq 'chmod +x .github/scripts/psql' .github/workflows/iam-g1-disposable-emergency-revoke.yml; then
+            echo "::error::BLOCKED_G1_LEGACY_DEVELOPMENT_PSQL_WRAPPER"; exit 2
+          fi
+          docker build --pull --file database/tests/fixtures/pg18-system-ca.Dockerfile --tag iam-g1-pg18-system-ca:local database/tests/fixtures
+          docker run --rm --network none --read-only --entrypoint sh iam-g1-pg18-system-ca:local -ec 'test -s /etc/ssl/certs/ca-certificates.crt && test "$SSL_CERT_FILE" = /etc/ssl/certs/ca-certificates.crt && psql --version | grep -Eq "psql \(PostgreSQL\) 18"'
+          echo "PASS_G1_CA_PROVISIONED_CLIENT_OFFLINE"
