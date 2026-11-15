@@ -84,8 +84,8 @@ test("a successful docs Preview never exempts mixed or sensitive changes from Au
 });
 test("trusted docs evidence is in the required security-gate dependency chain", () => {
   const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
-  const bridge = workflow.split("\\n  docs-preview-evidence:\\n")[1]?.split("\\n  security-gate:\\n")[0];
-  const gate = workflow.split("\\n  security-gate:\\n")[1];
+  const bridge = workflow.split("\n  docs-preview-evidence:\n")[1]?.split("\n  security-gate:\n")[0];
+  const gate = workflow.split("\n  security-gate:\n")[1];
   assert.ok(bridge);
   assert.ok(bridge.includes("name: docs-preview-evidence"));
   assert.ok(bridge.includes("actions: read"));
