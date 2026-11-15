@@ -88,6 +88,47 @@ dump application data. Do not grant it by default. `SELECT` and
 `BYPASSRLS` are also forbidden without a separately approved backup identity
 and tenant/RLS access proof.
 
+## PG18 privilege-denial classification (latest diagnostic, no grants)
+
+The first **real** authenticated direct run reached `pg_dump` and returned
+`PG_DUMP_PRIVILEGE_DENIED`. The exact server-side failed object/operation
+was intentionally suppressed for privacy. It was **not** a failed password.
+
+A read-only, authenticated catalog query from the disposable branch reports:
+
+- 23 ordinary tables (20 `iam`, 2 `audit`, 1 `app_private`),
+  3 sequences and 1 view; no SELECT/MAINTAIN/INSERT/UPDATE/DELETE/TRUNCATE
+  privileges on these objects.
+- No `USAGE` or `CREATE` on any of the three application schemas;
+  `rolbypassrls=false`.
+- These are distinct missing privilege classes. PostgreSQL 18 documents
+  `LOCK TABLE ... ACCESS SHARE` as requiring an appropriate table privilege:
+  `SELECT` permits this specific lock; `MAINTAIN` also permits locks but
+  grants **other maintenance capabilities**. Neither is a harmless metadata-only
+  grant. PostgreSQL `pg_dump` acquires shared locks, even when
+  `--schema-only` excludes application rows.
+
+Official references:
+- https://www.postgresql.org/docs/18/sql-lock.html
+- https://www.postgresql.org/docs/18/app-pgdump.html
+- https://www.postgresql.org/docs/18/ddl-priv.html
+
+The updated fail-closed runner classifies the server denial in a static category
+(`SCHEMA_USAGE_DENIED`, `TABLE_PRIVILEGE_DENIED`,
+`LOCK_PRIVILEGE_DENIED`, `SEQUENCE_PRIVILEGE_DENIED`,
+`VIEW_PRIVILEGE_DENIED`, `OWNERSHIP_REQUIRED` or
+`PRIVILEGE_DENIED`) without showing SQL, object identifiers or credentials.
+The exact cause must be established by a new run **after the revised SHA has
+been independently approved and the environment SHA variable updated**.
+Do NOT blindly grant MAINTAIN or SELECT. The first denied object may not be
+the only blocker, and a schema-only archive still cannot prove full recovery.
+
+If a later operator proposes a disposable-branch-only temporary privilege
+lease, review it as a separate controlled operation: explicit project, branch,
+role, object list, TTL and rollback; independent approval; RLS A/B; post-COMMIT
+privilege inventory; revoke and retest. The audit branch / GitHub workflow
+does **not** issue GRANT/REVOKE or alter Neon roles.
+
 ## Real full restore remains a separate gate
 
 A `pg_dump --schema-only` archive contains **no business data** and
