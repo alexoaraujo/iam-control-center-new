@@ -2,19 +2,16 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { isApprovedProductionRelease } from "./production-deploy-approval.mjs";
 
-const BUILD_RELEVANT = [
-  /^\.github\/workflows\/quality\.yml$/,
-  // E2E harness changes require a fresh exact-SHA Preview deployment.
-  /^\.github\/e2e\//,
-  /^scripts\//,
-  /^apps\/web\//,
-  /^packages\//,
-  /^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc|vercel\.json|turbo\.json|pnpmfile\.cjs)$/,
-  /^(tsconfig[^/]*\.json|eslint\.config\.[^/]+|postcss\.config\.[^/]+|tailwind\.config\.[^/]+|next\.config\.[^/]+)$/,
-];
+// Keep Preview classification congruent with release-security-gate.mjs:
+// only documentation-only diffs can omit a Preview; SQL, CI, policies,
+// migrations and every unrecognized file must trigger exact-SHA Preview/E2E.
+const docOnly = (file) => typeof file === "string" &&
+  /^(docs\/|README\.md$|SECURITY\.md$)/.test(file);
 
 export function hasBuildRelevantChanges(changedFiles) {
-  return changedFiles.some((file) => BUILD_RELEVANT.some((pattern) => pattern.test(file)));
+  // A missing or invalid scope must never suppress a required Preview.
+  return !Array.isArray(changedFiles) ||
+    changedFiles.some((file) => !docOnly(file));
 }
 
 export function shouldBuild({
@@ -38,7 +35,9 @@ export function shouldBuild({
   // the current environment; skipping would keep the stale deployment.
   if (previousSha === currentSha) return true;
 
-  return hasBuildRelevantChanges(changedFiles) || hasBuildRelevantChanges(mergeParentChangedFiles);
+  const scope = [...changedFiles, ...mergeParentChangedFiles];
+  // Missing/empty diffs are not evidence that a commit is documentation-only.
+  return scope.length === 0 || hasBuildRelevantChanges(scope);
 }
 
 function diffFiles(base, head) {
