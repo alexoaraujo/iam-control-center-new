@@ -118,7 +118,10 @@ def preflight(key: str) -> None:
                     if r.get("type") == "required_reviewers"]
     reviewers = (review_rules[0].get("reviewers", []) if len(review_rules) == 1 else [])
     policies = branch_guards.get("branch_policies", [])
+    deployment = env.get("deployment_branch_policy") or {}
     if (env.get("can_admins_bypass") is not False
+            or deployment.get("protected_branches") is not False
+            or deployment.get("custom_branch_policies") is not True
             or len(review_rules) != 1
             or review_rules[0].get("prevent_self_review") is not True
             or len(reviewers) != 1
@@ -192,16 +195,20 @@ def test_new_connection(password: str) -> None:
         "PGSSLMODE": "verify-full", "PGSSLROOTCERT": "system",
         "PGCONNECT_TIMEOUT": "8", "PGOPTIONS": "-c statement_timeout=30000",
     }
-    try:
-        result = subprocess.run(
-            ["psql", "-X", "-w", "-At", "-v", "ON_ERROR_STOP=1",
-             "-c", "SELECT current_database(),current_user"],
-            capture_output=True, text=True, env=env, timeout=25, check=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise Blocked("CHILD_CONNECTION_VERIFY_FAILED") from exc
-    if result.returncode or result.stdout.strip() != f"{DATABASE}|{ROLE}":
-        raise Blocked("CHILD_CONNECTION_VERIFY_FAILED")
-    print("PASS_G1_CHILD_OWNER_NEW_CREDENTIAL_TLS_VERIFIED")
+    for attempt in range(6):
+        try:
+            result = subprocess.run(
+                ["psql", "-X", "-w", "-At", "-v", "ON_ERROR_STOP=1",
+                 "-c", "SELECT current_database(),current_user"],
+                capture_output=True, text=True, env=env, timeout=25, check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise Blocked("CHILD_CONNECTION_VERIFY_FAILED") from exc
+        if result.returncode == 0 and result.stdout.strip() == f"{DATABASE}|{ROLE}":
+            print("PASS_G1_CHILD_OWNER_NEW_CREDENTIAL_TLS_VERIFIED")
+            return
+        if attempt < 5:
+            time.sleep(2)
+    raise Blocked("CHILD_CONNECTION_VERIFY_FAILED_SECRET_ALREADY_UPDATED")
 
 
 def execute(mode: str, confirm: str) -> None:
