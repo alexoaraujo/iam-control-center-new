@@ -57,7 +57,7 @@ Workflow: [IAM canonical export and isolated restore (manual)](https://github.co
 | `auth_only` | `NO_DDL` | Autenticação e identidades de SOURCE/TARGET; sem DDL |
 | `readiness_only` | `NO_DDL` | Consultas de catálogo, roles, ACLs, grants, pgcrypto e elegibilidade de lock; falha fechada |
 | `export_only` | `NO_DDL` | **BLOQUEADO** até `readiness_only` PASS, aprovação específica e privilégio mínimo; quando aprovado, dump somente schema em runner efêmero |
-| `restore_isolated` | `RESTORE_BR_SWEET_UNION_ONLY` | **BLOQUEADO** até gates independentes de exportação, ledger, rollback e DDL isolado; pode criar extensão antes de restore transacional |
+| `restore_isolated` | `RESTORE_BR_SWEET_UNION_ONLY` | **BLOQUEADO** até gates independentes de exportação, ledger, rollback e DDL isolado; exige `pgcrypto` já instalada com aprovação separada e restaura schema apenas em transação única, sem DDL de extensão implícito |
 
 A execução é manual (`workflow_dispatch`) e requer environment `IAM-Canonical-Isolated-Restore` no job autenticado. **Não repetir workflow em SHA antigo para validar código novo**. Logs e job status devem ser verificados em cada execução; job skipped nunca significa PASS. O conector GitHub usado em auditoria não disponibiliza `workflow_dispatch`: não alegar execução se não houver run ID real.
 

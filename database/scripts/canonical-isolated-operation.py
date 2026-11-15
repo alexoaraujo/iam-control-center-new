@@ -554,11 +554,9 @@ def execute(mode: str) -> None:
         check_migrator_owner_membership(src, dst, workspace)
         check_pgcrypto_availability(src, dst, workspace)
         # Scope is the exact isolated database, NEVER inherited iam_database.
-        # CREATE EXTENSION may remain if restore fails; other DDL is one transaction.
-        docker_run([
-            "psql", "-X", "-w", "-v", "ON_ERROR_STOP=1", "-c",
-            "CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public"
-        ], dst, workspace)
+        # pgcrypto must already be installed under separate DDL approval.
+        # Never create an extension outside pg_restore's single transaction.
+        # A failed restore must leave no implicit extension side effect.
         docker_run([
             "pg_restore", "-w", "--exit-on-error", "--single-transaction",
             "--dbname=iam_canonical_validation", "/work/schema.dump"

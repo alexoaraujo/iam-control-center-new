@@ -197,11 +197,53 @@ class IsolatedRunnerContract(unittest.TestCase):
              patch.object(module, "check_pgcrypto_availability"), \
              patch.object(module, "docker_run", side_effect=self.simulated_docker(calls)):
             module.execute("restore_isolated")
-        self.assertEqual(len(calls), 4)
+        self.assertEqual([call[0] for call in calls], ["pg_dump", "pg_restore", "pg_restore"])
         self.assertEqual(calls[-1][0], "pg_restore")
         self.assertIn("--dbname=iam_canonical_validation", calls[-1])
         self.assertIn("--single-transaction", calls[-1])
         self.assertNotIn("--clean", calls[-1])
+        self.assertFalse(any(call[0] == "psql" for call in calls))
+        self.assertFalse(any("CREATE EXTENSION" in str(call) for call in calls))
+
+    def test_restore_failure_never_creates_extension_before_transaction(self):
+        # Regression: an extension created by a separate psql command would
+        # survive a later pg_restore failure and violate isolated rollback.
+        calls = []
+
+        def fail_during_restore(args, credentials, workspace):
+            calls.append(args)
+            if args[0] == "pg_dump":
+                (workspace / "schema.dump").write_bytes(b"PGDMP" + b"Z" * 2049)
+            elif args[:2] == ["pg_restore", "--list"]:
+                return "; synthetic schema-only archive\n12; 1259 123 TABLE iam.tenants owner\n"
+            elif args[0] == "pg_restore":
+                raise module.GateBlocked("PG18_SCHEMA_RESTORE_UNCLASSIFIED")
+            else:
+                self.fail("unexpected operation before transactional pg_restore")
+            return ""
+
+        with (
+            self.env(approval=module.APPROVAL, confirm=module.CONFIRMATION),
+            patch.object(module, "check_source"),
+            patch.object(module, "check_target"),
+            patch.object(module, "check_authenticated_readiness"),
+            patch.object(module, "check_restore_acl_principals"),
+            patch.object(module, "check_runtime_role_contract"),
+            patch.object(module, "check_migrator_owner_membership"),
+            patch.object(module, "check_pgcrypto_availability"),
+            patch.object(module, "docker_run", side_effect=fail_during_restore),
+        ):
+            with self.assertRaisesRegex(
+                module.GateBlocked, "PG18_SCHEMA_RESTORE_UNCLASSIFIED"
+            ):
+                module.execute("restore_isolated")
+
+        self.assertEqual(
+            [call[0] for call in calls], ["pg_dump", "pg_restore", "pg_restore"]
+        )
+        self.assertIn("--single-transaction", calls[-1])
+        self.assertFalse(any(call[0] == "psql" for call in calls))
+        self.assertFalse(any("CREATE EXTENSION" in str(call) for call in calls))
 
     def test_export_detects_data_contamination(self):
         def contaminated(args, credentials, workspace):
