@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment:
-      name: IAM-Canonical-Isolated-Restore
+      name: IAM-G1-Disposable-Lease-Probe
     steps:
       - name: Check out exact immutable commit
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
