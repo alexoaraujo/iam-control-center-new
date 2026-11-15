@@ -18,10 +18,11 @@ docker exec "$container" pg_isready -U postgres -d postgres >/dev/null
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U postgres -d postgres <<'SQL'
 CREATE ROLE iam_schema_export_reader LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOINHERIT;
 CREATE ROLE iam_runtime_test LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB;
-CREATE DATABASE iam_database;
+CREATE ROLE neondb_owner LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB;
+CREATE DATABASE iam_database OWNER neondb_owner;
 SQL
 
-docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U postgres -d iam_database <<'SQL'
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U neondb_owner -d iam_database <<'SQL'
 CREATE SCHEMA iam;
 CREATE SCHEMA audit;
 CREATE SCHEMA app_private;
@@ -101,7 +102,7 @@ runtime_check() {
 runtime_check
 echo 'PASS_G1_PG18_SYNTHETIC_RLS_A_B_NO_CONTEXT'
 
-docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U postgres -d iam_database <<'SQL'
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U neondb_owner -d iam_database <<'SQL'
 BEGIN;
 GRANT USAGE ON SCHEMA iam,audit,app_private TO iam_schema_export_reader;
 DO $grant$
@@ -138,7 +139,7 @@ fi
 echo 'PASS_G1_PG18_SYNTHETIC_SCHEMA_ONLY_EXPORT'
 
 # Independent privileged revoker connection; exact SQL pulled from proposed source.
-docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U postgres \
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U neondb_owner \
   -d iam_database < "$tmp/revoke.sql" >/dev/null
 # New session after committed revocation must match 0 privileges including view.
 test "$(inventory)" = "$zero" || { echo 'BLOCKED_G1_PG18_POSTCOMMIT_PARITY'; exit 2; }
