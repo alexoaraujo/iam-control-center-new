@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { getSql } from "./db";
+import { canonicalIssuer } from "./identity-sync";
 
 /**
  * Server-side only: a verified Auth0 session drives all permission checks.
@@ -54,8 +55,10 @@ export async function checkPermission(
   const canonicalTenantId = tenantId.toLowerCase();
   const canonicalIdentityId = identityId.toLowerCase();
 
-  const issuer = `https://${authDomain}/`;
   try {
+    // Match the canonical issuer used by identity synchronization/import.
+    // DNS hostname casing is not an authorization distinction.
+    const issuer = canonicalIssuer(authDomain);
     const db = getSql();
     // The SQL client MUST be logged in as the actual non-BYPASSRLS runtime
     // principal, not SET ROLE from an owner/migrator account.

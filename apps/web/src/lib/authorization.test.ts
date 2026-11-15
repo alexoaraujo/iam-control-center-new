@@ -60,6 +60,15 @@ describe("trusted server-only authorization", () => {
       .update(`${tenant}|${identity}|${expiry}|${nonce}`, "utf8").digest("hex"));
   });
 
+  it("compares the same canonical Auth0 issuer as identity sync for mixed-case domains", async () => {
+    vi.stubEnv("AUTH0_DOMAIN", "EXAMPLE.Auth0.COM");
+    expect(await checkPermission("auth0|subject-a", tenantId, identityId, "iam.tenant.read")).toBe(true);
+    const [build] = transaction.mock.calls[0];
+    const [, permission] = build(fakeTaggedSql);
+    expect(permission.params).toContain("https://example.auth0.com/");
+    expect(permission.params).not.toContain("https://EXAMPLE.Auth0.COM/");
+  });
+
   it("normalizes mixed-case UUID selectors before HMAC and every PostgreSQL RLS comparison", async () => {
     const mixedTenant = "ABCDEFAB-CDEF-4ABC-8ABC-ABCDEFABCDEF";
     const mixedIdentity = "ABCDEFAB-ABCD-4ABC-8ABC-ABCDEFABCDEF";
