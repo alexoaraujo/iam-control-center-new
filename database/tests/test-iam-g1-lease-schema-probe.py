@@ -154,6 +154,31 @@ class LeaseProbeContract(unittest.TestCase):
         self.assertNotIn("ALTER ROLE", audit.split("WITH expected_roles", 1)[1])
         self.assertNotIn("GRANT ", audit.split("WITH expected_roles", 1)[1])
 
+    def test_pg_dump_denial_is_classified_without_object_names_or_sql(self):
+        # These are synthetic server messages: exact names/secrets are NEVER echoed.
+        errors = {
+            "ERROR: permission denied for schema iam": "SCHEMA_USAGE_DENIED",
+            "ERROR: permission denied for sequence audit.sequence_private": "SEQUENCE_PRIVILEGE_DENIED",
+            "ERROR: permission denied for view iam.private_view": "VIEW_PRIVILEGE_DENIED",
+            "ERROR: permission denied for table iam.sensitive_table": "TABLE_PRIVILEGE_DENIED",
+            "ERROR: permission denied for relation iam.sensitive_table": "TABLE_PRIVILEGE_DENIED",
+            "ERROR: permission denied to lock iam.sensitive_table": "LOCK_PRIVILEGE_DENIED",
+            "ERROR: must have SELECT privilege on table iam.sensitive_table": "LOCK_PRIVILEGE_DENIED",
+            "ERROR: must be owner of table iam.sensitive_table": "OWNERSHIP_REQUIRED",
+            "ERROR: permission denied on table iam.sensitive_table": "PRIVILEGE_DENIED",
+        }
+        for raw, expected in errors.items():
+            with self.subTest(expected=expected):
+                self.assertEqual(probe.classify(raw), expected)
+                with tempfile.TemporaryDirectory() as tmp:
+                    completion = subprocess.CompletedProcess(["pg_dump"], 1, "", raw)
+                    with patch.object(probe.subprocess, "run", return_value=completion):
+                        with self.assertRaises(probe.Blocked) as exc:
+                            probe.run_pg(["pg_dump", "-w"], probe.validate_url(URL), Path(tmp))
+                        self.assertEqual(str(exc.exception), "PG_DUMP_" + expected)
+                        self.assertNotIn("iam.", str(exc.exception))
+                        self.assertNotIn("audit.", str(exc.exception))
+
     def test_credentialed_workflow_does_not_reuse_development_url(self):
         content = (SCRIPT.parents[2] / ".github" / "workflows" /
                    "iam-g1-lease-schema-probe.yml").read_text(encoding="utf8")
