@@ -405,7 +405,7 @@ jobs:
       - name: Run Auth0 end-to-end flow
         env:
           # Branch-scoped credential (never Neon API key); only this step can read it.
-          NEON_RBAC_TEST_OWNER_DATABASE_URL: ${{ secrets.NEON_RBAC_TEST_OWNER_DATABASE_URL }}
+          NEON_RBAC_TEST_OWNER_DATABASE_URL: ${{ github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && secrets.NEON_RBAC_TEST_OWNER_DATABASE_URL || '' }}
         run: |
           NODE_PATH="$RUNNER_TEMP/playwright/node_modules" \
             "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" test \

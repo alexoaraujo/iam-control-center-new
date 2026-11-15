@@ -60,6 +60,25 @@ describe("trusted server-only authorization", () => {
       .update(`${tenant}|${identity}|${expiry}|${nonce}`, "utf8").digest("hex"));
   });
 
+  it("normalizes mixed-case UUID selectors before HMAC and every PostgreSQL RLS comparison", async () => {
+    const mixedTenant = "ABCDEFAB-CDEF-4ABC-8ABC-ABCDEFABCDEF";
+    const mixedIdentity = "ABCDEFAB-ABCD-4ABC-8ABC-ABCDEFABCDEF";
+    expect(validSelector(mixedTenant)).toBe(true);
+    expect(validSelector(mixedIdentity)).toBe(true);
+    expect(await checkPermission("auth0|subject-a", mixedTenant, mixedIdentity, "iam.tenant.read")).toBe(true);
+    const [build] = transaction.mock.calls[0];
+    const [context, permission] = build(fakeTaggedSql);
+    const [tenant, identity, expiry, nonce, signature] = context.params;
+    expect(tenant).toBe(mixedTenant.toLowerCase());
+    expect(identity).toBe(mixedIdentity.toLowerCase());
+    expect(signature).toBe(createHmac("sha256", Buffer.from(secret, "hex"))
+      .update(`${tenant}|${identity}|${expiry}|${nonce}`, "utf8").digest("hex"));
+    expect(permission.params).toContain(mixedTenant.toLowerCase());
+    expect(permission.params).toContain(mixedIdentity.toLowerCase());
+    expect(permission.params).not.toContain(mixedTenant);
+    expect(permission.params).not.toContain(mixedIdentity);
+  });
+
   it("uses a fresh secret nonce for every check and never lets a browser choose a signature", async () => {
     await checkPermission("auth0|subject-a", tenantId, identityId, "iam.tenant.read");
     await checkPermission("auth0|subject-a", tenantId, identityId, "iam.tenant.read");
