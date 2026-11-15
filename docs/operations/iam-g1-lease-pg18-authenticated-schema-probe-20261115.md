@@ -21,7 +21,7 @@
 Workflow: `.github/workflows/iam-g1-lease-schema-probe.yml`.
 
 1. Independent review of the workflow and the exact commit SHA.
-2. In GitHub protected environment `IAM-Canonical-Isolated-Restore`, approve
+2. Create a **new, dedicated** GitHub protected environment `IAM-G1-Disposable-Lease-Probe` containing **only** the lease-only database URL and SHA variable. Never extend `IAM-Canonical-Isolated-Restore` (it holds Development and restore secrets) to audit branches. In the new environment, approve
    the **explicit audit branch**, without opening environments to arbitrary PRs.
 3. Set environment variable `IAM_G1_LEASE_APPROVED_SHA` to the reviewed
    40-character SHA, not an old SHA or `main` baseline.
@@ -40,7 +40,7 @@ Workflow: `.github/workflows/iam-g1-lease-schema-probe.yml`.
    preserve `iam_database`, `iam_canonical_validation`, secrets, roles and
    existing PR approvals; investigate the annotated job outcome.
 
-**Actual execution evidence on initial push (run 43706898906):**
+**Actual execution evidence on initial push (run 43706898906; superseded environment design):**
 `offline-contracts=SUCCESS` (8/8 unit tests); `authenticated-schema-probe=FAILURE`
 before usable PostgreSQL job logs, so there is **no observed pg_dump outcome**.
 Protected environment admission, SHA approval and dedicated credential availability
