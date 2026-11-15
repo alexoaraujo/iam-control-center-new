@@ -142,10 +142,14 @@ a second human operator as part of the approved revocation operation, not
 pre-populated as a substitute for approval. GitHub Environment approval must
 be independent and performed by a human other than the workflow initiator.
 
-For the GitHub environment, administrator-bypass denial must additionally
-be inspected in the web UI: the current REST create/update contract does not
-expose a reliable writable admin-bypass field. If that cannot be proven, the
-privileged gate stays BLOCKED.
+For the GitHub environment, the bootstrap now explicitly submits
+`can_admins_bypass=false` and **requires the exact false value from GitHub REST**
+on readback (missing/true -> fail closed); the privileged workflow repeats the
+same check before database access. Also inspect the UI in Settings > Environments
+to independently corroborate the API response. GitHub documents required
+reviewers, and the maintained GitHub Terraform provider supports this bypass
+field even where the REST guide omits it. If API rejects the property or it
+cannot be read back as false, **stop**; do not weaken the contract.
 
 ### Current status
 
@@ -155,3 +159,45 @@ privileged gate stays BLOCKED.
   admin bypass.
 - BLOCKED: live Neon GRANT MAINTAIN, signed RLS A/B, live schema-only dump, live
   REVOKE and COMMIT, merge/cutover.
+
+
+### Real signed RLS A/B prerequisites confirmed by Neon (2026-11-15)
+
+Read-only catalog/data aggregate at tiny-rice-70320263/br-spring-grass-b6gap6kp:
+**tenants 0, identities 2, memberships 0, active memberships 0, active signing
+context keys 0**, 41 RLS policies, 20 FORCE RLS tables. The live runtime
+\`iam_app_runtime_login\` sees tenants=0/memberships=0/identities=0 and
+\`app_private.current_tenant_id() IS NULL\`. This is a **no-context** PASS,
+NOT a signed A/B PASS.
+
+The existing \`database/tests/runtime-rls-contract.sql\` is a synthetic, signed
+A/B test in a PostgreSQL 18 isolated CI instance: it inserts two synthetic
+tenants/identities/memberships, an HMAC key, verifies A/B isolation and
+tampered/expired signatures, and **ROLLBACK**. It has NOT been run against
+Neon. To run it on this disposable clone, require a separate approved
+short-lived administrative transaction using synthetic fixtures and isolated
+credential, a real independent revoker preflight, a secret-free evidence log
+and a verified rollback. Do **not** borrow a signing key from Development,
+read \`app_private.context_keys.secret\` into logs or issue an owner-generated
+signature and claim it came from an independent trusted issuer.
+
+The child branch and parent Development both show \`neondb_owner\` metadata
+created=2026-11-10 and updated=2026-11-10. Child was created 2026-11-13,
+so **no independent child password rotation is demonstrated**. This is not
+positive evidence of credential segregation; prove a branch-specific secret
+and verify that parent credentials were not affected before enabling live
+revoke. The \`neondb_owner\` role has BYPASSRLS and broad grants and is an
+incident-response operator, NOT a least-privileged application role.
+
+Updated protected environment gates:
+- PUT the dedicated Environment with required independent reviewer
+  \`alexoaraujo83\`, \`prevent_self_review=true\`, **\`can_admins_bypass=false\`**,
+  and custom deployment policy solely \`main\`.
+- GET the same environment and require all flags, reviewer and branch policies;
+  a missing \`can_admins_bypass\` field is a **block**, not an implicit false.
+- Never treat code PR approval as operational consent to \`USAGE\` or
+  \`MAINTAIN\`. Request distinct signed operational approval on the
+  branch ID, 24 relation allowlist, TTL, specific risk and rollback evidence.
+- Keep project and TTL pinned. After 2026-11-16T12:00:00Z create a **new**
+  disposable branch with new credentials/review; never silently retarget to
+  Development/Production.
