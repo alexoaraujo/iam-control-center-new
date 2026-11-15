@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { hasBuildRelevantChanges, shouldBuild } from "./vercel-ignore-build.mjs";
+import { decideSecurityGate } from "./release-security-gate.mjs";
 
 test("skips Preview for documentation-only changes", () => {
   assert.equal(
@@ -121,7 +122,7 @@ test("builds an exact-SHA Preview for a main-sync merge carrying PR application 
   );
 });
 
-test("does not spend a Preview build for a docs-only main-sync merge", () => {
+test("SQL inherited through a main-sync merge must trigger exact-SHA Preview", () => {
   assert.equal(
     shouldBuild({
       environment: "preview",
@@ -129,6 +130,19 @@ test("does not spend a Preview build for a docs-only main-sync merge", () => {
       currentSha: "merged-feature",
       changedFiles: ["database/scripts/schema-manifest.sql"],
       mergeParentChangedFiles: ["docs/operations/runbook.md"],
+    }),
+    true,
+  );
+});
+
+test("documentation-only main-sync merges still omit unneeded Preview", () => {
+  assert.equal(
+    shouldBuild({
+      environment: "preview",
+      previousSha: "previous-feature",
+      currentSha: "merged-feature",
+      changedFiles: ["docs/operations/runbook.md"],
+      mergeParentChangedFiles: ["README.md", "SECURITY.md"],
     }),
     false,
   );
@@ -145,4 +159,65 @@ test("redeploying the same Preview SHA never ignores updated environment setting
     }),
     true,
   );
+});
+
+test("Preview impact classification and security-gate agree for SQL, workflows and unknown changes", () => {
+  const nonDocs = [
+    "database/migrations/0003_set_tenant_context_search_path.sql",
+    "database/scripts/schema-manifest.sql",
+    ".github/workflows/database-tests.yml",
+    ".github/workflows/quality.yml",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    "SCAFFOLD-MANIFEST.json",
+    "apps/web/src/lib/authorization.ts",
+    "scripts/vercel-ignore-build.mjs",
+    ".env.example",
+    "new-security-policy.json",
+  ];
+  for (const file of nonDocs) {
+    const preview = shouldBuild({
+      environment: "preview", previousSha: "before", currentSha: "after",
+      changedFiles: [file],
+    });
+    assert.equal(preview, true, file);
+    assert.equal(hasBuildRelevantChanges([file]), true, file);
+    const gateInputs = {
+      quality: "success", previewRequired: String(preview),
+      preview: "success", auth0Enabled: "true", syncAuth0: "success",
+      auth0E2E: "success", docsPreview: "skipped", changedFiles: [file],
+    };
+    assert.deepEqual(decideSecurityGate(gateInputs), { pass: true, reason: "E2E_VERIFIED" }, file);
+    for (const [name, value] of [["preview", "skipped"], ["syncAuth0", "failure"],
+      ["auth0E2E", "skipped"], ["previewRequired", "false"]]) {
+      assert.equal(decideSecurityGate({ ...gateInputs, [name]: value }).pass, false, file + ":" + name);
+    }
+  }
+});
+
+test("docs-only scopes require trusted docs Preview evidence, not Auth0 E2E", () => {
+  for (const file of ["README.md", "SECURITY.md", "docs/operations/runbook.md"]) {
+    const preview = shouldBuild({
+      environment: "preview", previousSha: "before", currentSha: "after",
+      changedFiles: [file],
+    });
+    assert.equal(preview, false, file);
+    assert.deepEqual(decideSecurityGate({
+      quality: "success", previewRequired: String(preview),
+      preview: "skipped", auth0Enabled: "false", syncAuth0: "skipped",
+      auth0E2E: "skipped", docsPreview: "success", changedFiles: [file],
+    }), { pass: true, reason: "DOCUMENTATION_ONLY_PREVIEW_VERIFIED" }, file);
+    assert.equal(decideSecurityGate({
+      quality: "success", previewRequired: "false",
+      docsPreview: "failure", changedFiles: [file],
+    }).pass, false);
+  }
+});
+
+test("no/invalid diff cannot suppress a required Preview", () => {
+  assert.equal(shouldBuild({
+    environment: "preview", previousSha: "before", currentSha: "after",
+    changedFiles: [], mergeParentChangedFiles: [],
+  }), true);
+  assert.equal(hasBuildRelevantChanges([""]), true);
+  assert.equal(hasBuildRelevantChanges(["docs/runbook.md", "database/migrations/003.sql"]), true);
 });
