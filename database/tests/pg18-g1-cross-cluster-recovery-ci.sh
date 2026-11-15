@@ -40,14 +40,22 @@ docker run -d --name "$target" --network none \
 target_started=1
 unset srcpass dstpass
 for container in "$source" "$target"; do
-  principal=postgres
-  # Both disposable clusters bootstrap a local postgres superuser; no shared data.
+  # The official postgres:18 entrypoint briefly starts a temporary server
+  # during initdb before shutting it down and starting the final server.
+  # pg_isready alone can succeed in that temporary window, then a following
+  # CREATE DATABASE races the restart with "database system is starting up".
+  # Wait for the entrypoint's final-start marker AND a real SQL/version probe.
   ready=0
-  for i in $(seq 1 60); do
-    if docker exec "$container" pg_isready -q -U "$principal" -d postgres; then ready=1; break; fi
+  for i in $(seq 1 90); do
+    if docker logs "$container" 2>&1 |
+         grep -Fq 'PostgreSQL init process complete; ready for start up.' &&
+       docker exec "$container" pg_isready -q -U postgres -d postgres; then
+      actual_version="$(docker exec "$container" psql -X -U postgres -d postgres -Atqc "SELECT current_setting('server_version_num')" 2>/dev/null || : )"
+      if [[ "$actual_version" =~ ^18[0-9]{4}$ ]]; then ready=1; break; fi
+    fi
     sleep .5
   done
-  if [[ "$ready" != 1 ]]; then echo BLOCKED_G1_DOCKER_PG18_READY >&2; exit 3; fi
+  if [[ "$ready" != 1 ]]; then echo BLOCKED_G1_DOCKER_PG18_FINAL_STARTUP >&2; exit 3; fi
 done
 src() { docker exec -i "$source" psql -X -U postgres -d "$db" -v ON_ERROR_STOP=1 "$@"; }
 dst() { docker exec -i "$target" psql -X -U postgres -d "$db" -v ON_ERROR_STOP=1 "$@"; }
