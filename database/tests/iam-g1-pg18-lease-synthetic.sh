@@ -38,6 +38,7 @@ ALTER TABLE iam.tenant_demo ENABLE ROW LEVEL SECURITY;
 ALTER TABLE iam.tenant_demo FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON iam.tenant_demo
   USING (tenant = current_setting('app.tenant', true));
+CREATE VIEW iam.tenant_view AS SELECT id,tenant FROM iam.tenant_demo;
 CREATE TABLE audit.audit_event(id bigint PRIMARY KEY);
 CREATE TABLE app_private.context_keys(key_id text PRIMARY KEY, secret bytea NOT NULL);
 INSERT INTO app_private.context_keys VALUES ('synthetic', decode('73696d756c61746564','hex'));
@@ -84,7 +85,7 @@ echo "PASS_G1_SYNTHETIC_ZERO_PRIVILEGES_DENIED"
 # DISPOSABLE CI FIXTURE ONLY. DO NOT COPY THESE GRANTS INTO NEON.
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -q -U postgres -d iam_database >/dev/null <<'SQL'
 GRANT USAGE ON SCHEMA iam, audit, app_private TO iam_schema_export_reader;
-GRANT MAINTAIN ON TABLE iam.tenant_demo, audit.audit_event, app_private.context_keys
+GRANT MAINTAIN ON TABLE iam.tenant_demo, iam.tenant_view, audit.audit_event, app_private.context_keys
   TO iam_schema_export_reader;
 SQL
 
@@ -95,7 +96,7 @@ test "$fn" = "synthetic" || { echo "::error::BLOCKED_G1_FUNCTION_SURFACE_UNEXPEC
 echo "PASS_G1_SYNTHETIC_USAGE_EXPOSES_PUBLIC_SECURITY_DEFINER"
 
 # The lease must not confer data SELECT, including on the synthetic secret table.
-for table in iam.tenant_demo audit.audit_event app_private.context_keys; do
+for table in iam.tenant_demo iam.tenant_view audit.audit_event app_private.context_keys; do
   if docker exec "$container" psql -X -v ON_ERROR_STOP=1 -q -U iam_schema_export_reader -d iam_database \
     -c "SELECT * FROM $table LIMIT 1" >/dev/null 2>&1; then
     echo "::error::BLOCKED_G1_SYNTHETIC_DATA_READ_AFTER_LEASE"
@@ -117,6 +118,7 @@ if grep -Eq 'TABLE DATA |BLOB DATA ' /tmp/g1-synthetic-toc.txt; then
   exit 2
 fi
 grep -Eq ' TABLE ' /tmp/g1-synthetic-toc.txt || { echo "::error::BLOCKED_G1_SYNTHETIC_TOC_MISSING_TABLE"; exit 2; }
+grep -Eq ' VIEW ' /tmp/g1-synthetic-toc.txt || { echo "::error::BLOCKED_G1_SYNTHETIC_TOC_MISSING_VIEW"; exit 2; }
 rm -f /tmp/g1-synthetic-toc.txt
 echo "PASS_G1_SYNTHETIC_PG18_SCHEMA_ONLY_DUMP"
 
@@ -128,8 +130,8 @@ REVOKE USAGE ON SCHEMA iam, audit, app_private FROM iam_schema_export_reader;
 SQL
 proof="$(docker exec "$container" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d iam_database \
   -c "SELECT (SELECT count(*) FROM pg_namespace WHERE nspname IN ('iam','audit','app_private') AND has_schema_privilege('iam_schema_export_reader',oid,'USAGE')),
-             (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON c.relnamespace=n.oid WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p') AND has_table_privilege('iam_schema_export_reader',c.oid,'MAINTAIN')),
-             (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON c.relnamespace=n.oid WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p') AND has_table_privilege('iam_schema_export_reader',c.oid,'SELECT'))" | tail -n 1)"
+             (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON c.relnamespace=n.oid WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p','v') AND has_table_privilege('iam_schema_export_reader',c.oid,'MAINTAIN')),
+             (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON c.relnamespace=n.oid WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p','v') AND has_table_privilege('iam_schema_export_reader',c.oid,'SELECT'))" | tail -n 1)"
 test "$proof" = "0|0|0" || { echo "::error::BLOCKED_G1_SYNTHETIC_REVOKE_PARITY"; exit 2; }
 if docker exec "$container" pg_dump -w -U iam_schema_export_reader -d iam_database \
   --schema-only --format=custom --schema=iam --schema=audit --schema=app_private \
