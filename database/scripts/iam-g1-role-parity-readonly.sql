@@ -26,6 +26,7 @@ WITH expected_roles(name,can_login,can_inherit) AS (
    r.rolbypassrls IS DISTINCT FROM false OR
    r.rolsuper IS DISTINCT FROM false OR
    r.rolcreaterole IS DISTINCT FROM false OR
+   r.rolreplication IS DISTINCT FROM false OR
    r.rolcreatedb IS DISTINCT FROM false
 ), expected_members(member_name,group_name,admin_allowed,inherit_allowed,set_allowed) AS (
  VALUES
