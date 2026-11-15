@@ -411,6 +411,89 @@ jobs:
             "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" test \
             --config=.github/e2e/playwright.config.cjs
 
+  docs-preview-evidence:
+    name: docs-preview-evidence
+    # An always-emitted trusted, read-only bridge from the separate docs workflow.
+    # No checkout or PR-controlled code executes with the GitHub token.
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      actions: read
+    steps:
+      - name: Verify exact-SHA docs Preview check from its trusted workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          # Forks have no approved Vercel/Auth0 callback and cannot claim a trusted docs exemption.
+          [[ "${PR_HEAD_REPOSITORY}" == "${REPOSITORY}" ]] || {
+            echo "::error::Docs gate requires a same-repository PR"; exit 1;
+          }
+          files="$(gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" --jq '.[].filename')"
+          [[ -n "${files}" ]] || { echo "::error::Empty PR change scope"; exit 1; }
+          docs_only=true
+          while IFS= read -r file; do
+            case "${file}" in
+              README.md|SECURITY.md|docs/*) ;;
+              *) docs_only=false ;;
+            esac
+          done <<< "${files}"
+          if [[ "${docs_only}" != true ]]; then
+            echo "NOT_REQUIRED: code/security/SQL changes use exact-SHA Preview and Auth0 E2E instead"
+            exit 0
+          fi
+          # The docs Preview gate lives in another workflow; poll its exact commit check.
+          # Never accept a similarly named check from a different workflow or an older SHA.
+          for attempt in $(seq 1 84); do
+            checks="$(gh api "repos/${REPOSITORY}/commits/${PR_HEAD_SHA}/check-runs?per_page=100")"
+            check="$(jq -c --arg sha "${PR_HEAD_SHA}" '
+              [.check_runs[] | select(
+                .name == "docs-preview-gate" and
+                .head_sha == $sha and
+                .app.slug == "github-actions"
+              )] | sort_by(.id) | last // {}
+            ' <<< "${checks}")"
+            status="$(jq -r '.status // "missing"' <<< "${check}")"
+            conclusion="$(jq -r '.conclusion // "missing"' <<< "${check}")"
+            if [[ "${status}" == completed ]]; then
+              if [[ "${conclusion}" != success ]]; then
+                echo "::error::docs-preview-gate is not SUCCESS for exact SHA: ${conclusion}"
+                exit 1
+              fi
+              details="$(jq -r '.details_url // ""' <<< "${check}")"
+              if [[ "${details}" =~ ^https://github\.com/alexoaraujo/iam-control-center-new/actions/runs/([0-9]+)/job/([0-9]+)$ ]]; then
+                run_id="${BASH_REMATCH[1]}"
+              else
+                echo "::error::Docs check has no trusted workflow-run identity"
+                exit 1
+              fi
+              run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}")"
+              jq -e --arg sha "${PR_HEAD_SHA}" '
+                .path == ".github/workflows/docs-preview-gate.yml" and
+                .head_sha == $sha and
+                .event == "pull_request" and .conclusion == "success"
+              ' <<< "${run}" >/dev/null || {
+                echo "::error::SUCCESS check did not come from approved docs workflow and SHA"
+                exit 1
+              }
+              echo "PASS: verified docs-preview-gate SUCCESS in trusted workflow at exact SHA"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Required exact-SHA docs Preview check absent or timed out"
+          exit 1
+
   security-gate:
     name: security-gate
     # A stable, always-emitted status for branch protection. Unlike quality,
@@ -421,6 +504,7 @@ jobs:
       - preview-deployment
       - sync-auth0-preview
       - auth0-e2e
+      - docs-preview-evidence
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     permissions:
@@ -446,4 +530,5 @@ jobs:
           SYNC_AUTH0_RESULT: ${{ needs.sync-auth0-preview.result }}
           AUTH0_E2E_RESULT: ${{ needs.auth0-e2e.result }}
           AUTH0_E2E_ENABLED: ${{ vars.AUTH0_E2E_ENABLED }}
+          DOCS_PREVIEW_RESULT: ${{ needs.docs-preview-evidence.result }}
         run: node scripts/release-security-gate.mjs
