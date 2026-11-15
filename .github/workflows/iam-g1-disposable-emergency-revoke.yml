@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  actions: read  # read-only verification of protected environment before DB access
 
 concurrency:
   group: iam-g1-disposable-revoker-single-operator
@@ -53,6 +54,41 @@ jobs:
             echo "::error::BLOCKED_G1_DISPOSABLE_BRANCH_TTL_EXPIRED"; exit 2;
           }
           echo "PASS_G1_REVOKER_SHA_AND_TTL_CHECK"
+      - name: Verify live GitHub Environment reviewer and main-only deployment policy
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          api="https://api.github.com/repos/alexoaraujo/iam-control-center-new/environments/IAM-G1-Disposable-Lease-Revocation"
+          curl --fail --silent --show-error --max-time 15 \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            "${api}" > "${RUNNER_TEMP}/iam-g1-revoke-environment.json"
+          jq -e '
+            .name == "IAM-G1-Disposable-Lease-Revocation"
+            and .deployment_branch_policy.protected_branches == false
+            and .deployment_branch_policy.custom_branch_policies == true
+            and any(.protection_rules[]?;
+              .type == "required_reviewers"
+              and .prevent_self_review == true
+              and any(.reviewers[]?; .type == "User" and .reviewer.login == "alexoaraujo83"))
+          ' "${RUNNER_TEMP}/iam-g1-revoke-environment.json" >/dev/null || {
+            echo "::error::BLOCKED_G1_ENV_REVIEWER_OR_BRANCH_POLICY"; exit 2;
+          }
+          curl --fail --silent --show-error --max-time 15 \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            "${api}/deployment-branch-policies" > "${RUNNER_TEMP}/iam-g1-revoke-branches.json"
+          jq -e '
+            .total_count == 1
+            and (.branch_policies | length) == 1
+            and .branch_policies[0].name == "main"
+          ' "${RUNNER_TEMP}/iam-g1-revoke-branches.json" >/dev/null || {
+            echo "::error::BLOCKED_G1_ENV_NONEXCLUSIVE_DEPLOYMENT_BRANCH"; exit 2;
+          }
+          echo 'PASS_G1_ENV_PROTECTION_REVIEWERS_MAIN'
       - name: Validate independent revoke-only source offline
         shell: bash
         run: |
