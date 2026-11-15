@@ -14,6 +14,7 @@ spec.loader.exec_module(m)
 def environment(reviewer="alexoaraujo83", self_review=True):
     return {
         "name": m.ENV,
+        "can_admins_bypass": False,
         "deployment_branch_policy": {
             "protected_branches": False, "custom_branch_policies": True
         },
@@ -47,6 +48,7 @@ class GitHubFake:
             assert args[3] == m.BASE
             assert data["reviewers"] == [{"type": "User", "id": 288204053}]
             assert data["prevent_self_review"] is True
+            assert data["can_admins_bypass"] is False
             self.env = environment()
             return self.env
         if args[:3] == ["api", "--method", "POST"]:
@@ -76,6 +78,12 @@ class Contracts(TestCase):
         self.assertTrue(m.expected_environment(environment()))
         self.assertFalse(m.expected_environment(environment("alexoaraujo")))
         self.assertFalse(m.expected_environment(environment(self_review=False)))
+        bypass = environment()
+        bypass["can_admins_bypass"] = True
+        self.assertFalse(m.expected_environment(bypass))
+        absent_bypass = environment()
+        absent_bypass.pop("can_admins_bypass")
+        self.assertFalse(m.expected_environment(absent_bypass))
         e = environment()
         e["deployment_branch_policy"]["protected_branches"] = True
         self.assertFalse(m.expected_environment(e))
