@@ -105,7 +105,11 @@ class Contracts(TestCase):
         self.assertNotIn("secret set", flattened)
         self.assertNotIn("neon_api_key", flattened)
         self.assertNotIn("grant", flattened)
-        self.assertNotIn("revoke", flattened)
+        self.assertFalse(any(args[:2] == ["secret", "set"] for args, _ in f.calls))
+        self.assertTrue(all(
+            args[2] in ("PUT", "POST")
+            for args, _ in f.calls if args[:2] == ["api", "--method"]
+        ))
 
     def test_apply_blocks_self_reviewer(self):
         f = GitHubFake(actor=m.REVIEWER)
