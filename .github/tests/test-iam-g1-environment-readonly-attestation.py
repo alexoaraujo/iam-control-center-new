@@ -32,10 +32,14 @@ def policies(name):
     ]}
 
 
+def custom():
+    return {"total_count": 0, "custom_deployment_protection_rules": []}
+
+
 class Contracts(TestCase):
     def test_both_envs_pass(self):
         for name in target.ENVS:
-            target.verify_configuration(name, env(name), policies(name))
+            target.verify_configuration(name, env(name), policies(name), custom())
 
     def test_enabled_or_missing_admin_bypass_fails(self):
         for name in target.ENVS:
@@ -46,7 +50,7 @@ class Contracts(TestCase):
                 else:
                     data["can_admins_bypass"] = value
                 with self.assertRaisesRegex(target.GateBlocked, "ADMIN_BYPASS"):
-                    target.verify_configuration(name, data, policies(name))
+                    target.verify_configuration(name, data, policies(name), custom())
 
     def test_reviewers_and_self_review_mismatch_fail(self):
         for name in target.ENVS:
@@ -60,7 +64,7 @@ class Contracts(TestCase):
                 else:
                     rule["prevent_self_review"] = False
                 with self.assertRaises(target.GateBlocked):
-                    target.verify_configuration(name, data, policies(name))
+                    target.verify_configuration(name, data, policies(name), custom())
 
     def test_custom_rule_and_wait_timer_fail(self):
         for name in target.ENVS:
@@ -69,7 +73,7 @@ class Contracts(TestCase):
                 data = env(name)
                 data["protection_rules"].append(rule)
                 with self.assertRaises(target.GateBlocked):
-                    target.verify_configuration(name, data, policies(name))
+                    target.verify_configuration(name, data, policies(name), custom())
 
     def test_branch_pattern_or_type_drift_fails(self):
         for name in target.ENVS:
@@ -79,22 +83,39 @@ class Contracts(TestCase):
                 x = policies(name)
                 x["branch_policies"][0]["name"] = invalid
                 with self.assertRaises(target.GateBlocked):
-                    target.verify_configuration(name, env(name), x)
+                    target.verify_configuration(name, env(name), x, custom())
             x = policies(name)
             x["branch_policies"][0]["type"] = "tag"
             with self.assertRaises(target.GateBlocked):
-                target.verify_configuration(name, env(name), x)
+                target.verify_configuration(name, env(name), x, custom())
             x = policies(name)
             x["total_count"] = 2
             with self.assertRaises(target.GateBlocked):
-                target.verify_configuration(name, env(name), x)
+                target.verify_configuration(name, env(name), x, custom())
+
+    def test_custom_rules_endpoint_must_be_empty(self):
+        for name in target.ENVS:
+            bad_responses = [
+                {"total_count": 1, "custom_deployment_protection_rules": [
+                    {"id": 1, "enabled": True, "app": {"slug": "atlassian"}}
+                ]},
+                {"total_count": 0, "custom_deployment_protection_rules": [
+                    {"id": 1, "enabled": True}
+                ]},
+                {"total_count": 0},
+                {},
+            ]
+            for custom_rules in bad_responses:
+                with self.assertRaisesRegex(target.GateBlocked, "CUSTOM_DEPLOYMENT"):
+                    target.verify_configuration(name, env(name), policies(name),
+                                                custom_rules)
 
     def test_missing_custom_branch_mode_fails(self):
         for name in target.ENVS:
             data = env(name)
             data["deployment_branch_policy"]["custom_branch_policies"] = False
             with self.assertRaises(target.GateBlocked):
-                target.verify_configuration(name, data, policies(name))
+                target.verify_configuration(name, data, policies(name), custom())
 
 
 if __name__ == "__main__":
