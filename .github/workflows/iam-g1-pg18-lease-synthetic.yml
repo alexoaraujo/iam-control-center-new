@@ -7,10 +7,12 @@ on:
     paths:
       - ".github/workflows/iam-g1-pg18-lease-synthetic.yml"
       - "database/tests/iam-g1-pg18-lease-synthetic.sh"
+      - "docs/operations/iam-g1-pg18-synthetic-lease-rehearsal-20261115.md"
   pull_request:
     paths:
       - ".github/workflows/iam-g1-pg18-lease-synthetic.yml"
       - "database/tests/iam-g1-pg18-lease-synthetic.sh"
+      - "docs/operations/iam-g1-pg18-synthetic-lease-rehearsal-20261115.md"
 
 permissions:
   contents: read
