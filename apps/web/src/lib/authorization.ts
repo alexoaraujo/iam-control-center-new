@@ -48,6 +48,12 @@ export async function checkPermission(
     || !validPermission(permission) || process.env.DATABASE_RUNTIME_ROLE !== expectedRuntime
     || !authDomain || !/^[a-z0-9][a-z0-9.-]+$/i.test(authDomain)) return false;
 
+  // PostgreSQL::uuid canonicalizes hex digits to lowercase before verifying
+  // the signed tenant context. Normalize both selectors first so the HMAC
+  // payload and every SQL comparison use the exact same UUID representation.
+  const canonicalTenantId = tenantId.toLowerCase();
+  const canonicalIdentityId = identityId.toLowerCase();
+
   const issuer = `https://${authDomain}/`;
   try {
     const db = getSql();
@@ -62,25 +68,25 @@ export async function checkPermission(
     if (!role || role.role !== expectedRuntime || role.login !== expectedRuntime
       || role.rolsuper !== false || role.rolbypassrls !== false) return false;
 
-    const proof = signTenantContext(tenantId, identityId);
+    const proof = signTenantContext(canonicalTenantId, canonicalIdentityId);
     if (!proof) return false;
 
     // Context must be set in a distinct SQL statement of the SAME atomic
     // transaction, not a writable CTE (RLS/STABLE visibility is statement-scoped).
     const [, results] = await db.transaction((tx) => [
       tx`SELECT iam.set_tenant_context(
-        ${tenantId}::uuid, ${identityId}::uuid,
+        ${canonicalTenantId}::uuid, ${canonicalIdentityId}::uuid,
         ${proof.expires}::bigint, ${proof.nonce}::text, ${proof.signature}::text
       )`,
       tx`SELECT EXISTS(
         SELECT 1 FROM iam.identities i
         JOIN iam.memberships m ON m.identity_id=i.id
-        WHERE i.id=${identityId}::uuid
+        WHERE i.id=${canonicalIdentityId}::uuid
           AND i.issuer=${issuer}::text
           AND i.subject=${subject}::text
-          AND m.tenant_id=${tenantId}::uuid
+          AND m.tenant_id=${canonicalTenantId}::uuid
           AND m.status='active'
-          AND app_private.current_tenant_id()=${tenantId}::uuid
+          AND app_private.current_tenant_id()=${canonicalTenantId}::uuid
           AND EXISTS(
             SELECT 1 FROM iam.effective_permissions(m.id) p
             WHERE p.permission_key=${permission}::text
