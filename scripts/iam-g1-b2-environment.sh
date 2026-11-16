@@ -40,7 +40,7 @@ bootstrap() {
     gh api --method PUT "$ENV_API" --input - >/dev/null
   gh api --method POST "$ENV_API/deployment-branch-policies" \
     -f name=main -f type=branch >/dev/null
-  echo "ENV_CREATED_MAIN_ONLY: required reviewer must be configured in GitHub Settings"
+  echo "ENV_CREATED_MAIN_ONLY: required independent reviewers and disabled administrator bypass must be configured in GitHub Settings"
 }
 
 verify_protections() {
@@ -53,15 +53,19 @@ verify_protections() {
     exit 3
   fi
   if ! gh api "$ENV_API/deployment-branch-policies?per_page=100" |
-    jq -e '.total_count == 1 and .branch_policies[0].name == "main"' >/dev/null; then
+    jq -e '.total_count == 1 and .branch_policies[0].name == "main" and .branch_policies[0].type == "branch"' >/dev/null; then
     echo "BLOCKED_ENVIRONMENT_BRANCH_POLICY: only main must be permitted" >&2
+    exit 3
+  fi
+  if ! jq -e '.can_admins_bypass == false' "$env_file" >/dev/null; then
+    echo "BLOCKED_ADMIN_BYPASS: disable administrator bypass on the environment" >&2
     exit 3
   fi
   if ! jq -e 'any(.protection_rules[]?; .type == "required_reviewers" and .prevent_self_review == true and ([.reviewers[]?] | length > 0))' "$env_file" >/dev/null; then
     echo "BLOCKED_INDEPENDENT_REVIEW: require reviewers and prevent self-review" >&2
     exit 3
   fi
-  echo "PASS_ENVIRONMENT_PROTECTIONS: main-only policy and independent review required"
+  echo "PASS_ENVIRONMENT_PROTECTIONS: main branch only, independent reviewers, no administrator bypass"
 }
 
 audit_names() {
