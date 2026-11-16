@@ -7,6 +7,10 @@ No Neon operations. Never put Backblaze credentials in pull requests, source cod
 
 GitHub Actions run [43798649391](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/43798649391) stopped before network access with `BLOCKED_MISSING_B2_SECRETS`. At least one of the two expected secrets was unavailable to the job. Workflow `iam-g1-b2-probe.yml` resolves **environment secrets** under the exact name `IAM-G1-Backup-Custody`.
 
+## Offline guard regression checks
+
+Before running the administrative repair, execute `python3 scripts/test-iam-g1-b2-environment-policy.py` on a trusted machine with `jq` installed. These tests use a fake `gh` executable and exercise rejection of tag-only `main`, administrator bypass, missing protection flags, self-review, and extra allowed branches. They do not access GitHub or Backblaze.
+
 ## Secure administrative repair
 
 Use a **trusted, interactive terminal** with `gh`, `jq`, and a GitHub account authorized to administer this repository. Authenticate with `gh auth login` if needed. Do not use an arbitrary CI runner to enter secrets.
