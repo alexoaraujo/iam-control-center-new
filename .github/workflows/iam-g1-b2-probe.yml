@@ -33,8 +33,9 @@ jobs:
           test "$B2_BUCKET" = "iam-control-center-g1-backups" || { echo "::error::BLOCKED_BUCKET_MISMATCH"; exit 1; }
           test "$B2_ENDPOINT" = "https://s3.us-east-005.backblazeb2.com" || { echo "::error::BLOCKED_ENDPOINT_MISMATCH"; exit 1; }
           test "$B2_REGION" = "us-east-005" || { echo "::error::BLOCKED_REGION_MISMATCH"; exit 1; }
-          python3 -m pip install --disable-pip-version-check --quiet --user 'boto3>=1.35,<2' 'cryptography>=44,<47'
-          python3 - <<'PY'
+          python3 -m venv "$RUNNER_TEMP/iam-g1-probe-venv"
+          "$RUNNER_TEMP/iam-g1-probe-venv/bin/python" -m pip install --disable-pip-version-check --quiet 'boto3>=1.35,<2' 'cryptography>=44,<47'
+          "$RUNNER_TEMP/iam-g1-probe-venv/bin/python" - <<'PY'
           import os, hashlib, secrets, datetime
           import boto3
           from botocore.config import Config
