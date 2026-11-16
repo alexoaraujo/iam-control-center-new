@@ -12,8 +12,8 @@ GitHub Actions run [43798649391](https://github.com/alexoaraujo/iam-control-cent
 Use a **trusted, interactive terminal** with `gh`, `jq`, and a GitHub account authorized to administer this repository. Authenticate with `gh auth login` if needed. Do not use an arbitrary CI runner to enter secrets.
 
 1. Run `bash scripts/iam-g1-b2-environment.sh bootstrap`. If the environment does not exist, this only creates an environment with a custom deployment branch policy restricted to `main`. It **does not add secrets or reviewers**. Existing environment settings are preserved.
-2. Open [GitHub Environments](https://github.com/alexoaraujo/iam-control-center-new/settings/environments) → **IAM-G1-Backup-Custody**. Require a genuinely independent reviewer and enable **Prevent self-review**, where supported. Keep the deployment branch restriction to **only `main`**. Do not assume the author of a previous PR is an independent backup custodian.
-3. Run `bash scripts/iam-g1-b2-environment.sh apply`. It **refuses** to write secrets unless the main-only and reviewer protections pass. It upserts these Environment variables:
+2. Open [GitHub Environments](https://github.com/alexoaraujo/iam-control-center-new/settings/environments) → **IAM-G1-Backup-Custody**. Require a genuinely independent reviewer, enable **Prevent self-review**, and disable **Allow administrators to bypass configured protection rules**. Keep the deployment branch restriction to **only the `main` branch** (policy type `branch`, not a tag named `main`). Do not assume the author of a previous PR is an independent backup custodian.
+3. Run `bash scripts/iam-g1-b2-environment.sh apply`. It **refuses** to write variables or secrets unless an exact `main` branch-only deployment policy, required reviewers with prevent-self-review, and `can_admins_bypass=false` all pass. A missing security field also fails closed. It upserts these Environment variables:
    - `IAM_G1_B2_BUCKET=iam-control-center-g1-backups`
    - `IAM_G1_B2_ENDPOINT=https://s3.us-east-005.backblazeb2.com`
    - `IAM_G1_B2_REGION=us-east-005`
@@ -24,7 +24,7 @@ Use a **trusted, interactive terminal** with `gh`, `jq`, and a GitHub account au
 ## Guardrails and evidence
 
 - Do not copy a repository secret into an environment by assuming its hidden value can be retrieved: GitHub secret values are write-only.
-- The existing environment must not be relaxed for the sake of passing a probe.
+- The existing environment must not be relaxed for the sake of passing a probe. If your GitHub plan does not support these protection controls, stop and obtain an independent authorization method rather than bypassing the gate.
 - A successful upload does not prove readback, object integrity after retrieval, private key custody, retention policy, isolated restore, or rollback.
 - Backup, restore, Neon branch mutations, and `G1_FULL_BACKUP_OWNER_APPROVED` remain **BLOCKED** until their independent gates pass.
 - Record only the run URL, SHA, status, ciphertext checksum, and reviewer approval in issue #97; **never** record credentials.
