@@ -1,0 +1,68 @@
+name: IAM-G1 B2 private encrypted synthetic probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-g1-b2-custody-probe
+  cancel-in-progress: false
+
+jobs:
+  encrypted-upload-probe:
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: IAM-G1-Backup-Custody
+    timeout-minutes: 10
+    steps:
+      - name: Verify protected configuration and upload encrypted synthetic data
+        shell: bash
+        env:
+          B2_BUCKET: ${{ vars.IAM_G1_B2_BUCKET }}
+          B2_ENDPOINT: ${{ vars.IAM_G1_B2_ENDPOINT }}
+          B2_REGION: ${{ vars.IAM_G1_B2_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.IAM_G1_B2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.IAM_G1_B2_SECRET_ACCESS_KEY }}
+          AWS_EC2_METADATA_DISABLED: 'true'
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$AWS_ACCESS_KEY_ID" && test -n "$AWS_SECRET_ACCESS_KEY" || { echo "::error::BLOCKED_MISSING_B2_SECRETS"; exit 1; }
+          test "$B2_BUCKET" = "iam-control-center-g1-backups" || { echo "::error::BLOCKED_BUCKET_MISMATCH"; exit 1; }
+          test "$B2_ENDPOINT" = "https://s3.us-east-005.backblazeb2.com" || { echo "::error::BLOCKED_ENDPOINT_MISMATCH"; exit 1; }
+          test "$B2_REGION" = "us-east-005" || { echo "::error::BLOCKED_REGION_MISMATCH"; exit 1; }
+          python3 -m pip install --disable-pip-version-check --quiet --user 'boto3>=1.35,<2' 'cryptography>=44,<47'
+          python3 - <<'PY'
+          import os, hashlib, secrets, datetime
+          import boto3
+          from botocore.config import Config
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+          # Only synthetic data; ephemeral encryption key is never exported or logged.
+          plaintext = b"IAM-G1-SYNTHETIC-NO-DATABASE-DATA:" + secrets.token_bytes(64)
+          key = AESGCM.generate_key(bit_length=256)
+          nonce = secrets.token_bytes(12)
+          ciphertext = nonce + AESGCM(key).encrypt(nonce, plaintext, b"iam-g1-probe-v1")
+          assert AESGCM(key).decrypt(nonce, ciphertext[12:], b"iam-g1-probe-v1") == plaintext
+          digest = hashlib.sha256(ciphertext).hexdigest()
+          stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+          object_key = f"iam-g1/probes/{stamp}-{os.environ['GITHUB_RUN_ID']}.aesgcm"
+          client = boto3.client(
+              "s3",
+              endpoint_url=os.environ["B2_ENDPOINT"],
+              region_name=os.environ["B2_REGION"],
+              config=Config(signature_version="s3v4", s3={"addressing_style": "path"}, retries={"max_attempts": 2}),
+          )
+          client.put_object(
+              Bucket=os.environ["B2_BUCKET"], Key=object_key, Body=ciphertext,
+              ContentType="application/octet-stream",
+              Metadata={"sha256": digest, "classification": "synthetic-encrypted-probe"},
+          )
+          print("PASS_B2_ENCRYPTED_SYNTHETIC_UPLOAD")
+          print(f"object_key={object_key}")
+          print(f"ciphertext_sha256={digest}")
+          print("READBACK_NOT_TESTED: requires separately approved read-only credential")
+          print("G1_FULL_BACKUP_OWNER_APPROVED=BLOCKED")
+          PY
