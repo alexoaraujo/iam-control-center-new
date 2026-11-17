@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
-    "test": "bun test --isolate --globals=vitest"
+    "test": "bun test --isolate --globals=vitest --preload ./test-preload.ts"
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^4.33.0",
