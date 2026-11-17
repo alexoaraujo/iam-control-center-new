@@ -35,6 +35,17 @@ test("RBAC E2E denies cross-branch credentials before fixture writes", () => {
   assert.match(e2e, /FAIL cleanup: fixture residue/);
 });
 
+test("RBAC synthetic writes preflight both effective owner role and runtime NOBYPASSRLS", () => {
+  assert.match(e2e, /BLOCKED_RBAC_FIXTURE_UNSAFE_ROLE_TOPOLOGY/);
+  assert.match(e2e, /pg_has_role\(current_user,'iam_owner','SET'\)/);
+  assert.match(e2e, /NOT rolbypassrls AND NOT rolsuper AND NOT rolcanlogin/);
+  assert.match(e2e, /NOT rolbypassrls AND NOT rolsuper FROM pg_roles WHERE rolname='iam_app_runtime_login'/);
+  const rolePreflight = e2e.indexOf("const roleTopology = await sql.query(");
+  const createFixture = e2e.indexOf("async function create(sql, subject)");
+  assert.ok(rolePreflight > 0 && createFixture > rolePreflight);
+  assert.match(e2e, /SET LOCAL ROLE iam_owner/);
+});
+
 test("RBAC credentials remain scoped to one protected Preview E2E step", () => {
   assert.match(workflow, /^\s+environment:\n\s+name: Preview$/m);
   assert.ok(workflow.includes("NEON_RBAC_TEST_OWNER_DATABASE_URL: ${{ github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && secrets.NEON_RBAC_TEST_OWNER_DATABASE_URL || '' }}"));
