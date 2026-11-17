@@ -12,6 +12,13 @@ describe("Biome lint replacement contracts", () => {
     expect(config.linter?.domains?.react).toBe("recommended");
   });
 
+  it("makes React Hooks, Next.js image optimization and JSX interaction rules blocking", () => {
+    expect(config.linter?.rules?.correctness?.useHookAtTopLevel).toBe("error");
+    expect(config.linter?.rules?.correctness?.useExhaustiveDependencies).toBe("error");
+    expect(config.linter?.rules?.performance?.noImgElement).toBe("error");
+    expect(config.linter?.rules?.a11y?.noStaticElementInteractions).toBe("error");
+  });
+
   it("keeps generated files outside the linted source tree", () => {
     expect(config.files?.includes).toContain("!!**/.next");
     expect(config.files?.includes).toContain("!!**/coverage");
