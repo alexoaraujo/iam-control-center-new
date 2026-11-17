@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { hasBuildRelevantChanges, shouldBuild } from "./vercel-ignore-build.mjs";
+import { decideSecurityGate } from "./release-security-gate.mjs";
 
 test("skips Preview for documentation-only changes", () => {
   assert.equal(
@@ -51,16 +52,43 @@ test("builds Preview when shared dependencies or workspace config changes", () =
   );
 });
 
-test("never skips Production", () => {
+test("denies any unapproved Production Git push, including docs-only changes", () => {
   assert.equal(
     shouldBuild({
-      environment: "production",
-      previousSha: "base",
-      currentSha: "head",
+      environment: "production", gitRef: "main", currentSha: "a".repeat(40),
       changedFiles: ["docs/only.md"],
     }),
+    false,
+  );
+});
+
+test("permits Production only for an exact reviewed 40-hex SHA on main", () => {
+  const sha = "a".repeat(40);
+  assert.equal(
+    shouldBuild({ environment: "production", gitRef: "main", currentSha: sha,
+      approvedProductionSha: sha, changedFiles: [] }),
     true,
   );
+  for (const input of [
+    { currentSha: "b".repeat(40), approvedProductionSha: sha, gitRef: "main" },
+    { currentSha: sha, approvedProductionSha: "b".repeat(40), gitRef: "main" },
+    { currentSha: sha, approvedProductionSha: sha, gitRef: "feature" },
+    { currentSha: sha, approvedProductionSha: sha, gitRef: "" },
+    { currentSha: sha, approvedProductionSha: "a".repeat(39), gitRef: "main" },
+    { currentSha: "a".repeat(39), approvedProductionSha: sha, gitRef: "main" },
+  ]) {
+    assert.equal(shouldBuild({ environment: "production", ...input, changedFiles: ["apps/web/src/app/page.tsx"] }), false);
+  }
+});
+
+test("release approval does not bypass Preview impact detection", () => {
+  const sha = "a".repeat(40);
+  assert.equal(shouldBuild({ environment: "preview", previousSha: "old",
+    currentSha: sha, approvedProductionSha: sha, gitRef: "main",
+    changedFiles: ["docs/only.md"] }), false);
+  assert.equal(shouldBuild({ environment: "preview", previousSha: "old",
+    currentSha: sha, approvedProductionSha: sha, gitRef: "main",
+    changedFiles: ["apps/web/src/app/page.tsx"] }), true);
 });
 
 test("fails closed when commit metadata is missing", () => {
@@ -77,4 +105,119 @@ test("fails closed when commit metadata is missing", () => {
 
 test("builds Preview when integration validation scripts change", () => {
   assert.equal(hasBuildRelevantChanges(["scripts/e2e-config.mjs"]), true);
+});
+
+test("builds an exact-SHA Preview for a main-sync merge carrying PR application changes", () => {
+  assert.equal(
+    shouldBuild({
+      environment: "preview",
+      previousSha: "previous-feature",
+      currentSha: "merged-feature",
+      // A Vercel incremental diff sees only the merged main's database changes.
+      changedFiles: [".github/workflows/database-tests.yml", "database/scripts/roles.sql"],
+      // The second merge parent is main, which does not contain the PR's app code.
+      mergeParentChangedFiles: ["apps/web/src/lib/authorization.ts", ".github/e2e/auth0-rbac.spec.cjs"],
+    }),
+    true,
+  );
+});
+
+test("SQL inherited through a main-sync merge must trigger exact-SHA Preview", () => {
+  assert.equal(
+    shouldBuild({
+      environment: "preview",
+      previousSha: "previous-feature",
+      currentSha: "merged-feature",
+      changedFiles: ["database/scripts/schema-manifest.sql"],
+      mergeParentChangedFiles: ["docs/operations/runbook.md"],
+    }),
+    true,
+  );
+});
+
+test("documentation-only main-sync merges still omit unneeded Preview", () => {
+  assert.equal(
+    shouldBuild({
+      environment: "preview",
+      previousSha: "previous-feature",
+      currentSha: "merged-feature",
+      changedFiles: ["docs/operations/runbook.md"],
+      mergeParentChangedFiles: ["README.md", "SECURITY.md"],
+    }),
+    false,
+  );
+});
+
+test("redeploying the same Preview SHA never ignores updated environment settings", () => {
+  assert.equal(
+    shouldBuild({
+      environment: "preview",
+      previousSha: "35dd97edd08a92bb4dbc1b1a9c02e5a3c11627d4",
+      currentSha: "35dd97edd08a92bb4dbc1b1a9c02e5a3c11627d4",
+      changedFiles: [],
+      mergeParentChangedFiles: [],
+    }),
+    true,
+  );
+});
+
+test("Preview impact classification and security-gate agree for SQL, workflows and unknown changes", () => {
+  const nonDocs = [
+    "database/migrations/0003_set_tenant_context_search_path.sql",
+    "database/scripts/schema-manifest.sql",
+    ".github/workflows/database-tests.yml",
+    ".github/workflows/quality.yml",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    "SCAFFOLD-MANIFEST.json",
+    "apps/web/src/lib/authorization.ts",
+    "scripts/vercel-ignore-build.mjs",
+    ".env.example",
+    "new-security-policy.json",
+  ];
+  for (const file of nonDocs) {
+    const preview = shouldBuild({
+      environment: "preview", previousSha: "before", currentSha: "after",
+      changedFiles: [file],
+    });
+    assert.equal(preview, true, file);
+    assert.equal(hasBuildRelevantChanges([file]), true, file);
+    const gateInputs = {
+      quality: "success", previewRequired: String(preview),
+      preview: "success", auth0Enabled: "true", syncAuth0: "success",
+      auth0E2E: "success", docsPreview: "skipped", changedFiles: [file],
+    };
+    assert.deepEqual(decideSecurityGate(gateInputs), { pass: true, reason: "E2E_VERIFIED" }, file);
+    for (const [name, value] of [["preview", "skipped"], ["syncAuth0", "failure"],
+      ["auth0E2E", "skipped"], ["previewRequired", "false"]]) {
+      assert.equal(decideSecurityGate({ ...gateInputs, [name]: value }).pass, false, file + ":" + name);
+    }
+  }
+});
+
+test("docs-only scopes require trusted docs Preview evidence, not Auth0 E2E", () => {
+  for (const file of ["README.md", "SECURITY.md", "docs/operations/runbook.md"]) {
+    const preview = shouldBuild({
+      environment: "preview", previousSha: "before", currentSha: "after",
+      changedFiles: [file],
+    });
+    assert.equal(preview, false, file);
+    assert.deepEqual(decideSecurityGate({
+      quality: "success", previewRequired: String(preview),
+      preview: "skipped", auth0Enabled: "false", syncAuth0: "skipped",
+      auth0E2E: "skipped", docsPreview: "success", changedFiles: [file],
+    }), { pass: true, reason: "DOCUMENTATION_ONLY_PREVIEW_VERIFIED" }, file);
+    assert.equal(decideSecurityGate({
+      quality: "success", previewRequired: "false",
+      docsPreview: "failure", changedFiles: [file],
+    }).pass, false);
+  }
+});
+
+test("no/invalid diff cannot suppress a required Preview", () => {
+  assert.equal(shouldBuild({
+    environment: "preview", previousSha: "before", currentSha: "after",
+    changedFiles: [], mergeParentChangedFiles: [],
+  }), true);
+  assert.equal(hasBuildRelevantChanges([""]), true);
+  assert.equal(hasBuildRelevantChanges(["docs/runbook.md", "database/migrations/003.sql"]), true);
 });
