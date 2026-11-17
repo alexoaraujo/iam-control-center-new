@@ -17,7 +17,10 @@ const collections = {
   default_acls: x => [x.schema,x.owner,x.object_type,x.grantee,x.privilege,x.grantor].join('|'),
   database_acl: x => [x.database,x.owner,x.grantee,x.privilege,x.grantor].join('|'),
   roles: x => x.name,
-  role_memberships: x => JSON.stringify(x),
+  // A role membership has no name field: derive its identity from the same
+  // deterministic structural representation used for value comparison.
+  // JSON.stringify(x) would confuse object-property insertion order with drift.
+  role_memberships: x => canonical(x),
 };
 const canonical = value => {
   // Preserve nested PostgreSQL array order (notably pg_enum.enumsortorder).
