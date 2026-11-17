@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { classifyOfflineScope, verifyOfflineCheckRuns } from "./iam-offline-ci-evidence.mjs";
 
 const canonical = [
@@ -53,6 +54,8 @@ test("unknown, mixed, malformed and sensitive file sets always require Auth0", (
     ["database/offline/compare-schema-manifests.mjs", "README.md"],
     ["database/offline/compare-schema-manifests.mjs", "database/offline/compare-schema-manifests.mjs"],
     [null], [" database/tests/run.sh"], ["database/tests/run.sh\napps/web/src/proxy.ts"],
+    [".github/workflows/iam-g1-b2-policy-test.yml"],
+    [".github/workflows/iam-g1-b2-readback-regression.yml"],
   ];
   for (const files of cases) assert.equal(classifyOfflineScope(files), null,
     JSON.stringify(files));
@@ -76,8 +79,9 @@ function run(path, overrides = {}) {
 
 test("trusts only matching completed SHA, PR, workflow path and GitHub Actions check", async () => {
   const scope = classifyOfflineScope(b2Env);
-  const checks = [checked("policy-regression")];
-  const good = () => run(".github/workflows/iam-g1-b2-policy-test.yml");
+  const checks = [checked("quality", 122), checked("policy-regression", 123)];
+  const good = id => run(id === "122"
+    ? ".github/workflows/quality.yml" : ".github/workflows/iam-g1-b2-policy-test.yml");
   assert.equal(await verifyOfflineCheckRuns({
     scope, checks, sha, loadRun: good,
   }), true);
@@ -91,8 +95,9 @@ test("trusts only matching completed SHA, PR, workflow path and GitHub Actions c
   ];
   for (const delta of wrongCases) {
     assert.equal(await verifyOfflineCheckRuns({
-      scope, checks, sha, loadRun: () =>
-        run(".github/workflows/iam-g1-b2-policy-test.yml", delta),
+      scope, checks, sha, loadRun: id =>
+        run(id === "122" ? ".github/workflows/quality.yml"
+          : ".github/workflows/iam-g1-b2-policy-test.yml", delta),
     }), false, JSON.stringify(delta));
   }
   for (const delta of [
@@ -101,7 +106,7 @@ test("trusts only matching completed SHA, PR, workflow path and GitHub Actions c
     { details_url: "https://example.com/forged" },
   ]) {
     assert.equal(await verifyOfflineCheckRuns({
-      scope, checks: [checked("policy-regression", 123, delta)],
+      scope, checks: [checked("quality", 122), checked("policy-regression", 123, delta)],
       sha, loadRun: good,
     }), false, JSON.stringify(delta));
   }
@@ -121,13 +126,49 @@ test("canonical comparison requires all four independent PostgreSQL 18 jobs", as
 
 test("readback policy does not accept a similarly named job from an arbitrary workflow", async () => {
   const scope = classifyOfflineScope(b2Readback);
-  const checks = [checked("readback-regression")];
+  const checks = [checked("quality", 124), checked("readback-regression", 125)];
+  const quality = id => id === "124" ? ".github/workflows/quality.yml"
+    : ".github/workflows/iam-g1-b2-readback-regression.yml";
   assert.equal(await verifyOfflineCheckRuns({
-    scope, checks, sha, loadRun: () =>
-      run(".github/workflows/iam-g1-b2-readback.yml"),
+    scope, checks, sha, loadRun: id =>
+      run(id === "124" ? ".github/workflows/quality.yml"
+        : ".github/workflows/iam-g1-b2-readback.yml"),
   }), false);
   assert.equal(await verifyOfflineCheckRuns({
-    scope, checks, sha, loadRun: () =>
-      run(".github/workflows/iam-g1-b2-readback-regression.yml"),
+    scope, checks, sha, loadRun: id => run(quality(id)),
   }), true);
+  assert.equal(await verifyOfflineCheckRuns({
+    scope, checks: [checked("readback-regression", 125)],
+    sha, loadRun: id => run(quality(id)),
+  }), false, "PR-defined readback workflow cannot self-attest without quality");
+});
+
+
+test("B2 scopes require independent protected quality checks at same SHA", async () => {
+  for (const [scopeFiles, externalName, workflow] of [
+    [b2Env, "policy-regression", ".github/workflows/iam-g1-b2-policy-test.yml"],
+    [b2Readback, "readback-regression", ".github/workflows/iam-g1-b2-readback-regression.yml"],
+  ]) {
+    const scope = classifyOfflineScope(scopeFiles);
+    const runs = id => run(id === "126" ? ".github/workflows/quality.yml" : workflow);
+    const full = [checked("quality", 126), checked(externalName, 127)];
+    assert.equal(await verifyOfflineCheckRuns({ scope, checks: full, sha, loadRun: runs }), true);
+    assert.equal(await verifyOfflineCheckRuns({
+      scope, checks: full.slice(1), sha, loadRun: runs,
+    }), false, "external PR-defined workflow must not self-attest");
+    assert.equal(await verifyOfflineCheckRuns({
+      scope, checks: full, sha, loadRun: id => run(id === "126" ? workflow : workflow),
+    }), false, "spoofed quality check must not be accepted from external workflow");
+  }
+});
+
+test("protected quality job actually executes synthetic B2 checks without private credentials", () => {
+  const yml = readFileSync(".github/workflows/quality.yml", "utf8");
+  const quality = yml.split("\n  quality:\n")[1]?.split("\n  preview-deployment:\n")[0];
+  assert.ok(quality);
+  assert.ok(quality.includes("Independently run synthetic B2 regressions from trusted CI"));
+  assert.ok(quality.includes("bash -n scripts/iam-g1-b2-environment.sh"));
+  assert.ok(quality.includes("python3 scripts/test-iam-g1-b2-environment-policy.py"));
+  assert.ok(quality.includes("python3 scripts/iam-g1-b2-readback.py --self-test"));
+  assert.ok(!quality.includes("secrets."));
 });
