@@ -29,6 +29,28 @@ test("builds Preview when the Auth0 CI workflow changes", () => {
   );
 });
 
+test("treats edits to the docs Preview gate as security-sensitive", () => {
+  const changedFiles = [".github/workflows/docs-preview-gate.yml"];
+  assert.equal(hasBuildRelevantChanges(changedFiles), true);
+  assert.equal(shouldBuild({
+    environment: "preview",
+    previousSha: "before",
+    currentSha: "after",
+    changedFiles,
+  }), true);
+  // A docs Preview result cannot authorize a change to the gate itself.
+  assert.equal(decideSecurityGate({
+    quality: "success",
+    previewRequired: "true",
+    preview: "skipped",
+    syncAuth0: "skipped",
+    auth0E2E: "skipped",
+    docsPreview: "success",
+    auth0Enabled: "true",
+    changedFiles,
+  }).pass, false);
+});
+
 test("builds Preview when web application code changes", () => {
   assert.equal(
     shouldBuild({
