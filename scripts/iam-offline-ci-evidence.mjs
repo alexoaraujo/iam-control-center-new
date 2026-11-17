@@ -26,6 +26,9 @@ const scopes = [
   },
   {
     id: "b2-environment-policy",
+    // A changed script is required: a PR-created workflow alone is not proof.
+    requiredChanged: ["scripts/iam-g1-b2-environment.sh",
+      "scripts/test-iam-g1-b2-environment-policy.py"],
     files: [
       ".github/workflows/iam-g1-b2-policy-test.yml",
       "docs/operations/iam-g1-b2-custody-reconciliation.md",
@@ -33,11 +36,13 @@ const scopes = [
       "scripts/test-iam-g1-b2-environment-policy.py",
     ],
     checks: [
+      ["quality", ".github/workflows/quality.yml"],
       ["policy-regression", ".github/workflows/iam-g1-b2-policy-test.yml"],
     ],
   },
   {
     id: "b2-readback-policy",
+    requiredChanged: ["scripts/iam-g1-b2-readback.py"],
     files: [
       ".github/workflows/iam-g1-b2-readback-regression.yml",
       ".github/workflows/iam-g1-b2-readback.yml",
@@ -45,6 +50,7 @@ const scopes = [
       "scripts/iam-g1-b2-readback.py",
     ],
     checks: [
+      ["quality", ".github/workflows/quality.yml"],
       ["readback-regression", ".github/workflows/iam-g1-b2-readback-regression.yml"],
     ],
   },
@@ -66,7 +72,8 @@ export function classifyOfflineScope(changedFiles) {
   for (const scope of scopes) {
     const allowed = new Set(scope.files);
     if (changedFiles.every(file => allowed.has(file)) &&
-        changedFiles.some(file => !documentary(file))) {
+        changedFiles.some(file => !documentary(file)) &&
+        (!scope.requiredChanged || scope.requiredChanged.some(file => changedFiles.includes(file)))) {
       return { id: scope.id, checks: scope.checks };
     }
   }
@@ -141,8 +148,11 @@ export async function attestOfflineScope(env) {
     throw Error("PR identity changed or untrusted head repository");
   }
   const fileRecords = pages("repos/" + repository + "/pulls/" + PR_NUMBER + "/files");
-  // Never exempt renames, whose original paths could be Auth0/runtime files.
-  if (fileRecords.some(file => file.status === "renamed" ||
+  // Never exempt renames or deleted scripts/workflows: the verifier must
+  // not trust a self-modified test workflow whose underlying test disappeared.
+  if (fileRecords.some(file =>
+      (file.status === "removed" && !documentary(file.filename)) ||
+      file.status === "renamed" ||
       file.previous_filename || typeof file.filename !== "string")) {
     return { verified: false, scope: "none" };
   }
