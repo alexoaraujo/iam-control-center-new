@@ -8,14 +8,14 @@
 | Job | Usa ambiente protegido? | Acesso sensível | Modo após este patch |
 | --- | --- | --- | --- |
 | `quality` | Não | Nenhum secret real (build com variáveis inertes) | Automático |
-| `preview-deployment` | **Não**, removido neste patch | GitHub checks/statuses/deployments **read-only**, sem `secrets.*` | **Automático**; verifica SHA exato, `Vercel Preview Comments`, URL e READY via checks |
+| `preview-deployment` | **Não**, removido neste patch | GitHub checks/statuses **read-only**; sem permissão de deployments, sem `secrets.*` | **Automático**; verifica SHA exato, `Vercel Preview Comments`, URL e READY via checks |
 | `sync-auth0-preview` | `Preview` | `secrets.VERCEL_API_TOKEN` | Mantém proteção do Environment + checagem explícita branch/alias/SHA |
 | `auth0-e2e` | `Preview` | Credenciais reais Auth0, GitHub OIDC `id-token: write` | Mantém proteção do Environment, validações OIDC, callback e E2E real |
 | `security-gate` integrado | Não | Verifica resultado dos jobs anteriores | Mantém fail-closed |
 | `iam-canonical-isolated-restore.yml` | `IAM-Canonical-Isolated-Restore` para operações autenticadas | URLs com credenciais e DDL opcional | **Intocado**; aprovação independente continua aplicável |
 | G1 Neon/B2 e ambientes de revogação | Vários ambientes específicos | Backups, restauração, revogação e credenciais | **Intocados** |
 
-O componente `preview-deployment` não possui etapas de deploy e executa apenas leituras da API GitHub via `GH_TOKEN` de escopo read. Não precisa de Environment `Preview` para obter OIDC, pois esse job não solicita OIDC. O job `auth0-e2e` **continua** com `environment: Preview`, exigido pelo subject de OIDC esperado pelo Vercel; não substituir por ambiente fictício.
+O componente `preview-deployment` não possui etapas de deploy e executa apenas leituras dos GitHub commit statuses e check-runs via `GH_TOKEN`. Não solicita sequer permissão `deployments: read`; uma prova de contrato impede a reintrodução desta permissão. Não precisa de Environment `Preview` para obter OIDC, pois esse job não solicita OIDC. O job `auth0-e2e` **continua** com `environment: Preview`, exigido pelo subject de OIDC esperado pelo Vercel; não substituir por ambiente fictício.
 
 ## Auditoria e validação
 
