@@ -4,7 +4,7 @@
  * independently validated before any release approval. It is NOT a security bypass.
  */
 import { mock, vi as bunVi } from "bun:test";
-import { vi as vitestVi } from "vitest";
+import { beforeEach, vi as vitestVi } from "vitest";
 
 const nativeAndCompat = [...new Set([bunVi, vitestVi])];
 type Patchable = typeof bunVi & {
@@ -72,3 +72,8 @@ for (const v of nativeAndCompat) {
 // dependency. These test files import server modules under mocked boundaries;
 // the Bun test loader must treat the marker as inert ONLY within this test VM.
 mock.module("server-only", () => ({}));
+
+// Vitest 5 resets mock call histories before each case. Bun 1.4.4 currently
+// retains calls between cases in a suite, which would produce false failures.
+// Preserve the stricter original semantics without resetting implementations.
+beforeEach(() => vitestVi.clearAllMocks());
