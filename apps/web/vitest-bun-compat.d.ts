@@ -1,12 +1,10 @@
 /**
- * Test-only TypeScript declaration for Bun's built-in Vitest runtime shim.
- * No runtime import and no replacement of application authorization types.
+ * Types for Bun 1.4.4's built-in virtual "vitest" module in test files only.
+ * The application never imports this module; production code is unchanged.
  *
- * Keep assertions and mocking strongly typed through the real bun:test APIs;
- * never replace test functions or vi with any.
- *
- * Bun 1.4.4's package does not currently expose bun-types/vitest to TS 6.0.3
- * via compilerOptions.types under pnpm, so bridge the virtual module here.
+ * Bun's core vi is strongly typed but lacks the Vitest-compatible helpers
+ * that test-preload.ts provides. Mirror their precise signatures here rather
+ * than masking test failures with skipLibCheck / any / ts-ignore.
  */
 declare module "vitest" {
   export {
@@ -18,6 +16,13 @@ declare module "vitest" {
     expect,
     it,
     test,
-    vi,
   } from "bun:test";
+
+  export const vi: typeof import("bun:test").vi & {
+    hoisted<T>(factory: () => T): T;
+    stubEnv(name: string, value: string | undefined): void;
+    unstubAllEnvs(): void;
+    stubGlobal(name: string, value: unknown): void;
+    unstubAllGlobals(): void;
+  };
 }
