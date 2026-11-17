@@ -13,7 +13,7 @@ function stop(code) {
 function validRef(ref) {
   return typeof ref?.branch === "string" && BRANCH_PATTERN.test(ref.branch) &&
     !/[\r\n]/.test(ref.branch) && SHA_PATTERN.test(ref.sha ?? "") &&
-    ref.repo === REPO && /^[a-zA-Z0-9-]+\\.vercel\\.app$/.test(ref.previewHost ?? "") &&
+    ref.repo === REPO && /^[a-zA-Z0-9-]+\.vercel\.app$/.test(ref.previewHost ?? "") &&
     typeof ref.deploymentId === "string" &&
     /^dpl_[a-zA-Z0-9]+$/.test(ref.deploymentId);
 }
@@ -26,7 +26,8 @@ function verifyDeployment(deployment, ref) {
       metadata.githubCommitSha !== ref.sha ||
       metadata.githubOrg !== "alexoaraujo" ||
       metadata.githubRepo !== "iam-control-center-new" ||
-      !/^[a-z0-9-]+\.vercel\.app$/.test(deployment?.url ?? "")) {
+      (deployment?.url !== ref.previewHost &&
+       !deployment?.alias?.includes(ref.previewHost))) {
     stop("BLOCKED_PREVIEW_LEASE_EXACT_DEPLOYMENT");
   }
 }
