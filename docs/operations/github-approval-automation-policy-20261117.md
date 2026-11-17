@@ -1,7 +1,7 @@
 # PEOS — Automação de approvals GitHub: reduzir intervenção manual sem bypass
 
 **Data:** 2026-11-17. **Repo:** `alexoaraujo/iam-control-center-new`.  
-**Escopo deste patch:** somente o workflow `.github/workflows/quality.yml`, contrato de testes e CI isolada. Nenhuma alteração de Settings/Environments via API, Vercel, Auth0, Neon, secrets, Production ou `main`.
+**Escopo deste patch:** `.github/workflows/quality.yml`, contrato read-only, CI isolada e a classificação fail-closed de mudanças em `scripts/vercel-ignore-build.mjs` com testes sintéticos. Nenhuma alteração de Settings/Environments via API, Vercel, Auth0, Neon, secrets, Production ou `main`.
 
 ## Separação de aprovações
 
@@ -45,3 +45,12 @@ Para eliminar **todas** as solicitações de revisão de Environment, o administ
 ## Branch de integração com o PoC Bun sem picomatch
 
 Esta cópia é empilhada sobre a [PR #121](https://github.com/alexoaraujo/iam-control-center-new/pull/121), SHA pai `55dac1c52e3b9d453d2a8db4c5c2efb2ca1ff4c7`, que demonstrou `pnpm audit` sem `picomatch`. As alterações deste patch equivalem à [PR #124](https://github.com/alexoaraujo/iam-control-center-new/pull/124), mas são avaliadas sobre a árvore com Bun, não sobre a `main` vulnerável. O check integrado `security-gate` continua a exigir E2E Auth0 real, callback branch/SHA autorizado e reviews independentes; a autorização operacional continua pendente. Não rebasear cegamente sobre a `main` antes da integração e das aprovações.
+
+
+## Refatoração complementar — Preview por SHA nunca omite origens removidas por rename
+
+A leitura integral do classificador de Preview revelou que `git diff --name-only` com detecção automática de renames pode exibir apenas `docs/archive.md` ao mover `apps/web/authorization.ts` para `docs/`. Isso ocultaria um arquivo de código removido e poderia produzir `preview_required=false` indevidamente. O `security-gate` integrado já executava `git diff --no-renames` e recusaria o falso escopo, mas a CI deixaria de executar o Preview necessário.
+
+A correção usa `git diff --no-renames --name-only` em **ambos** os comparadores Git (diff principal e pais adicionais de merge), para preservar o caminho do código removido. O predicado `shouldBuild` retorna `true` (construir Preview) quando recebe arrays de diff ausentes ou inválidos, em vez de lançar erro não controlado. O arquivo `scripts/vercel-ignore-build.test.mjs` inclui testes de valores malformados e uma simulação real de Git com renomeação de fonte para docs que verifica `preview_required=true` no output do comando executado.
+
+Esta refatoração não altera o gate Production, não dispensa o Auth0 E2E, não usa secrets e não concede novos privilégios. Uma renomeação de código exige Preview; um diff genuinamente documental continua apto a ser omitido apenas após a classificação e o gate documental independentes.
