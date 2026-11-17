@@ -34,6 +34,6 @@ describe("Biome lint replacement contracts", () => {
 
   it("leaves independent typecheck and unit test gates enabled", () => {
     expect(manifest.scripts?.typecheck).toBe("tsc --noEmit");
-    expect(manifest.scripts?.test).toBe("bun test --isolate --globals=vitest");
+    expect(manifest.scripts?.test).toBe("bun test --isolate --globals=vitest --preload ./test-preload.ts");
   });
 });
