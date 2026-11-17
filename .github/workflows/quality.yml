@@ -112,7 +112,6 @@ jobs:
       contents: read
       statuses: read
       checks: read
-      deployments: read
     steps:
       - name: Wait for an exact-SHA READY Vercel Preview deployment
         id: resolve-preview
