@@ -73,6 +73,7 @@ function run(path, overrides = {}) {
   return {
     path, head_sha: sha, event: "pull_request", status: "completed",
     conclusion: "success", repository: { full_name: repo },
+    pull_requests: [{ number: 98, head: { sha } }],
     ...overrides,
   };
 }
@@ -83,30 +84,38 @@ test("trusts only matching completed SHA, PR, workflow path and GitHub Actions c
   const good = id => run(id === "122"
     ? ".github/workflows/quality.yml" : ".github/workflows/iam-g1-b2-policy-test.yml");
   assert.equal(await verifyOfflineCheckRuns({
-    scope, checks, sha, loadRun: good,
+    scope, checks, sha, prNumber: 98, loadRun: good,
   }), true);
   const wrongCases = [
     { head_sha: "b".repeat(40) },
     { event: "workflow_dispatch" },
     { status: "in_progress" },
-    { conclusion: "failure" },
+    // A failed parent workflow is acceptable if the exact check job succeeded.
+    { pull_requests: [{ number: 99, head: { sha } }] },
+    { pull_requests: [{ number: 98, head: { sha: "b".repeat(40) } }] },
+    { pull_requests: [] },
     { path: ".github/workflows/quality.yml" },
     { repository: { full_name: "somewhere/else" } },
   ];
   for (const delta of wrongCases) {
     assert.equal(await verifyOfflineCheckRuns({
-      scope, checks, sha, loadRun: id =>
+      scope, checks, sha, prNumber: 98, loadRun: id =>
         run(id === "122" ? ".github/workflows/quality.yml"
           : ".github/workflows/iam-g1-b2-policy-test.yml", delta),
     }), false, JSON.stringify(delta));
   }
+  assert.equal(await verifyOfflineCheckRuns({
+    scope, checks, sha, prNumber: 98,
+    loadRun: id => run(id === "122" ? ".github/workflows/quality.yml"
+      : ".github/workflows/iam-g1-b2-policy-test.yml", { conclusion: "failure" }),
+  }), true, "parent CI can fail only because security-gate depends on this attestation");
   for (const delta of [
     { head_sha: "b".repeat(40) }, { conclusion: "skipped" },
     { app: { slug: "untrusted" } }, { status: "in_progress" },
     { details_url: "https://example.com/forged" },
   ]) {
     assert.equal(await verifyOfflineCheckRuns({
-      scope, checks: [checked("quality", 122), checked("policy-regression", 123, delta)],
+      scope, prNumber: 98, checks: [checked("quality", 122), checked("policy-regression", 123, delta)],
       sha, loadRun: good,
     }), false, JSON.stringify(delta));
   }
@@ -116,10 +125,10 @@ test("canonical comparison requires all four independent PostgreSQL 18 jobs", as
   const scope = classifyOfflineScope(canonical);
   const checks = scope.checks.map(([name], i) => checked(name, 123 + i));
   const loadRun = () => run(".github/workflows/database-tests.yml");
-  assert.equal(await verifyOfflineCheckRuns({ scope, checks, sha, loadRun }), true);
+  assert.equal(await verifyOfflineCheckRuns({ scope, checks, sha, prNumber: 98, loadRun }), true);
   for (let i = 0; i < checks.length; i++) {
     assert.equal(await verifyOfflineCheckRuns({
-      scope, checks: checks.filter((_, j) => i !== j), sha, loadRun,
+      scope, prNumber: 98, checks: checks.filter((_, j) => i !== j), sha, loadRun,
     }), false, "Missing independent PG18 job " + i);
   }
 });
@@ -130,15 +139,15 @@ test("readback policy does not accept a similarly named job from an arbitrary wo
   const quality = id => id === "124" ? ".github/workflows/quality.yml"
     : ".github/workflows/iam-g1-b2-readback-regression.yml";
   assert.equal(await verifyOfflineCheckRuns({
-    scope, checks, sha, loadRun: id =>
+    scope, checks, sha, prNumber: 98, loadRun: id =>
       run(id === "124" ? ".github/workflows/quality.yml"
         : ".github/workflows/iam-g1-b2-readback.yml"),
   }), false);
   assert.equal(await verifyOfflineCheckRuns({
-    scope, checks, sha, loadRun: id => run(quality(id)),
+    scope, checks, sha, prNumber: 98, loadRun: id => run(quality(id)),
   }), true);
   assert.equal(await verifyOfflineCheckRuns({
-    scope, checks: [checked("readback-regression", 125)],
+    scope, prNumber: 98, checks: [checked("readback-regression", 125)],
     sha, loadRun: id => run(quality(id)),
   }), false, "PR-defined readback workflow cannot self-attest without quality");
 });
@@ -152,12 +161,12 @@ test("B2 scopes require independent protected quality checks at same SHA", async
     const scope = classifyOfflineScope(scopeFiles);
     const runs = id => run(id === "126" ? ".github/workflows/quality.yml" : workflow);
     const full = [checked("quality", 126), checked(externalName, 127)];
-    assert.equal(await verifyOfflineCheckRuns({ scope, checks: full, sha, loadRun: runs }), true);
+    assert.equal(await verifyOfflineCheckRuns({ scope, checks: full, sha, prNumber: 98, loadRun: runs }), true);
     assert.equal(await verifyOfflineCheckRuns({
-      scope, checks: full.slice(1), sha, loadRun: runs,
+      scope, prNumber: 98, checks: full.slice(1), sha, loadRun: runs,
     }), false, "external PR-defined workflow must not self-attest");
     assert.equal(await verifyOfflineCheckRuns({
-      scope, checks: full, sha, loadRun: id => run(id === "126" ? workflow : workflow),
+      scope, checks: full, sha, prNumber: 98, loadRun: id => run(id === "126" ? workflow : workflow),
     }), false, "spoofed quality check must not be accepted from external workflow");
   }
 });
