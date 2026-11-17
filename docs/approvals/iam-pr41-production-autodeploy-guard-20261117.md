@@ -47,6 +47,22 @@
 4. Após o merge, confirmar CI em `main`, ref final, novo SHA, Production alias e estado do deployment. Se a proteção não se mantiver, interromper promoção e avaliar rollback controlado; nenhuma alteração destrutiva automática.
 5. Manter backup/restore G1, Neon cutover, alteração de Production e liberação de domínio fora do escopo.
 
+## 3A. Alternativa suportada encontrada — desativar auto-assign dos domínios Production
+
+**Fonte oficial:** https://vercel.com/docs/deployments/promoting-a-deployment (seção *Staging and promoting a production deployment*). A Vercel documenta que desligar **Auto-assign Custom Production Domains** permite que o próximo build Production fique em estado *Staged*, sem direcionar automaticamente tráfego aos domínios de Production. A promoção posterior precisa de comando/ação manual. A página de Git também confirma que pushes em `main` podem criar builds `production`: desligar auto-assign não significa impedir a criação do deployment.
+
+**Controle candidato para aprovação — Vercel project settings:**
+- UI: `Project → Settings → Environments → Production → Branch Tracking → Auto-assign Custom Production Domains = OFF`.
+- API vinculada: `update_project` com `requestBody: { "autoAssignCustomDomains": false }`. Essa ação **não foi executada**.
+- Possível alternativa: `commandForIgnoringBuildStep` para ignorar builds Production ou `git.deploymentEnabled` em `vercel.json`. Porém editar Git alteraria o SHA aprovado da PR #41 e *Ignored Build Step* não é equivalente a autopromoção bloqueada; não são a escolha primária sem nova revisão.
+- A configuração só poderá ser alterada após aprovação formal inequívoca no HEAD **atual da PR #109**, e a operação deve ser bloqueada se a API recusar ou se o readback não provar o controle.
+
+**Preflight adicional de escopo:** o domínio efetivo da aplicação é `iam-control-center-new.vercel.app`. O nome do ajuste diz *Custom Production Domains*; **não assumir** que esse ajuste cobre automaticamente o domínio padrão `.vercel.app`. Antes do merge, exigir verificação inequívoca do comportamento de assignment para **esse domínio específico**. Se a API não expuser a configuração, realizar readback pela UI do projeto; se ainda não houver prova independente, `BLOCKED_UNVERIFIED_PRODUCTION_GUARD`.
+
+**Readback obrigatório após autorização:** confirmar que `autoAssignCustomDomains=false` está persistido no projeto Vercel, que `iam-control-center-new.vercel.app` continua na baseline `dpl_4sd7DPf8nnr5WuzieAkn2CZcbSq1`, e que a política é aplicável ao próximo push `main` **antes** de executar o merge. A baseline deve continuar READY. Caso haja divergência, parar sem merge e restaurar a configuração anterior via rollback previamente aprovado. Não usar cancelamento manual de um novo deployment como mecanismo de prevenção.
+
+**Separação dos gates:** aprovação para aplicar a trava ≠ comprovação efetiva da trava ≠ autorização de promover Production. A PR #41 já possui autorização de merge condicionada. Esta PR #109 não deve ser integrada à feature branch PR #41, pois modificaria o SHA aprovado, exigindo repetir CI/Auth0/review.
+
 ## 4. Critérios para o revisor
 
 - [ ] Confirmar os SHAs da PR #41 e de `main` sem alteração.
