@@ -17,7 +17,7 @@
 4. Generated `pnpm-lock.yaml` **on authenticated GitHub Actions runner** using pnpm 10.34.9 `pnpm install --lockfile-only --ignore-scripts`. GitHub [run #44156526386](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44156526386), job `regenerate-biome-lockfile` SUCCESS. Transferred the generated public lockfile unchanged to this branch (no fabricated integrity hashes).
 5. Tested against the resulting frozen lockfile in [run #44157006241](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44157006241), job `biome-lint-proof` (#134300315395), around **2026-11-17T19:18Z**:
    - `pnpm install --frozen-lockfile` **PASS**.
-   - `pnpm lint` (Biome) **PASS**.
+   - `pnpm lint` (Biome) **PASS, with 25 non-blocking warnings** over 48 files (primarily CSS selector specificity and TypeScript assertions). Existing warnings must be reviewed; this is not parity evidence.
    - `pnpm typecheck` **PASS**.
    - `pnpm test` (Vitest, **19 test files**) **PASS**.
    - `node --test scripts/*.test.mjs`: **122 PASS**, 0 FAIL.
@@ -32,7 +32,7 @@ The old ESLint config enabled Next Core Web Vitals and Next TypeScript presets. 
 
 ## Next safe gate
 
-- [ ] Independently inventory which ESLint rules were enforced and compare with Biome equivalents, including negative fixtures for React hooks, Next-specific elements and accessibility.
+- [ ] Evaluate and remediate the 25 Biome warnings without suppressing security-critical rules. Independently inventory which ESLint rules were enforced and compare with Biome equivalents, including negative fixtures for React hooks, Next-specific elements and accessibility.
 - [ ] Create a separate controlled proposal to replace the Vitest/Vite test runner with equal mock, TypeScript/TSX and database authorization regression coverage; verify alternative dependency tree before adopting it.
 - [ ] Generate lockfile with pnpm and run clean `pnpm audit` **without waivers**.
 - [ ] Rerun all required CI workflows, PG18/RLS, and branch-specific Preview/Auth0 as necessary on the integrated SHA.
