@@ -6,13 +6,13 @@
 
 - Repositório: `alexoaraujo/iam-control-center-new`.
 - `main` na inspeção: `17a4e86fddecc02c4326049fdf3d95fea6f4e522`. Se o SHA mudar, revalidar a base e os controles.
-- PR de código: [#113](https://github.com/alexoaraujo/iam-control-center-new/pull/113), branch `fix/peos-ci-offline-security-gate-20261117`, HEAD `a9d0bf1313b6850772e17a7d4a3d7ad70c3d585b`. Qualquer novo push invalida a autorização de SHA.
+- PR de código: [#113](https://github.com/alexoaraujo/iam-control-center-new/pull/113), branch `fix/peos-ci-offline-security-gate-20261117`, HEAD `51c857a1f130300cdb3f34686511200364558b87`. Qualquer novo push invalida a autorização de SHA.
 - Vercel equipe `aoa4`, projeto `prj_OnuwD1iarOsXh6FFGkSpK4A5mj80`.
 - Callback compartilhado: `iam-control-center-new-ci-preview.vercel.app` (project domain `verified=true`).
 - Baseline de project domain: `gitBranch=feat/iam-api-rbac-lineage-20261110`.
 - Baseline de alias: `dpl_AHt58aoFXCAJXzkXngm2ZgrVS72w`, READY, proveniente de `feat/iam-api-rbac-lineage-20261110@f2cfa570e282463d4e7457613de3f4a527df8149`.
 - Preview anterior da PR #113, **NÃO ELEGÍVEL**: `dpl_GfYemN9v1C9vNBC2iuD8EuWG12Sc`, SHA histórico `810cc0e88cd16981d2f74a5ae9acc83b921d2b8e`.
-- **Preview candidato atual, somente leitura, não autorizado para lease**: `dpl_BxFmVyAMjQLnK9SKoChTXs3qdDP8`, READY, branch `fix/peos-ci-offline-security-gate-20261117`, SHA `a9d0bf1313b6850772e17a7d4a3d7ad70c3d585b`. A criação futura de env branch-specific pode exigir novo deploy sem mudar código; toda troca de deployment ID exige novo readback e reaprovação.
+- **Preview candidato atual, somente leitura, não autorizado para lease**: `dpl_78rb6VD5Ab9d8CGwcVpxr7G6nmw8`, READY, branch `fix/peos-ci-offline-security-gate-20261117`, SHA `51c857a1f130300cdb3f34686511200364558b87`. A criação futura de env branch-specific pode exigir novo deploy sem mudar código; toda troca de deployment ID exige novo readback e reaprovação.
 - Production baseline: domínio `iam-control-center-new.vercel.app` apontando para `dpl_4sd7DPf8nnr5WuzieAkn2CZcbSq1`, commit `main@665b41008d16e88d6cd6f9857951a294ddb112f2`.
 - GitHub ruleset `protect-main` ID `26988310`: ativo, 1 revisão independente, checks `quality` e `security-gate`, sem bypass.
 - CI anterior: [run #44025495927](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44025495927), quality/Preview PASS; `sync-auth0-preview=FAIL` com `AUTH0_GATE_REVIEW_REQUIRED`, `auth0-e2e=SKIPPED`, `security-gate=FAIL`. Esse bloqueio é esperado e **não** deve ser removido.
@@ -21,9 +21,15 @@
 Os deployments, domínios e seus metadados são **referências temporais** de leitura autenticada. Nenhuma execução deve confiar nesses valores sem novo readback.
 
 
+## 1A. Reconciliação da prova offline e eliminação de dependência circular
+
+O verificador foi corrigido para evitar uma dependência circular entre `quality`, `offline-evidence` e `security-gate`: a conclusão positiva do **job** é obrigatória, enquanto o run pai pode estar `in_progress` ou completar com `failure` porque o próprio gate depende da prova. Validação de proveniência requer `repository.full_name`, `head_sha`, `event=pull_request`, workflow path exato e inclusão do número/HEAD da PR no array `pull_requests`. Testes negativos cobrem associação de outra PR, SHA divergente, job pulado/falho e status inválidos do run.
+
+No HEAD `51c857a1f130300cdb3f34686511200364558b87`, `quality=SUCCESS` e o gate PostgreSQL 18/RLS = SUCCESS; `auth0-e2e` continua **não autorizado/não comprovado**. O deployment `dpl_78rb6VD5Ab9d8CGwcVpxr7G6nmw8` está READY no SHA/branch corretos, mas **não recebeu** a configuração branch-specific ausente e **não** está autorizado para lease. A review anterior da #113 e a da #114 exigem renovação em seus respectivos HEADs.
+
 ## 1A. Revisão do gate após novo HEAD da PR #113
 
-O commit `a9d0bf1313b6850772e17a7d4a3d7ad70c3d585b` reforça a proveniência de testes offline B2: o job `quality` protegido pela baseline reexecuta testes sintéticos e o attestador exige check `quality` + workflow de regressão no mesmo SHA. A revisão de código no SHA anterior foi invalidada pelo `protect-main`; exige **nova review independente** e CI para o HEAD atual. **A review de lease anterior, que cita `810cc0e88cd16981d2f74a5ae9acc83b921d2b8e`, também não autoriza o novo SHA**.
+O commit `51c857a1f130300cdb3f34686511200364558b87` reforça a proveniência de testes offline B2: o job `quality` protegido pela baseline reexecuta testes sintéticos e o attestador exige check `quality` + workflow de regressão no mesmo SHA. A revisão de código no SHA anterior foi invalidada pelo `protect-main`; exige **nova review independente** e CI para o HEAD atual. **A review de lease anterior, que cita `810cc0e88cd16981d2f74a5ae9acc83b921d2b8e`, também não autoriza o novo SHA**.
 
 Inventário Vercel Preview (`decrypt=false`) indicou `APP_BASE_URL` sem fallback Preview e sem valor da branch; `E2E_CALLBACK_HOST` e `E2E_CALLBACK_BRANCH` sem branch-specific, com fallback `encrypted` incompatível com o contrato `plain`. `AUTH0_DOMAIN` default está correto; `AUTH0_CLIENT_SECRET` e `AUTH0_SECRET` existentes permanecem intactos. **Não copiar `DATABASE_URL` Neon** e não rotacionar segredos. A correção preparatória somente pode ser feita após autorização explícita separada para essas três variáveis não secretas, seguida de deploy READY do SHA exato e atualização desta autorização operacional.
 
@@ -62,7 +68,7 @@ IAM_PR113_AUTH0_PREVIEW_LEASE_APPROVED
 approval_pr=<NUMERO_DA_PR_DE_AUTORIZACAO>
 repository=alexoaraujo/iam-control-center-new
 target_pr=113
-approved_target_head_sha=a9d0bf1313b6850772e17a7d4a3d7ad70c3d585b
+approved_target_head_sha=51c857a1f130300cdb3f34686511200364558b87
 expected_main_sha=17a4e86fddecc02c4326049fdf3d95fea6f4e522
 vercel_team=aoa4
 vercel_project=prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
