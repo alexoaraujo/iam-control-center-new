@@ -47,18 +47,23 @@ jobs:
           base64 -w 4000 pnpm-lock.yaml
           echo IAM_BUN_PNPM_LOCK_END
       - name: Install frozen pnpm dependencies
+        id: frozen
         run: pnpm install --frozen-lockfile
       - name: Verify Bun 1.4.4 runtime
         run: bun --version
       - name: Run every existing test through Bun Vitest-compatible runner
         run: pnpm test
       - name: Run PEOS native Node contracts independently
+        if: ${{ always() && steps.frozen.outcome == 'success' }}
         run: node --test scripts/*.test.mjs
       - name: Biome lint
+        if: ${{ always() && steps.frozen.outcome == 'success' }}
         run: pnpm lint
       - name: TypeScript typecheck
+        if: ${{ always() && steps.frozen.outcome == 'success' }}
         run: pnpm typecheck
       - name: Next.js build with inert CI-only Auth0 values
+        if: ${{ always() && steps.frozen.outcome == 'success' }}
         env:
           AUTH0_DOMAIN: ci-only.invalid
           AUTH0_CLIENT_ID: ci-build-only
@@ -67,4 +72,5 @@ jobs:
           APP_BASE_URL: http://localhost:3000
         run: pnpm build
       - name: Mandatory full dependency audit (no waivers)
+        if: ${{ always() && steps.frozen.outcome == 'success' }}
         run: pnpm audit
