@@ -1,0 +1,106 @@
+name: IAM G1 disposable Neon PG18 schema-only probe
+
+on:
+  push:
+    branches:
+      - audit/iam-g1-lease-schema-probe-20261115
+    paths:
+      - ".github/workflows/iam-g1-lease-schema-probe.yml"
+      - "database/scripts/iam-g1-lease-schema-probe.py"
+      - "database/tests/test-iam-g1-lease-schema-probe.py"
+      - "database/scripts/iam-g1-role-parity-readonly.sql"
+      - "docs/operations/iam-g1-lease-pg18-authenticated-schema-probe-20261115.md"
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Authenticated read-only schema probe, not full backup or restore"
+        type: choice
+        required: true
+        options:
+          - NO_EXECUTION
+          - LEASE_SCHEMA_ONLY_NO_GRANTS
+        default: NO_EXECUTION
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-g1-lease-pg18-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-contracts:
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      github.ref == 'refs/heads/audit/iam-g1-lease-schema-probe-20261115'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out isolated branch without persisted Git credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Positive/negative tests with synthetic URL only, no Neon access
+        run: |
+          set -euo pipefail
+          python3 database/tests/test-iam-g1-lease-schema-probe.py
+          python3 -m py_compile database/scripts/iam-g1-lease-schema-probe.py
+          echo "PASS_G1_OFFLINE_SCHEMA_PROBE_CONTRACTS"
+
+  authenticated-schema-probe:
+    needs: offline-contracts
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      github.ref == 'refs/heads/audit/iam-g1-lease-schema-probe-20261115' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' &&
+        inputs.confirmation == 'LEASE_SCHEMA_ONLY_NO_GRANTS'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: IAM-G1-Disposable-Lease-Probe
+    steps:
+      - name: Check out exact immutable commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Fail closed unless exact SHA was approved by the environment operator
+        env:
+          IAM_G1_LEASE_APPROVED_SHA: ${{ vars.IAM_G1_LEASE_APPROVED_SHA }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$IAM_G1_LEASE_APPROVED_SHA" =~ ^[0-9a-f]{40}$ ]] ||
+             [[ "$IAM_G1_LEASE_APPROVED_SHA" != "$GITHUB_SHA" ]]; then
+            echo "::error::BLOCKED_G1_EXACT_SHA_APPROVAL: set the reviewed SHA in the protected environment"
+            exit 2
+          fi
+          echo "PASS_G1_EXACT_SHA_ENVIRONMENT_APPROVAL"
+      - name: Validate guarded PostgreSQL 18 client image with system CA
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull             --file database/tests/fixtures/pg18-system-ca.Dockerfile             --tag iam-pg18-system-ca:local             database/tests/fixtures
+          docker run --rm --entrypoint sh iam-pg18-system-ca:local             -ec 'test -s /etc/ssl/certs/ca-certificates.crt && test "$SSL_CERT_FILE" = /etc/ssl/certs/ca-certificates.crt'
+      - name: Authenticated direct pg_dump on disposable lease (no GRANT, no data)
+        env:
+          IAM_EXPORT_LEASE_DATABASE_URL: ${{ secrets.IAM_EXPORT_LEASE_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 database/scripts/iam-g1-lease-schema-probe.py
+      - name: Evidence summary without secret or dump artifact
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "### IAM G1 schema-only lease probe"
+            echo "- SHA: $GITHUB_SHA"
+            echo "- Neon: tiny-rice-70320263 / br-spring-grass-b6gap6kp / iam_database"
+            echo "- Endpoint: ep-sparkling-sea-b6iw0z9y.c-2.sa-east-1.aws.neon.tech (direct)"
+            echo "- Login: iam_schema_export_reader; verified CA/hostname"
+            echo "- pg_dump --schema-only; PostgreSQL 18; no GRANT or DDL"
+            echo "- No application rows; local temporary archive deleted"
+            echo "- Does NOT prove full-data backup, role parity or real restore"
+          } >> "$GITHUB_STEP_SUMMARY"
