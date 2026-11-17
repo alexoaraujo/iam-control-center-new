@@ -6,6 +6,7 @@ const { neon } = require("@neondatabase/serverless");
 const ID = {
   project: "tiny-rice-70320263", branch: "br-royal-dream-b6di0p2w",
   parent: "br-muddy-bar-b63ksdy7", name: "validation/pr-41-auth0-rbac-e2e-20261113",
+  expiresAt: "2026-11-16T23:00:00Z",
   host: "ep-shiny-pond-b6zifpoo.c-2.sa-east-1.aws.neon.tech",
   tenant: "f65d8f1e-bcd4-4d68-927b-a8b64cda0c41",
   identity: "c7d196ad-4e1a-498c-b4ae-3e4d0ef2a041",
@@ -27,6 +28,10 @@ const countKeys = ["tenants", "identities", "memberships", "roles", "membership_
 const counts = async (sql) => (await sql.query(countsQuery, [ID.tenant, ID.identity, ID.membership, ID.role]))[0];
 const zero = (result) => countKeys.every((key) => result[key] === 0);
 async function connect() {
+  // Check the pinned Neon clone TTL before any secret, connection, or DML.
+  // A new approved child must update ID.branch/host/name/expiresAt together.
+  const { assertRbacFixtureLease } = await import("../../scripts/neon-rbac-fixture-lease.mjs");
+  assertRbacFixtureLease(ID);
   check(process.env.GITHUB_REPOSITORY === "alexoaraujo/iam-control-center-new" &&
     process.env.GITHUB_EVENT_NAME === "pull_request" &&
     process.env.GITHUB_HEAD_REF === "feat/iam-api-rbac-lineage-20261110" &&
