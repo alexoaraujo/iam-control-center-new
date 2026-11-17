@@ -68,3 +68,51 @@ test('top-level collection order is ignored while nested order is preserved',()=
  b.types=[structuredClone(a.types[1]),structuredClone(a.types[0])];
  assert.equal(compareManifests(a,b).equal,true);
 });
+
+test('role membership identity ignores JSON object property insertion order',()=>{
+ const a=base(),b=base();
+ a.role_memberships=[{role:'iam_app_runtime',member:'iam_app_runtime_login',
+   grantor:'iam_owner',admin_option:false,inherit_option:true,set_option:false}];
+ b.role_memberships=[{set_option:false,inherit_option:true,admin_option:false,
+   grantor:'iam_owner',member:'iam_app_runtime_login',role:'iam_app_runtime'}];
+ assert.deepEqual(compareManifests(a,b),{equal:true,count:0,differences:[]});
+});
+
+test('role membership privilege drift is one changed identity, not a removal and addition',()=>{
+ const a=base(),b=base();
+ const grant={role:'iam_app_runtime',member:'iam_app_runtime_login',
+   grantor:'iam_owner',admin_option:false,inherit_option:true,set_option:false};
+ a.role_memberships=[grant];
+ b.role_memberships=[{set_option:true,...grant,admin_option:true}];
+ const drift=compareManifests(a,b);
+ assert.equal(drift.count,1);
+ assert.match(drift.differences[0],/role_memberships\./);
+ assert.match(drift.differences[0],/\[changed\]$/);
+ assert.doesNotMatch(report(a,b),/admin_option|inherit_option|set_option/);
+});
+
+test('rejects duplicate memberships with reordered JSON fields and absent identity fields',()=>{
+ const a=base(),b=base();
+ const grant={role:'iam_app_runtime',member:'iam_app_runtime_login',
+   grantor:'iam_owner',admin_option:false,inherit_option:true,set_option:false};
+ b.role_memberships=[grant,{admin_option:true,grantor:'iam_owner',member:'iam_app_runtime_login',
+   role:'iam_app_runtime',inherit_option:false,set_option:true}];
+ assert.throws(()=>compareManifests(a,b),/duplicate identity/);
+ for(const field of ['role','member','grantor']) {
+   const bad={...grant};
+   delete bad[field];
+   b.role_memberships=[bad];
+   assert.throws(()=>compareManifests(a,b),/missing\/duplicate identity/);
+ }
+});
+
+test('membership identities distinguish quoted role names containing separators',()=>{
+ const a=base(),b=base();
+ const grant={role:'iam|runtime',member:'login',grantor:'iam_owner',
+   admin_option:false,inherit_option:true,set_option:false};
+ a.role_memberships=[grant];
+ b.role_memberships=[{...grant,role:'iam',member:'runtime|login'}];
+ const drift=compareManifests(a,b);
+ assert.equal(drift.count,2);
+ assert.equal(drift.equal,false);
+});
