@@ -7,6 +7,9 @@ on:
       - ".github/workflows/bun-runner-compat-poc.yml"
       - "apps/web/package.json"
       - "apps/web/tsconfig.json"
+      - "apps/web/vitest-bun-compat.d.ts"
+      - "apps/web/test-preload.ts"
+      - "apps/web/biome.config.test.mjs"
       - "pnpm-lock.yaml"
       - "docs/security/bun-runner-migration-poc-20261117.md"
 
