@@ -14,6 +14,15 @@ test("RBAC E2E is pinned to the approved active Neon child, never the expired fi
   assert.doesNotMatch(e2e + workflow, /br-shy-scene-b67zm2v7/);
 });
 
+test("RBAC E2E blocks expired Neon branch before reading a secret", () => {
+  assert.match(e2e, /expiresAt: "2026-11-16T23:00:00Z"/);
+  assert.match(e2e, /assertRbacFixtureLease\(ID\)/);
+  const leaseCheck = e2e.indexOf("assertRbacFixtureLease(ID)");
+  const secretRead = e2e.indexOf("const connection = process.env.NEON_RBAC_TEST_OWNER_DATABASE_URL");
+  const sqlSession = e2e.indexOf("const sql = neon(connection)");
+  assert.ok(leaseCheck !== -1 && leaseCheck < secretRead && secretRead < sqlSession);
+});
+
 test("RBAC E2E denies cross-branch credentials before fixture writes", () => {
   assert.match(e2e, /uri\.hostname === ID\.host/);
   assert.match(e2e, /rows\[0\]\.branch === ID\.branch/);
