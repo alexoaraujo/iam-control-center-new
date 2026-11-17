@@ -17,10 +17,10 @@ Esses IDs são um checkpoint, **não** um lease permanente. Ao mudar qualquer SH
 ## Contrato de validação (fail closed)
 
 A função `verifyLeaseSnapshot(snapshot)` exige:
-1. Repositório exato e SHAs de 40 dígitos para PR #41 e PR #103, mais deployments READY correspondentes à branch, SHA, projeto e repositório.
+1. Repositório exato e SHAs de 40 dígitos para PR #41 e PR #103, mais deployments READY correspondentes à branch, SHA, projeto, repositório e **hostname do Preview verificado** (URL do deployment ou alias exato).
 2. Domain verificado e alias pertencentes ao mesmo projeto.
 3. Na fase `before`, ambos continuam apontando à origem; em `leased`, apontam ao destino aprovado; em `rollback`, voltam à origem.
-4. Metadados, **sem decriptação**, mostrando `APP_BASE_URL`, `DATABASE_URL` e `AUTHZ_CONTEXT_SIGNING_KEY_HEX` com `target=preview` e `gitBranch` exata da PR #103. A presença dos nomes não prova valores corretos, validade dos segredos, RBAC ou RLS.
+4. Nas fases `before` e `leased`, metadados, **sem decriptação**, mostrando `APP_BASE_URL`, `DATABASE_URL` e `AUTHZ_CONTEXT_SIGNING_KEY_HEX` com `target=preview` e `gitBranch` exata da PR #103. No `rollback`, a validação do vínculo original continua possível mesmo depois da remoção das variáveis do destino. A presença dos nomes não prova valores corretos, validade dos segredos, RBAC ou RLS.
 
 Retornos `PASS_PREVIEW_LEASE_*_READ_ONLY` só atestam a coerência do snapshot. Os campos `operationalApproval`, `dataSourceAndRls` e `auth0LoginAndGrantRevoke` permanecem `NOT_ATTESTED` / `NOT_TESTED` intencionalmente.
 
