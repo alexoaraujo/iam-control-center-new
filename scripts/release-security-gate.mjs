@@ -1,11 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { classifyOfflineScope } from "./iam-offline-ci-evidence.mjs";
 
 const sha = /^[a-f0-9]{40}$/;
 const docOnly = (file) => /^(docs\/|README\.md$|SECURITY\.md$)/.test(file);
 
 export function decideSecurityGate({
   quality, previewRequired, preview, syncAuth0, auth0E2E, auth0Enabled, docsPreview, changedFiles,
+  auth0Scope, offlineEvidenceResult, offlineEvidenceVerified, offlineEvidenceScope,
 }) {
   if (quality !== "success") return { pass: false, reason: "QUALITY_NOT_SUCCESS" };
   if (!Array.isArray(changedFiles) || changedFiles.length === 0 ||
@@ -29,8 +31,16 @@ export function decideSecurityGate({
   if (preview !== "success") return { pass: false, reason: "PREVIEW_NOT_SUCCESS" };
   if (auth0Enabled !== "true") return { pass: false, reason: "AUTH0_E2E_NOT_ENABLED" };
   if (syncAuth0 !== "success") return { pass: false, reason: "AUTH0_PREFLIGHT_NOT_SUCCESS" };
-  if (auth0E2E !== "success") return { pass: false, reason: "AUTH0_E2E_NOT_SUCCESS" };
-  return { pass: true, reason: "E2E_VERIFIED" };
+  if (auth0E2E === "success") return { pass: true, reason: "E2E_VERIFIED" };
+  // Offline evidence is an independent exact-SHA GitHub Actions proof, not an
+  // Auth0-skip override. Only three reviewed non-runtime scopes are eligible.
+  const offline = classifyOfflineScope(changedFiles);
+  if (auth0E2E === "skipped" && auth0Scope === "not-authorized" &&
+      offline && offlineEvidenceResult === "success" &&
+      offlineEvidenceVerified === "true" && offlineEvidenceScope === offline.id) {
+    return { pass: true, reason: "OFFLINE_EVIDENCE_VERIFIED:" + offline.id };
+  }
+  return { pass: false, reason: "AUTH0_E2E_NOT_SUCCESS" };
 }
 
 export function changedFiles(base, head) {
@@ -56,6 +66,10 @@ function main() {
     auth0E2E: process.env.AUTH0_E2E_RESULT,
     auth0Enabled: process.env.AUTH0_E2E_ENABLED,
     docsPreview: process.env.DOCS_PREVIEW_RESULT,
+    auth0Scope: process.env.AUTH0_SCOPE,
+    offlineEvidenceResult: process.env.OFFLINE_EVIDENCE_RESULT,
+    offlineEvidenceVerified: process.env.OFFLINE_EVIDENCE_VERIFIED,
+    offlineEvidenceScope: process.env.OFFLINE_EVIDENCE_SCOPE,
     changedFiles: files,
   });
   if (!result.pass) {
