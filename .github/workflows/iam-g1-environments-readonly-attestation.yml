@@ -1,0 +1,46 @@
+name: IAM G1 live Environment read-only attestation
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/iam-g1-environments-readonly-attestation.yml'
+      - '.github/scripts/iam-g1-environment-readonly-attestation.py'
+      - '.github/tests/test-iam-g1-environment-readonly-attestation.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: iam-g1-live-env-readonly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  no-credentials-attestation:
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      (github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Checkout audited ref without persistent Git credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Test fail-closed metadata contract without network
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/tests/test-iam-g1-environment-readonly-attestation.py
+      - name: Verify BOTH GitHub Environments via read-only Actions token
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 .github/scripts/iam-g1-environment-readonly-attestation.py
+          echo 'PASS_G1_LIVE_ENV_READONLY_NO_NEON_NO_SECRETS' >> "$GITHUB_STEP_SUMMARY"

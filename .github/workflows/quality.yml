@@ -156,15 +156,61 @@ jobs:
           echo "::error::No exact-SHA READY Vercel Preview deployment was found for ${COMMIT_SHA}."
           exit 1
 
+  sync-auth0-preview:
+    name: sync-auth0-preview
+    # Only validated Auth0 callback branches can receive browser credentials.
+    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true' && needs.quality.outputs.preview_required == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+    needs:
+      - quality
+      - preview-deployment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment:
+      name: Preview
+    permissions:
+      contents: read
+    outputs:
+      auth0_ready: ${{ steps.sync.outputs.auth0_ready }}
+      scope: ${{ steps.sync.outputs.scope }}
+      callback_host: ${{ steps.sync.outputs.callback_host }}
+      callback_branch: ${{ steps.sync.outputs.callback_branch }}
+      app_base_url: ${{ steps.sync.outputs.app_base_url }}
+      auth0_domain: ${{ steps.sync.outputs.auth0_domain }}
+    steps:
+      - name: Checkout full PR history for reliable file-scope detection
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Synchronize Auth0 and Vercel Preview settings before E2E binding
+        id: sync
+        env:
+          PR_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
+          E2E_DEPLOYMENT_HOST: ${{ needs.preview-deployment.outputs.preview_host }}
+          VERCEL_TEAM_SLUG: aoa4
+          VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+        run: node scripts/sync-auth0-e2e-preview.mjs
+
   auth0-e2e:
     name: auth0-e2e
     # Always schedule E2E when a Preview is required and E2E is enabled.
     # Unsupported branches/forks fail closed in the binding preflight rather than
     # silently reporting CI green with auth0-e2e SKIPPED.
-    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true' && needs.quality.outputs.preview_required == 'true'
+    if: github.event_name == 'pull_request' && vars.AUTH0_E2E_ENABLED == 'true' && needs.quality.outputs.preview_required == 'true' && needs.sync-auth0-preview.outputs.auth0_ready == 'true'
     needs:
       - quality
       - preview-deployment
+      - sync-auth0-preview
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Must match the GitHub Actions environment configured in Vercel Trusted Sources.
@@ -179,11 +225,22 @@ jobs:
     env:
       AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
       AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
+      # Reviewed Auth0 user digest; never store the raw subject in the workflow.
+      AUTH0_E2E_EXPECTED_SUB_SHA256: e8cd8b1bf515f595a4531fb01ed6ae3d42c8929d28a50416759789376423a9f0
+      # Preview-only session-expiry regression control.
+      AUTH0_E2E_SESSION_ABSOLUTE_SECONDS: '45'
       # Positive write E2E is limited to isolated PR42 Preview.
       E2E_IDENTITY_SYNC: ${{ github.event.pull_request.head.ref == 'feat/auth0-neon-identity-sync-20261111' && 'true' || 'false' }}
       # Fixed user-approved callback alias. Branch is derived from the verified
       # Vercel project-domain binding for each run, never from a stale fallback.
-      E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
+      E2E_CALLBACK_HOST: ${{ needs.sync-auth0-preview.outputs.callback_host }}
+      E2E_CALLBACK_BRANCH: ${{ needs.sync-auth0-preview.outputs.callback_branch }}
+      APP_BASE_URL: ${{ needs.sync-auth0-preview.outputs.app_base_url }}
+      AUTH0_DOMAIN: ${{ needs.sync-auth0-preview.outputs.auth0_domain }}
+      # Preview-only branch-scoped SQL connection is injected solely in E2E step.
+      E2E_RBAC_HTTP_ENABLED: ${{ github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && 'true' || 'false' }}
+      E2E_RBAC_PROJECT_ID: tiny-rice-70320263
+      E2E_RBAC_BRANCH_ID: br-quiet-night-b6cfeq4j
       VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
       VERCEL_TEAM_SLUG: aoa4
       VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
@@ -216,7 +273,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/playwright"
           cd "$RUNNER_TEMP/playwright"
           npm init -y >/dev/null
-          npm install --save-exact --no-audit --no-fund @playwright/test@1.64.1
+          npm install --save-exact --no-audit --no-fund @playwright/test@1.64.1 @neondatabase/serverless@1.2.0
           npm audit --audit-level=high
 
       - name: Install Chromium
@@ -269,6 +326,15 @@ jobs:
           if (!audience.includes("https://github.com/alexoaraujo")) throw new Error("Unexpected OIDC audience.");
           if (claims.sub !== expectedSubject) throw new Error("OIDC subject does not match GitHub environment Preview.");
           NODE
+
+      - name: Verify callback and Preview are the same exact-SHA deployment
+        env:
+          E2E_DEPLOYMENT_HOST: ${{ needs.preview-deployment.outputs.preview_host }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/verify-preview-alias.mjs
 
       - name: Preflight Vercel Deployment Protection (negative and positive controls)
         shell: bash
@@ -337,7 +403,153 @@ jobs:
           NODE
 
       - name: Run Auth0 end-to-end flow
+        env:
+          # Branch-scoped credential (never Neon API key); only this step can read it.
+          NEON_RBAC_TEST_OWNER_DATABASE_URL: ${{ github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && secrets.NEON_RBAC_TEST_OWNER_DATABASE_URL || '' }}
         run: |
           NODE_PATH="$RUNNER_TEMP/playwright/node_modules" \
             "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" test \
             --config=.github/e2e/playwright.config.cjs
+
+  docs-preview-evidence:
+    name: docs-preview-evidence
+    # An always-emitted trusted, read-only bridge from the separate docs workflow.
+    # No checkout or PR-controlled code executes with the GitHub token.
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      actions: read
+    steps:
+      - name: Verify exact-SHA docs Preview check from its trusted workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          # Forks have no approved Vercel/Auth0 callback and cannot claim a trusted docs exemption.
+          [[ "${PR_HEAD_REPOSITORY}" == "${REPOSITORY}" ]] || {
+            echo "::error::Docs gate requires a same-repository PR"; exit 1;
+          }
+          files="$(gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" --jq '.[].filename')"
+          [[ -n "${files}" ]] || { echo "::error::Empty PR change scope"; exit 1; }
+          docs_only=true
+          while IFS= read -r file; do
+            case "${file}" in
+              README.md|SECURITY.md|docs/*) ;;
+              *) docs_only=false ;;
+            esac
+          done <<< "${files}"
+          if [[ "${docs_only}" != true ]]; then
+            echo "NOT_REQUIRED: code/security/SQL changes use exact-SHA Preview and Auth0 E2E instead"
+            exit 0
+          fi
+          # The docs Preview gate lives in another workflow; poll its exact commit check.
+          # Never accept a similarly named check from a different workflow or an older SHA.
+          for attempt in $(seq 1 "${DOCS_PREVIEW_POLL_ATTEMPTS:-84}"); do
+            checks="$(gh api "repos/${REPOSITORY}/commits/${PR_HEAD_SHA}/check-runs?per_page=100")"
+            check="$(jq -c --arg sha "${PR_HEAD_SHA}" '
+              [.check_runs[] | select(
+                .name == "docs-preview-gate" and
+                .head_sha == $sha and
+                .app.slug == "github-actions"
+              )] | sort_by(.id) | last // {}
+            ' <<< "${checks}")"
+            status="$(jq -r '.status // "missing"' <<< "${check}")"
+            conclusion="$(jq -r '.conclusion // "missing"' <<< "${check}")"
+            if [[ "${status}" == completed ]]; then
+              if [[ "${conclusion}" != success ]]; then
+                echo "::error::docs-preview-gate is not SUCCESS for exact SHA: ${conclusion}"
+                exit 1
+              fi
+              details="$(jq -r '.details_url // ""' <<< "${check}")"
+              if [[ "${details}" =~ ^https://github\.com/alexoaraujo/iam-control-center-new/actions/runs/([0-9]+)/job/([0-9]+)$ ]]; then
+                run_id="${BASH_REMATCH[1]}"
+              else
+                echo "::error::Docs check has no trusted workflow-run identity"
+                exit 1
+              fi
+              run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}")"
+              jq -e --arg sha "${PR_HEAD_SHA}" '
+                .path == ".github/workflows/docs-preview-gate.yml" and
+                .head_sha == $sha and
+                .event == "pull_request"
+              ' <<< "${run}" >/dev/null || {
+                echo "::error::SUCCESS check did not come from approved docs workflow and SHA"
+                exit 1
+              }
+              # A job can report success before the entire workflow is terminal.
+              # Do not incorrectly fail a legitimate in-progress workflow.
+              run_status="$(jq -r '.status // "missing"' <<< "${run}")"
+              run_conclusion="$(jq -r '.conclusion // "missing"' <<< "${run}")"
+              case "${run_status}" in
+                completed)
+                  if [[ "${run_conclusion}" != success ]]; then
+                    echo "::error::Trusted docs workflow completed without SUCCESS: ${run_conclusion}"
+                    exit 1
+                  fi
+                  echo "PASS: verified docs-preview-gate SUCCESS in trusted workflow at exact SHA"
+                  exit 0
+                  ;;
+                queued|in_progress|pending|waiting|requested)
+                  echo "Waiting for trusted docs workflow to finish: ${run_status}"
+                  sleep "${DOCS_PREVIEW_POLL_SECONDS:-10}"
+                  continue
+                  ;;
+                *)
+                  echo "::error::Unexpected trusted docs workflow status: ${run_status}"
+                  exit 1
+                  ;;
+              esac
+            fi
+            sleep "${DOCS_PREVIEW_POLL_SECONDS:-10}"
+          done
+          echo "::error::Required exact-SHA docs Preview check absent or timed out"
+          exit 1
+
+  security-gate:
+    name: security-gate
+    # A stable, always-emitted status for branch protection. Unlike quality,
+    # it incorporates positive E2E and fail-closed Preview contract results.
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    needs:
+      - quality
+      - preview-deployment
+      - sync-auth0-preview
+      - auth0-e2e
+      - docs-preview-evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR with full history for trusted change-scope assessment
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Reject missing security checks or unauthenticated scope exemptions
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          PREVIEW_REQUIRED: ${{ needs.quality.outputs.preview_required }}
+          PREVIEW_RESULT: ${{ needs.preview-deployment.result }}
+          SYNC_AUTH0_RESULT: ${{ needs.sync-auth0-preview.result }}
+          AUTH0_E2E_RESULT: ${{ needs.auth0-e2e.result }}
+          AUTH0_E2E_ENABLED: ${{ vars.AUTH0_E2E_ENABLED }}
+          DOCS_PREVIEW_RESULT: ${{ needs.docs-preview-evidence.result }}
+        run: node scripts/release-security-gate.mjs
