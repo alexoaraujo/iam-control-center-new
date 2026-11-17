@@ -20,7 +20,11 @@ test("Preview discovery uses no protected Environment, secrets or token-writing 
   assert.doesNotMatch(text, /\n    environment:/);
   assert.doesNotMatch(text, /secrets\./);
   assert.doesNotMatch(text, /\n      (?:deployments|contents|checks|statuses|id-token): write\b/);
-  assert.match(text, /\n      deployments: read\b/);
+  // The workflow calls only commit status and check-run read endpoints.
+  // No deployments permission is needed, not even deployments: read.
+  assert.doesNotMatch(text, /\n      deployments:/);
+  assert.match(text, /\n      statuses: read\b/);
+  assert.match(text, /\n      checks: read\b/);
   assert.match(text, /github\.event\.pull_request\.head\.sha/);
   assert.match(text, /Vercel Preview Comments/);
   assert.match(text, /\.head_sha == \$sha/);
