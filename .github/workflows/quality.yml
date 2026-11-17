@@ -66,6 +66,27 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # This job is defined by the protected base workflow for B2 offline PRs.
+      # Re-run their synthetic tests here; PR-created B2 workflows alone are
+      # not independent evidence for an Auth0 E2E exception.
+      - name: Independently run synthetic B2 regressions from trusted CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -e scripts/iam-g1-b2-environment.sh || -e scripts/test-iam-g1-b2-environment-policy.py ]]; then
+            [[ -f scripts/iam-g1-b2-environment.sh && -f scripts/test-iam-g1-b2-environment-policy.py ]] || {
+              echo "::error::Incomplete B2 environment guard test pair."
+              exit 1
+            }
+            command -v jq
+            bash -n scripts/iam-g1-b2-environment.sh
+            python3 scripts/test-iam-g1-b2-environment-policy.py
+          fi
+          if [[ -f scripts/iam-g1-b2-readback.py ]]; then
+            python3 -m py_compile scripts/iam-g1-b2-readback.py
+            python3 scripts/iam-g1-b2-readback.py --self-test
+          fi
+
       - name: Test Preview build and Auth0 configuration contracts
         run: node --test scripts/*.test.mjs
 
