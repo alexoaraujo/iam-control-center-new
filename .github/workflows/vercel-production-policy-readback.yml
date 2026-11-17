@@ -1,0 +1,87 @@
+name: Vercel Production policy readback (no deployment)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/vercel-production-policy-readback.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  live-config-readback:
+    # Only the existing callback-bound branch of this repository may access
+    # the pre-existing protected Preview token. No checkout or PR code executes.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110'
+    name: live-config-readback
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment:
+      name: Preview
+    steps:
+      - name: Set up Node.js 24 for static, no-checkout readback
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Read Vercel policy, production approval inventory and active alias (GET only)
+        env:
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          // No checkout, third-party packages, shell-interpolated tokens, writes,
+          // logs of response bodies, or access to decrypted env variable values.
+          const projectId = "prj_OnuwD1iarOsXh6FFGkSpK4A5mj80";
+          const team = "aoa4";
+          const aliasHost = "iam-control-center-new.vercel.app";
+          const baselineDeployId = "dpl_4sd7DPf8nnr5WuzieAkn2CZcbSq1";
+          const baselineSha = "665b41008d16e88d6cd6f9857951a294ddb112f2";
+          const expected = "sh -c 'if [ \"$VERCEL_ENV\" = production ]; then [ \"$VERCEL_GIT_COMMIT_REF\" = main ] && [ -n \"$IAM_APPROVED_PRODUCTION_SHA\" ] && [ \"$VERCEL_GIT_COMMIT_SHA\" = \"$IAM_APPROVED_PRODUCTION_SHA\" ] && exit 1; exit 0; fi; node scripts/vercel-ignore-build.mjs'";
+          const token = process.env.VERCEL_API_TOKEN;
+          if (!token) throw Error("BLOCKED_MISSING_PROTECTED_VERCEL_API_TOKEN");
+          const read = async (path) => {
+            const separator = path.includes("?") ? "&" : "?";
+            const url = "https://api.vercel.com" + path + separator + "slug=" + team;
+            const response = await fetch(url, {
+              headers: { Authorization: "Bearer " + token, Accept: "application/json" },
+              redirect: "error", cache: "no-store", signal: AbortSignal.timeout(15000),
+            });
+            if (!response.ok) throw Error("BLOCKED_VERCEL_READ_HTTP_" + response.status);
+            return response.json();
+          };
+          const project = await read("/v9/projects/" + projectId);
+          const env = await read("/v10/projects/" + projectId + "/env?decrypt=false");
+          const alias = await read("/v4/aliases/" + aliasHost);
+          if (!alias?.deploymentId) throw Error("BLOCKED_PRODUCTION_ALIAS_UNRESOLVED");
+          const deployment = await read("/v13/deployments/" + encodeURIComponent(alias.deploymentId));
+          const checks = {
+            project_identity: project?.id === projectId,
+            ignored_build_readback_available: typeof project?.commandForIgnoringBuildStep === "string",
+            exact_shell_command: project?.commandForIgnoringBuildStep === expected,
+            no_production_approved_sha: Array.isArray(env?.envs) &&
+              !env.envs.some(item => item.key === "IAM_APPROVED_PRODUCTION_SHA" &&
+                Array.isArray(item.target) && item.target.includes("production")),
+            alias_unchanged: alias?.alias === aliasHost &&
+              alias?.projectId === projectId && alias?.deploymentId === baselineDeployId,
+            baseline_deployment_unchanged: deployment?.id === baselineDeployId &&
+              deployment?.readyState === "READY" &&
+              deployment?.meta?.githubCommitSha === baselineSha &&
+              deployment?.meta?.githubCommitRef === "main",
+            auto_assign_disabled: project?.autoAssignCustomDomains === false,
+            production_branch_tracked: project?.link?.productionBranch ?? "NOT_EXPOSED",
+            negative_deployment_test_executed: false,
+            release_authorized: false,
+          };
+          console.log("VERCEL_PRODUCTION_READBACK " + JSON.stringify(checks));
+          // This checks readback and alias only. Auto-domain/production-branch
+          // policy and real negative deployment rehearsal are separate gates.
+          if (!checks.project_identity || !checks.ignored_build_readback_available ||
+              !checks.exact_shell_command || !checks.no_production_approved_sha ||
+              !checks.alias_unchanged || !checks.baseline_deployment_unchanged ||
+              !checks.auto_assign_disabled) {
+            throw Error("BLOCKED_VERCEL_RELEASE_READBACK");
+          }
+          console.log("PASS_READBACK_AND_AUTO_ASSIGN_DISABLED: no Production build, alias change, or promotion executed");
+          console.log("RELEASE_GATE_BLOCKED: negative deployment test, restore/rollback and formal release approval remain required");
+          NODE

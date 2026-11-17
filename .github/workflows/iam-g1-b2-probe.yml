@@ -77,8 +77,27 @@ jobs:
               "s3",
               endpoint_url=os.environ["B2_ENDPOINT"],
               region_name=os.environ["B2_REGION"],
-              config=Config(signature_version="s3v4", s3={"addressing_style": "path"}, retries={"max_attempts": 2}),
+              config=Config(signature_version="s3v4", s3={"addressing_style": "path"}, retries={"total_max_attempts": 1}),
           )
+
+          # Hypothesis-based compatibility workaround: remove the optional
+          # Expect: 100-continue handshake BEFORE SigV4 signing. Some S3
+          # compatible gateways/proxies mishandle the interim HTTP response.
+          # Never alter Host, authorization, payload, or TLS verification.
+          def suppress_expect_continue(request, **_kwargs):
+              if (request.headers.get("Expect") or "").lower() == "100-continue":
+                  del request.headers["Expect"]
+
+          # Purely local regression guard: no network or secret usage.
+          from botocore.awsrequest import AWSRequest
+          synthetic_request = AWSRequest(
+              method="PUT", url="https://example.invalid/test",
+              headers={"Expect": "100-continue"},
+          )
+          suppress_expect_continue(synthetic_request)
+          assert "Expect" not in synthetic_request.headers
+
+          client.meta.events.register("before-sign.s3.PutObject", suppress_expect_continue)
           try:
               client.put_object(
                   Bucket=os.environ["B2_BUCKET"], Key=object_key, Body=ciphertext,
