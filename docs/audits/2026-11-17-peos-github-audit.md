@@ -1,7 +1,7 @@
 # PEOS — Auditoria GitHub, correção e melhoria (2026-11-17)
 
 **Escopo:** auditoria verificável do repositório `alexoaraujo/iam-control-center-new` no GitHub, com revisão estática dos 24 workflows e caminhos de CI relevantes. Não equivale a uma auditoria completa de Auth0, Vercel, Neon ou Backblaze e não autoriza operações externas.
-**Baseline congelada para este relatório:** branch `main`, commit `17a4e86fddecc02c4326049fdf3d95fea6f4e522` (consultado por GitHub API em 2026-11-17). A PR resultante altera exclusivamente o gate documental, um teste Node e este relatório.
+**Baseline congelada para este relatório:** branch `main`, commit `17a4e86fddecc02c4326049fdf3d95fea6f4e522` (consultado por GitHub API em 2026-11-17). A PR resultante altera exclusivamente o gate documental, dois arquivos de testes Node e este relatório.
 **Método PEOS:** Executar → Verificar → Corrigir → Testar → Revisar → Validar → Avançar. Toda conclusão PASS exige artefato, SHA e hora UTC verificáveis; SKIPPED, falha e evidência ausente nunca significam PASS.
 
 ## 1. Inventário autenticado
@@ -24,9 +24,9 @@
 
 ### P1 — Gate documental permitia autoclassificação indevida
 
-- Na baseline, `.github/workflows/docs-preview-gate.yml` classificava a alteração do *próprio workflow* como `docs_only=true`, embora a mudança de verificador de CI seja sensível à segurança.
+- Na baseline, `.github/workflows/docs-preview-gate.yml` classificava a alteração do *próprio workflow*, `SCAFFOLD-MANIFEST.json` e `.github/PULL_REQUEST_TEMPLATE.md` como `docs_only=true`, embora esses arquivos sejam sensíveis à segurança ou à política de release.
 - `scripts/vercel-ignore-build.mjs` já trata todos os workflows como Preview relevante; portanto havia divergência entre classificadores, capaz de produzir evidência documental inadequada para alteração de política.
-- **Correção desta PR:** retirar `.github/workflows/docs-preview-gate.yml` da allowlist documental, adicioná-lo aos exemplos negativos do script inline e acrescentar regressão em `scripts/vercel-ignore-build.test.mjs` para exigir Preview/E2E quando o gate for alterado.
+- **Correção desta PR:** alinhar a allowlist somente a `README.md`, `SECURITY.md` e `docs/*`, adicionando os três caminhos sensíveis aos exemplos negativos e cobrindo a paridade nos testes `scripts/release-security-gate.test.mjs` e `scripts/vercel-ignore-build.test.mjs`.
 - Manter o workflow no gatilho `pull_request.paths` para executá-lo e classificá-lo como não documental. Não tocar no `pnpm audit`, nos required checks, no Auth0 nem no vínculo de callbacks.
 
 ### P1 — Nome de required check compartilhado entre workflows
@@ -59,9 +59,9 @@
 
 ## 4. Plano de teste e rollback desta PR
 
-1. Inspecionar diff: apenas `.github/workflows/docs-preview-gate.yml`, `scripts/vercel-ignore-build.test.mjs`, e este relatório; nenhum secret, produção, DDL, alias, API Auth0 ou Neon.
-2. Verificar que a allowlist do workflow contém apenas `README.md`, `SECURITY.md`, `SCAFFOLD-MANIFEST.json`, `docs/*` e `.github/PULL_REQUEST_TEMPLATE.md`. Seu próprio arquivo deve constar da denylist negativa.
-3. Executar `node --test scripts/vercel-ignore-build.test.mjs` (e `node --test scripts/*.test.mjs`), CI `quality`, `security-gate`, PG18 e testes de Preview/E2E aplicáveis no SHA criado. Não registrar PASS antes dos runs.
+1. Inspecionar diff: apenas `.github/workflows/docs-preview-gate.yml`, `scripts/release-security-gate.test.mjs`, `scripts/vercel-ignore-build.test.mjs` e este relatório; nenhum secret, produção, DDL, alias, API Auth0 ou Neon.
+2. Verificar que a allowlist do workflow contém apenas `README.md`, `SECURITY.md` e `docs/*`. O próprio workflow, `SCAFFOLD-MANIFEST.json` e `.github/PULL_REQUEST_TEMPLATE.md` devem constar da denylist negativa.
+3. Executar `node --test scripts/vercel-ignore-build.test.mjs scripts/release-security-gate.test.mjs` (e `node --test scripts/*.test.mjs`), CI `quality`, `security-gate`, PG18 e testes de Preview/E2E aplicáveis no SHA criado. Não registrar PASS antes dos runs.
 4. Reconhecer bloqueio de `quality` por `picomatch` até remediação; sem bypass, sem merge antecipado. Mudanças de workflow podem exigir preflight Auth0/Preview branch-specific e aprovação própria para qualquer lease.
 5. Revisão independente de mudança de workflow e plano de rollback. Rollback deste patch: reverter **apenas** os commits da branch/PR após aprovação; sem mutação na `main` até merge autorizado.
 
