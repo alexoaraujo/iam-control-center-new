@@ -11,7 +11,7 @@
     "allowJs": true,
     "types": [
       "node",
-      "bun-types/vitest"
+      "bun-types"
     ]
   },
   "include": [
