@@ -82,9 +82,9 @@ export function classifyOfflineScope(changedFiles) {
 
 // A check name alone can be spoofed by a different workflow; its job URL,
 // Actions run path, repo, PR event, complete conclusion and SHA must all agree.
-export async function verifyOfflineCheckRuns({ scope, checks, sha, loadRun }) {
-  if (!scope || !exactSha.test(sha ?? "") || !Array.isArray(checks) ||
-      typeof loadRun !== "function") return false;
+export async function verifyOfflineCheckRuns({ scope, checks, sha, prNumber, loadRun }) {
+  if (!scope || !exactSha.test(sha ?? "") || !/^[1-9][0-9]*$/.test(String(prNumber ?? "")) ||
+      !Array.isArray(checks) || typeof loadRun !== "function") return false;
   const runCache = new Map();
   for (const [name, path] of scope.checks) {
     let match = false;
@@ -100,10 +100,16 @@ export async function verifyOfflineCheckRuns({ scope, checks, sha, loadRun }) {
         catch { runCache.set(runId, null); }
       }
       const run = runCache.get(runId);
+      // The parent CI workflow may fail solely because security-gate is
+      // waiting for this attestation. Requiring run.conclusion=success would
+      // create a circular dependency. The exact named check-run itself MUST
+      // be completed/success, with trusted workflow provenance and PR linkage.
       if (run?.path === path && run.head_sha === sha &&
           run.event === "pull_request" && run.status === "completed" &&
-          run.conclusion === "success" &&
-          run.repository?.full_name === repository) {
+          run.repository?.full_name === repository &&
+          Array.isArray(run.pull_requests) &&
+          run.pull_requests.some(pr => pr.number === Number(prNumber) &&
+            pr.head?.sha === sha)) {
         match = true;
         break;
       }
@@ -164,7 +170,7 @@ export async function attestOfflineScope(env) {
     const checks = pages("repos/" + repository + "/commits/" +
       PR_HEAD_SHA + "/check-runs", "check_runs");
     if (await verifyOfflineCheckRuns({
-      scope, checks, sha: PR_HEAD_SHA,
+      scope, checks, sha: PR_HEAD_SHA, prNumber: PR_NUMBER,
       loadRun: id => api("repos/" + repository + "/actions/runs/" + id),
     })) return { verified: true, scope: scope.id };
     if (attempt < 30) await pause(10000);
