@@ -54,6 +54,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Pure Node.js CI contract tests use only built-in modules. Run these
+      # before the dependency audit so policy regressions remain observable
+      # even if an upstream vulnerability correctly blocks the full quality gate.
+      # This is NOT a waiver: pnpm audit remains mandatory and fail-closed.
+      - name: Test security and Preview classification contracts
+        run: node --test scripts/release-security-gate.test.mjs scripts/vercel-ignore-build.test.mjs
+
       - name: Dependency audit
         run: pnpm audit
 
