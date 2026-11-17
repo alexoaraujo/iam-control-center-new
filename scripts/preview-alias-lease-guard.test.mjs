@@ -8,18 +8,20 @@ const callback = "iam-control-center-new-ci-preview.vercel.app";
 const source = {
   branch: "feat/iam-api-rbac-lineage-20261110",
   sha: "0a681b73f40cd1b28db54e57f3813eefcdf0e64c",
-  deploymentId: "dpl_28LtLPW4oRs1vjgbA5uHUunnZQsU", repo,
+  deploymentId: "dpl_28LtLPW4oRs1vjgbA5uHUunnZQsU",
+  previewHost: "iam-control-center-1gasw2ybf-aoa4.vercel.app", repo,
 };
 const target = {
   branch: "fix/security-next-16-4-5",
   sha: "fb14b5b76c6bb52446b126b8c3fddfe77d8a3ea8",
-  deploymentId: "dpl_38TsYyHC1C5GYbvdLNw8uBVVVjiy", repo,
+  deploymentId: "dpl_38TsYyHC1C5GYbvdLNw8uBVVVjiy",
+  previewHost: "iam-control-center-4jw9ytx99-aoa4.vercel.app", repo,
 };
 const deployment = ref => ({
   id: ref.deploymentId,
   readyState: "READY",
   project: { id: project },
-  url: "iam-control-center-preview-example-aoa4.vercel.app",
+  url: ref.previewHost,
   meta: {
     githubCommitRef: ref.branch, githubCommitSha: ref.sha,
     githubOrg: "alexoaraujo", githubRepo: "iam-control-center-new",
@@ -57,6 +59,17 @@ test("rollback checks original branch and original deployment", () => {
   const bad = fixture("rollback");
   bad.alias.deploymentId = target.deploymentId;
   assert.throws(() => verifyLeaseSnapshot(bad), /SOURCE_BINDING/);
+});
+test("rollback attestations do not depend on previously removed target variables", () => {
+  const ready = fixture("rollback");
+  ready.targetPreviewVariables = [];
+  assert.equal(verifyLeaseSnapshot(ready).state,
+    "PASS_PREVIEW_LEASE_ROLLBACK_BINDING_READ_ONLY");
+});
+test("rejects mismatched Preview hostname despite correct SHA", () => {
+  const bad = fixture();
+  bad.target.previewHost = "untrusted-preview.vercel.app";
+  assert.throws(() => verifyLeaseSnapshot(bad), /EXACT_DEPLOYMENT/);
 });
 test("rejects split domain/alias binding", () => {
   const bad = fixture("leased");
