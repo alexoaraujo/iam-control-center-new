@@ -24,7 +24,17 @@
       "next": "recommended"
     },
     "rules": {
-      "preset": "recommended"
+      "preset": "recommended",
+      "correctness": {
+        "useHookAtTopLevel": "error",
+        "useExhaustiveDependencies": "error"
+      },
+      "performance": {
+        "noImgElement": "error"
+      },
+      "a11y": {
+        "noStaticElementInteractions": "error"
+      }
     }
   }
 }
