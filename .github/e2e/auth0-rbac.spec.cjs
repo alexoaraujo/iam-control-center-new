@@ -58,6 +58,16 @@ async function connect() {
   check(rows.length === 1 && rows[0].db === "iam_database" &&
     rows[0].branch === ID.branch && rows[0].principal === "neondb_owner",
     "SQL session is not the approved Neon branch");
+  // Read-only role topology attestation before touching any synthetic fixture.
+  // The owner login is Neon-privileged; data writes MUST SET LOCAL ROLE iam_owner.
+  const roleTopology = await sql.query(
+    "SELECT " +
+    "pg_has_role(current_user,'iam_owner','SET') AS may_set_iam_owner, " +
+    "(SELECT NOT rolbypassrls AND NOT rolsuper AND NOT rolcanlogin FROM pg_roles WHERE rolname='iam_owner') AS iam_owner_safe, " +
+    "(SELECT NOT rolbypassrls AND NOT rolsuper FROM pg_roles WHERE rolname='iam_app_runtime_login') AS runtime_safe");
+  check(roleTopology.length === 1 && roleTopology[0].may_set_iam_owner === true &&
+    roleTopology[0].iam_owner_safe === true && roleTopology[0].runtime_safe === true,
+    "BLOCKED_RBAC_FIXTURE_UNSAFE_ROLE_TOPOLOGY");
   const base = await counts(sql);
   check(zero(base) && base.active_keys === 1 && base.ledger_rows === 0,
     "Fixture IDs not clean or protected key/ledger baseline mismatch");
