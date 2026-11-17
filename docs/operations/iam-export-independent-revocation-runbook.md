@@ -1,5 +1,8 @@
 # IAM — independent emergency revocation of export MAINTAIN lease
 
+> **Atualização normativa PEOS (17/11/2026 UTC):** `independente` passa a descrever segregação **técnica de sessões/credenciais**, não a obrigação de segundo ser humano. Ver a [política de mantenedor único](peos-single-maintainer-governance.md). Confirmação explícita, branch, SHA, evidências REVOKE/COMMIT e bloqueios de credenciais permanecem obrigatórios. O conteúdo histórico abaixo não é autorização ativa.
+
+
 **Status 2026-11-13: reviewed proposal, NOT operationally configured.** The independent revoker is a *separate* manually dispatched GitHub Actions workflow and a REVOKE-only utility. It does not grant, issue, extend, or schedule a MAINTAIN lease. Without verified external approval and an independent recovery SLA, no persistent grant is allowed in Development.
 
 ## Scope, identity, and controls
