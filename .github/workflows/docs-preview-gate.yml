@@ -39,19 +39,20 @@ jobs:
           set -euo pipefail
           changed="$(gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" --jq '.[].filename')"
           test -n "${changed}" || { echo "::error::Empty PR file set"; exit 1; }
+          # Workflow changes are security-sensitive, including this classifier itself.
           # Reviewed documentary paths only. Keep code, security and env changes
           # in the separate code/Preview gate rather than treating them as docs.
           is_documentation_path() {
             case "$1" in
-              README.md|SECURITY.md|SCAFFOLD-MANIFEST.json|docs/*|.github/PULL_REQUEST_TEMPLATE.md|.github/workflows/docs-preview-gate.yml) return 0 ;;
+              README.md|SECURITY.md|SCAFFOLD-MANIFEST.json|docs/*|.github/PULL_REQUEST_TEMPLATE.md) return 0 ;;
               *) return 1 ;;
             esac
           }
           # Test the allowlist itself without checking out untrusted PR code.
-          for sample in README.md SECURITY.md docs/operations/roadmap.md .github/PULL_REQUEST_TEMPLATE.md .github/workflows/docs-preview-gate.yml; do
+          for sample in README.md SECURITY.md docs/operations/roadmap.md .github/PULL_REQUEST_TEMPLATE.md; do
             is_documentation_path "${sample}" || { echo "::error::Documentation classifier regression: ${sample}"; exit 1; }
           done
-          for sample in apps/web/src/app/page.tsx scripts/vercel-ignore-build.mjs .github/workflows/quality.yml .env.example; do
+          for sample in apps/web/src/app/page.tsx scripts/vercel-ignore-build.mjs .github/workflows/quality.yml .github/workflows/docs-preview-gate.yml .env.example; do
             if is_documentation_path "${sample}"; then
               echo "::error::Code or security path classified as documentation: ${sample}"
               exit 1
