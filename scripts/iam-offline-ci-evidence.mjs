@@ -100,12 +100,14 @@ export async function verifyOfflineCheckRuns({ scope, checks, sha, prNumber, loa
         catch { runCache.set(runId, null); }
       }
       const run = runCache.get(runId);
-      // The parent CI workflow may fail solely because security-gate is
-      // waiting for this attestation. Requiring run.conclusion=success would
-      // create a circular dependency. The exact named check-run itself MUST
-      // be completed/success, with trusted workflow provenance and PR linkage.
+      // CI's parent run remains in_progress while offline-evidence is
+      // attesting quality, and later may fail because security-gate waits for
+      // this exact attestation. Never require parent status=completed nor
+      // parent conclusion=success; require the named job's completed/success,
+      // immutable SHA, trusted workflow provenance and linked PR instead.
       if (run?.path === path && run.head_sha === sha &&
-          run.event === "pull_request" && run.status === "completed" &&
+          run.event === "pull_request" &&
+          (run.status === "in_progress" || run.status === "completed") &&
           run.repository?.full_name === repository &&
           Array.isArray(run.pull_requests) &&
           run.pull_requests.some(pr => pr.number === Number(prNumber) &&
