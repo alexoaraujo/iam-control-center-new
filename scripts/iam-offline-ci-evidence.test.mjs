@@ -109,6 +109,20 @@ test("trusts only matching completed SHA, PR, workflow path and GitHub Actions c
     loadRun: id => run(id === "122" ? ".github/workflows/quality.yml"
       : ".github/workflows/iam-g1-b2-policy-test.yml", { conclusion: "failure" }),
   }), true, "parent CI can fail only because security-gate depends on this attestation");
+  assert.equal(await verifyOfflineCheckRuns({
+    scope, checks, sha, prNumber: 98,
+    loadRun: id => run(id === "122" ? ".github/workflows/quality.yml"
+      : ".github/workflows/iam-g1-b2-policy-test.yml", {
+      status: "in_progress", conclusion: null,
+    }),
+  }), true, "the quality parent run must still be in_progress while attestation waits");
+  for (const status of ["queued", "waiting", "requested", "cancelled"]) {
+    assert.equal(await verifyOfflineCheckRuns({
+      scope, checks, sha, prNumber: 98,
+      loadRun: id => run(id === "122" ? ".github/workflows/quality.yml"
+        : ".github/workflows/iam-g1-b2-policy-test.yml", { status }),
+    }), false, "wrong parent status " + status);
+  }
   for (const delta of [
     { head_sha: "b".repeat(40) }, { conclusion: "skipped" },
     { app: { slug: "untrusted" } }, { status: "in_progress" },
