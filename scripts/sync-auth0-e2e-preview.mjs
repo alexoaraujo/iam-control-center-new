@@ -15,8 +15,8 @@ export function isAuth0CriticalFile(file) {
   return /^(apps\/web\/|packages\/|\.github\/e2e\/|database\/migrations\/|database\/tests\/api-authorization)/.test(file) ||
     /^scripts\/(bind-e2e-preview|verify-preview-alias|neon-rbac-fixture-binding)/.test(file);
 }
-// Changes to the E2E authorization gate itself require a separate security
-// review. They must never be described as ordinary governance-only SKIPs.
+// Changes to the E2E authorization gate require SHA-scoped maintainer
+// attestation and technical E2E. Never silently skip the authenticated test.
 export function isAuth0GateFile(file) {
   return file === ".github/workflows/quality.yml" ||
     file === "scripts/sync-auth0-e2e-preview.mjs" ||
@@ -37,10 +37,10 @@ export function decideScope(env, domain, paths) {
   if (!Array.isArray(paths) || paths.some(x => typeof x !== "string")) throw Error("Unknown PR change scope");
   if (domain.gitBranch !== env.PR_HEAD_BRANCH) {
     if (paths.some(isAuth0CriticalFile)) {
-      throw Error("Auth0-sensitive changes require a separately authorized callback branch; refusing to skip E2E");
+      throw Error("Auth0-sensitive changes require a SHA-bound, maintainer-authorized callback branch; refusing to skip E2E");
     }
     if (paths.some(isAuth0GateFile)) {
-      return { ready: false, reason: "SECURITY_REVIEW_REQUIRED" };
+      return { ready: false, reason: "SECURITY_SCOPE_ATTESTATION_REQUIRED" };
     }
     return { ready: false, reason: "BRANCH_NOT_BOUND_TO_CALLBACK" };
   }
@@ -114,8 +114,8 @@ export async function syncPreview(env, fetcher = fetch, changedFiles = prFiles) 
     // A change to the E2E policy or workflow itself is never an ordinary
     // governance skip. Fail the separate preflight check until the combined
     // code is tested on a verified callback-bound branch.
-    if (decision.reason === "SECURITY_REVIEW_REQUIRED") {
-      throw new Error("AUTH0_GATE_REVIEW_REQUIRED: callback-bound E2E and independent review required; refusing silent skip");
+    if (decision.reason === "SECURITY_SCOPE_ATTESTATION_REQUIRED") {
+      throw new Error("AUTH0_GATE_MAINTAINER_ATTESTATION_REQUIRED: callback-bound E2E and maintainer SHA authorization required; refusing silent skip");
     }
     appendFileSync(env.GITHUB_OUTPUT,"auth0_ready=false\nscope=not-authorized\n");
     console.log("::notice::Auth0 E2E NOT RUN: " + decision.reason + ". No credentials or alias modified.");
