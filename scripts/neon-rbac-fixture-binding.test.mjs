@@ -6,12 +6,22 @@ const e2e = readFileSync(new URL("../.github/e2e/auth0-rbac.spec.cjs", import.me
 const workflow = readFileSync(new URL("../.github/workflows/quality.yml", import.meta.url), "utf8");
 
 test("RBAC E2E is pinned to the approved active Neon child, never the expired fixture", () => {
-  assert.match(e2e, /project: "tiny-rice-70320263", branch: "br-royal-dream-b6di0p2w"/);
-  assert.match(e2e, /parent: "br-muddy-bar-b63ksdy7", name: "validation\/pr-41-auth0-rbac-e2e-20261113"/);
-  assert.match(e2e, /host: "ep-shiny-pond-b6zifpoo\.c-2\.sa-east-1\.aws\.neon\.tech"/);
+  assert.match(e2e, /project: "tiny-rice-70320263", branch: "br-quiet-night-b6cfeq4j"/);
+  assert.match(e2e, /parent: "br-muddy-bar-b63ksdy7", name: "validation\/pr-41-rbac-e2e-20261117"/);
+  assert.match(e2e, /host: "ep-broad-bonus-b6c5jc2y\.c-2\.sa-east-1\.aws\.neon\.tech"/);
   assert.match(workflow, /^\s+E2E_RBAC_PROJECT_ID: tiny-rice-70320263$/m);
-  assert.match(workflow, /^\s+E2E_RBAC_BRANCH_ID: br-royal-dream-b6di0p2w$/m);
+  assert.match(workflow, /^\s+E2E_RBAC_BRANCH_ID: br-quiet-night-b6cfeq4j$/m);
   assert.doesNotMatch(e2e + workflow, /br-shy-scene-b67zm2v7/);
+  assert.doesNotMatch(e2e + workflow, /br-royal-dream-b6di0p2w|ep-shiny-pond-b6zifpoo/);
+});
+
+test("RBAC E2E validates approved lease before reading a secret", () => {
+  assert.match(e2e, /expiresAt: "2026-11-20T01:30:00Z"/);
+  assert.match(e2e, /assertRbacFixtureLease\(ID\)/);
+  const leaseCheck = e2e.indexOf("assertRbacFixtureLease(ID)");
+  const secretRead = e2e.indexOf("const connection = process.env.NEON_RBAC_TEST_OWNER_DATABASE_URL");
+  const sqlSession = e2e.indexOf("const sql = neon(connection)");
+  assert.ok(leaseCheck !== -1 && leaseCheck < secretRead && secretRead < sqlSession);
 });
 
 test("RBAC E2E denies cross-branch credentials before fixture writes", () => {
@@ -23,6 +33,17 @@ test("RBAC E2E denies cross-branch credentials before fixture writes", () => {
   assert.ok(authenticatedIndex > -1 && fixtureIndex > authenticatedIndex);
   assert.match(e2e, /if\(fixtureStarted\)/);
   assert.match(e2e, /FAIL cleanup: fixture residue/);
+});
+
+test("RBAC synthetic writes preflight both effective owner role and runtime NOBYPASSRLS", () => {
+  assert.match(e2e, /BLOCKED_RBAC_FIXTURE_UNSAFE_ROLE_TOPOLOGY/);
+  assert.match(e2e, /pg_has_role\(current_user,'iam_owner','SET'\)/);
+  assert.match(e2e, /NOT rolbypassrls AND NOT rolsuper AND NOT rolcanlogin/);
+  assert.match(e2e, /NOT rolbypassrls AND NOT rolsuper FROM pg_roles WHERE rolname='iam_app_runtime_login'/);
+  const rolePreflight = e2e.indexOf("const roleTopology = await sql.query(");
+  const createFixture = e2e.indexOf("async function create(sql, subject)");
+  assert.ok(rolePreflight > 0 && createFixture > rolePreflight);
+  assert.match(e2e, /SET LOCAL ROLE iam_owner/);
 });
 
 test("RBAC credentials remain scoped to one protected Preview E2E step", () => {

@@ -4,9 +4,10 @@ const { createHash } = require("node:crypto");
 const { neon } = require("@neondatabase/serverless");
 
 const ID = {
-  project: "tiny-rice-70320263", branch: "br-royal-dream-b6di0p2w",
-  parent: "br-muddy-bar-b63ksdy7", name: "validation/pr-41-auth0-rbac-e2e-20261113",
-  host: "ep-shiny-pond-b6zifpoo.c-2.sa-east-1.aws.neon.tech",
+  project: "tiny-rice-70320263", branch: "br-quiet-night-b6cfeq4j",
+  parent: "br-muddy-bar-b63ksdy7", name: "validation/pr-41-rbac-e2e-20261117",
+  expiresAt: "2026-11-20T01:30:00Z",
+  host: "ep-broad-bonus-b6c5jc2y.c-2.sa-east-1.aws.neon.tech",
   tenant: "f65d8f1e-bcd4-4d68-927b-a8b64cda0c41",
   identity: "c7d196ad-4e1a-498c-b4ae-3e4d0ef2a041",
   membership: "c7d196ad-4e1a-498c-b4ae-3e4d0ef2a042",
@@ -27,6 +28,10 @@ const countKeys = ["tenants", "identities", "memberships", "roles", "membership_
 const counts = async (sql) => (await sql.query(countsQuery, [ID.tenant, ID.identity, ID.membership, ID.role]))[0];
 const zero = (result) => countKeys.every((key) => result[key] === 0);
 async function connect() {
+  // Check the pinned Neon clone TTL before any secret, connection, or DML.
+  // A new approved child must update ID.branch/host/name/expiresAt together.
+  const { assertRbacFixtureLease } = await import("../../scripts/neon-rbac-fixture-lease.mjs");
+  assertRbacFixtureLease(ID);
   check(process.env.GITHUB_REPOSITORY === "alexoaraujo/iam-control-center-new" &&
     process.env.GITHUB_EVENT_NAME === "pull_request" &&
     process.env.GITHUB_HEAD_REF === "feat/iam-api-rbac-lineage-20261110" &&
@@ -53,6 +58,16 @@ async function connect() {
   check(rows.length === 1 && rows[0].db === "iam_database" &&
     rows[0].branch === ID.branch && rows[0].principal === "neondb_owner",
     "SQL session is not the approved Neon branch");
+  // Read-only role topology attestation before touching any synthetic fixture.
+  // The owner login is Neon-privileged; data writes MUST SET LOCAL ROLE iam_owner.
+  const roleTopology = await sql.query(
+    "SELECT " +
+    "pg_has_role(current_user,'iam_owner','SET') AS may_set_iam_owner, " +
+    "(SELECT NOT rolbypassrls AND NOT rolsuper AND NOT rolcanlogin FROM pg_roles WHERE rolname='iam_owner') AS iam_owner_safe, " +
+    "(SELECT NOT rolbypassrls AND NOT rolsuper FROM pg_roles WHERE rolname='iam_app_runtime_login') AS runtime_safe");
+  check(roleTopology.length === 1 && roleTopology[0].may_set_iam_owner === true &&
+    roleTopology[0].iam_owner_safe === true && roleTopology[0].runtime_safe === true,
+    "BLOCKED_RBAC_FIXTURE_UNSAFE_ROLE_TOPOLOGY");
   const base = await counts(sql);
   check(zero(base) && base.active_keys === 1 && base.ledger_rows === 0,
     "Fixture IDs not clean or protected key/ledger baseline mismatch");
