@@ -515,6 +515,50 @@ jobs:
           echo "::error::Required exact-SHA docs Preview check absent or timed out"
           exit 1
 
+  offline-evidence:
+    name: offline-evidence
+    # Strict scope and workflow provenance, from the trusted base SHA only.
+    # No checkout of PR code, no Auth0/Neon/B2 secrets, no production access.
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+      checks: read
+    outputs:
+      verified: ${{ steps.verify.outputs.verified }}
+      scope: ${{ steps.verify.outputs.scope }}
+    steps:
+      - name: Checkout trusted base revision without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify exact-SHA offline scope and independently completed checks
+        id: verify
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # On the first review PR, the base intentionally has no new policy:
+          # report ineligible rather than executing PR-supplied verifier code.
+          if [[ ! -f scripts/iam-offline-ci-evidence.mjs ]]; then
+            echo 'verified=false' >> "$GITHUB_OUTPUT"
+            echo 'scope=none' >> "$GITHUB_OUTPUT"
+            echo 'NOT_ELIGIBLE: base policy not installed; Auth0 E2E required'
+            exit 0
+          fi
+          node scripts/iam-offline-ci-evidence.mjs
+
   security-gate:
     name: security-gate
     # A stable, always-emitted status for branch protection. Unlike quality,
@@ -526,6 +570,7 @@ jobs:
       - sync-auth0-preview
       - auth0-e2e
       - docs-preview-evidence
+      - offline-evidence
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     permissions:
@@ -552,4 +597,8 @@ jobs:
           AUTH0_E2E_RESULT: ${{ needs.auth0-e2e.result }}
           AUTH0_E2E_ENABLED: ${{ vars.AUTH0_E2E_ENABLED }}
           DOCS_PREVIEW_RESULT: ${{ needs.docs-preview-evidence.result }}
+          AUTH0_SCOPE: ${{ needs.sync-auth0-preview.outputs.scope }}
+          OFFLINE_EVIDENCE_RESULT: ${{ needs.offline-evidence.result }}
+          OFFLINE_EVIDENCE_VERIFIED: ${{ needs.offline-evidence.outputs.verified }}
+          OFFLINE_EVIDENCE_SCOPE: ${{ needs.offline-evidence.outputs.scope }}
         run: node scripts/release-security-gate.mjs
