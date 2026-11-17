@@ -51,4 +51,10 @@ Placeholders são exemplo, nunca aceite fictício. A decisão só vale no interv
 4. Revalidar as operações por SHA exato e registrar a decisão do mantenedor; incidentes e rollback continuam documentados em UTC.
 5. Não fazer merge automático de PRs bloqueadas pela CI, Auth0, RLS ou governança de Production.
 
+## Revalidação crítica da ruleset ativa (17/11/2026 UTC)
+
+Um readback autenticado posterior à redação inicial constatou a **substituição** da ruleset `protect-main` ID `26988310` pela ruleset **ativa ID `27506312`**. A versão atual continua com zero revisores obrigatórios, mas `required_status_checks` contém **somente `quality`** (GitHub Actions integration ID `15368`). **`security-gate` não está atualmente obrigatório na ruleset**, embora o workflow execute esse job. Isto é um drift real da proteção, não um `PASS`.
+
+**Condição normativa de ativação do PEOS mantenedor único:** o administrador deve restaurar `security-gate` no conjunto de required status checks da ruleset ativa **sem adicionar revisores**, preservando `quality`, `required_approving_review_count=0`, restrições de branch e ausência de bypass. O mantenedor deve anexar ID da ruleset, SHA/UTC e readback após a alteração. Não fazer merge de alterações sensíveis enquanto `security-gate` não voltar a ser exigido. A aplicação da ruleset depende de Settings GitHub Admin não disponível neste conector.
+
 **Estado inicial da política:** `POLICY=PROPOSED_IN_PR`; `GITHUB_MAIN_CODE_REVIEW_COUNT=0_AT_READBACK`; `ENVIRONMENT_ADMIN_REVIEWERS=UNVERIFIED_NOT_MODIFIED`; `OPERATIONAL_AUTHORIZATIONS=NOT_RETROACTIVE`.
