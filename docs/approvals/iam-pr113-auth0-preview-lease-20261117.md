@@ -11,7 +11,7 @@
 - Callback compartilhado: `iam-control-center-new-ci-preview.vercel.app` (project domain `verified=true`).
 - Baseline de project domain: `gitBranch=feat/iam-api-rbac-lineage-20261110`.
 - Baseline de alias: `dpl_AHt58aoFXCAJXzkXngm2ZgrVS72w`, READY, proveniente de `feat/iam-api-rbac-lineage-20261110@f2cfa570e282463d4e7457613de3f4a527df8149`.
-- **Preview anterior NÃO ELEGÍVEL para o HEAD atual**: `dpl_GfYemN9v1C9vNBC2iuD8EuWG12Sc`, READY, associado ao commit anterior `a9d0bf1313b6850772e17a7d4a3d7ad70c3d585b`. **Não é o alvo aprovado para a PR #113 atual**; obter deployment READY com SHA atual, readback independente e nova revisão.
+- **Preview anterior NÃO ELEGÍVEL para o HEAD atual**: `dpl_GfYemN9v1C9vNBC2iuD8EuWG12Sc`, READY, associado ao commit anterior `810cc0e88cd16981d2f74a5ae9acc83b921d2b8e`. **Não é o alvo aprovado para a PR #113 atual**; obter deployment READY com SHA atual, readback independente e nova revisão.
 - Production baseline: domínio `iam-control-center-new.vercel.app` apontando para `dpl_4sd7DPf8nnr5WuzieAkn2CZcbSq1`, commit `main@665b41008d16e88d6cd6f9857951a294ddb112f2`.
 - GitHub ruleset `protect-main` ID `26988310`: ativo, 1 revisão independente, checks `quality` e `security-gate`, sem bypass.
 - CI anterior: [run #44025495927](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44025495927), quality/Preview PASS; `sync-auth0-preview=FAIL` com `AUTH0_GATE_REVIEW_REQUIRED`, `auth0-e2e=SKIPPED`, `security-gate=FAIL`. Esse bloqueio é esperado e **não** deve ser removido.
