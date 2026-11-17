@@ -82,3 +82,19 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Execute negative lint rules without suppressing warnings
         run: node --test scripts/biome-negative-rules.test.mjs
+      - name: Biome lint on application
+        run: pnpm lint
+      - name: TypeScript typecheck
+        run: pnpm typecheck
+      - name: Vitest unit regressions
+        run: pnpm test
+      - name: PEOS Node script contracts
+        run: node --test scripts/*.test.mjs
+      - name: Next.js build with inert CI-only Auth0 values
+        env:
+          AUTH0_DOMAIN: ci-only.invalid
+          AUTH0_CLIENT_ID: ci-build-only
+          AUTH0_CLIENT_SECRET: ci-build-only-not-a-credential
+          AUTH0_SECRET: ci-build-only-secret-not-valid-for-any-environment
+          APP_BASE_URL: http://localhost:3000
+        run: pnpm build
