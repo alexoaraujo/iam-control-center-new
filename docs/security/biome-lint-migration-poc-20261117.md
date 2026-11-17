@@ -30,6 +30,14 @@
 
 The old ESLint config enabled Next Core Web Vitals and Next TypeScript presets. Biome v2 has `next` and `react` recommended domains covering important rules (including React hooks), but **functional test PASS does not prove an identical rule set**. Missing or differently scoped ESLint rules (including `jsx-a11y` and other Next core-web-vitals rules) need an explicit equivalence/negative-fixture review. Do not disable recommended Biome rules merely to obtain green checks.
 
+## PEOS extension — effective rule inventory and negative regression, 2026-11-17 UTC
+
+- Actual baseline `eslint --print-config src/app/page.tsx` on `main=17a4e86fddecc02c4326049fdf3d95fea6f4e522` confirmed **86 enabled ESLint rules**: Next.js 22, React Hooks 16, TypeScript lint 20, React 17, JSX accessibility 6, imports 1, core ESLint 4. Full named list and severities: [biome-eslint-effective-rules-inventory-20261117.md](./biome-eslint-effective-rules-inventory-20261117.md), source GitHub Actions [#44159264355](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44159264355).
+- The Biome config was hardened to `error` for `useHookAtTopLevel`, `useExhaustiveDependencies`, `noImgElement` and `noStaticElementInteractions`. Synthetic invalid TSX fixtures are created only in temporary directories and deleted after each test.
+- On [GitHub Actions #44159880087](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44159880087) (SHA `42889118456414fe5d1730e400f4a654cebde55f`), all four negative lint fixtures were rejected (4/4 PASS); Biome lint PASS with 25 existing warnings; TypeScript PASS; Vitest 96/96 PASS in 19 files; Node/PEOS contracts 126/126 PASS; Next.js build PASS.
+- Exact-SHA [CI quality #44159879981](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44159879981) **FAIL** at mandatory `pnpm audit` with one HIGH: `apps__web > vitest > picomatch@4.0.7`. Separate local PG18 `security-gate` PASS does not override CI failure.
+- **Full one-to-one parity is NOT PROVEN**. In particular, the baseline includes 16 React Hooks rules (many React Compiler-specific), 22 Next rules, 20 TypeScript lint rules and 6 accessibility rules. Four negative fixtures cover important subsets but cannot guarantee equivalence for all rules. Never convert `RULE_PARITY` to PASS solely based on successful app tests.
+
 ## Next safe gate
 
 - [ ] Evaluate and remediate the 25 Biome warnings without suppressing security-critical rules. Independently inventory which ESLint rules were enforced and compare with Biome equivalents, including negative fixtures for React hooks, Next-specific elements and accessibility.
