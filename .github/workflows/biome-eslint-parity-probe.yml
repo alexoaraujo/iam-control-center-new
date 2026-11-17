@@ -45,6 +45,12 @@ jobs:
           console.log("PEOS_ESLINT_BASELINE_SHA=17a4e86fddecc02c4326049fdf3d95fea6f4e522");
           console.log("PEOS_ESLINT_EFFECTIVE_ENABLED_COUNT=" + rules.length);
           const prefixes = ["@next/next/", "react-hooks/", "jsx-a11y/", "@typescript-eslint/", "react/", "import/"];
+          const builtin = rules.filter(([name]) => !prefixes.some(prefix => name.startsWith(prefix)));
+          console.log("PEOS_RULE_GROUP=ESLINT_CORE COUNT=" + builtin.length);
+          for (const [name,value] of builtin.sort(([a],[b]) => a.localeCompare(b))) {
+            const severity = Array.isArray(value) ? value[0] : value;
+            console.log("PEOS_ESLINT_RULE=" + name + " SEVERITY=" + severity);
+          }
           for (const prefix of prefixes) {
             const group = rules.filter(([name]) => name.startsWith(prefix)).sort(([a],[b]) => a.localeCompare(b));
             console.log("PEOS_RULE_GROUP=" + prefix + " COUNT=" + group.length);
