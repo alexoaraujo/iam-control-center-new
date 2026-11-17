@@ -89,7 +89,7 @@ test("trusts only matching completed SHA, PR, workflow path and GitHub Actions c
   const wrongCases = [
     { head_sha: "b".repeat(40) },
     { event: "workflow_dispatch" },
-    { status: "in_progress" },
+    { status: "queued" },
     // A failed parent workflow is acceptable if the exact check job succeeded.
     { pull_requests: [{ number: 99, head: { sha } }] },
     { pull_requests: [{ number: 98, head: { sha: "b".repeat(40) } }] },
