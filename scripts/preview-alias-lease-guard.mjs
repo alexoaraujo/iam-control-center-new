@@ -13,7 +13,8 @@ function stop(code) {
 function validRef(ref) {
   return typeof ref?.branch === "string" && BRANCH_PATTERN.test(ref.branch) &&
     !/[\r\n]/.test(ref.branch) && SHA_PATTERN.test(ref.sha ?? "") &&
-    ref.repo === REPO && typeof ref.deploymentId === "string" &&
+    ref.repo === REPO && /^[a-zA-Z0-9-]+\\.vercel\\.app$/.test(ref.previewHost ?? "") &&
+    typeof ref.deploymentId === "string" &&
     /^dpl_[a-zA-Z0-9]+$/.test(ref.deploymentId);
 }
 function verifyDeployment(deployment, ref) {
@@ -69,7 +70,9 @@ export function verifyLeaseSnapshot(snapshot) {
 
   // A lease must not be declared ready for transfer while its target lacks
   // branch-scoped Preview configuration. This does NOT validate secret values.
-  verifyScopedVariableNames(targetPreviewVariables, target.branch);
+  if (phase !== "rollback") {
+    verifyScopedVariableNames(targetPreviewVariables, target.branch);
+  }
   return {
     state: phase === "leased"
       ? "PASS_PREVIEW_LEASE_TARGET_BINDING_READ_ONLY"
