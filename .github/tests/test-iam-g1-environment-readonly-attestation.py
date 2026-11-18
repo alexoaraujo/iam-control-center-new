@@ -18,11 +18,7 @@ def env(name):
             "protected_branches": False,
             "custom_branch_policies": True,
         },
-        "protection_rules": [
-            {"type": "required_reviewers", "prevent_self_review": True,
-             "reviewers": [{"type": "User", "reviewer": {"login": target.REVIEWER}}]},
-            {"type": "branch_policy"},
-        ],
+        "protection_rules": [{"type": "branch_policy"}],
     }
 
 
@@ -52,18 +48,18 @@ class Contracts(TestCase):
                 with self.assertRaisesRegex(target.GateBlocked, "ADMIN_BYPASS"):
                     target.verify_configuration(name, data, policies(name), custom())
 
-    def test_reviewers_and_self_review_mismatch_fail(self):
+    def test_required_reviewers_are_rejected_under_single_maintainer_policy(self):
         for name in target.ENVS:
-            for defect in ("no_review", "wrong_review", "self_review"):
+            for required_rule in (
+                {"type": "required_reviewers", "prevent_self_review": True,
+                 "reviewers": [{"type": "User", "reviewer": {"login": "different"}}]},
+                {"type": "required_reviewers", "prevent_self_review": False,
+                 "reviewers": [{"type": "User", "reviewer": {"login": "alexoaraujo"}}]},
+                {"type": "required_reviewers", "reviewers": []},
+            ):
                 data = env(name)
-                rule = data["protection_rules"][0]
-                if defect == "no_review":
-                    data["protection_rules"].pop(0)
-                elif defect == "wrong_review":
-                    rule["reviewers"][0]["reviewer"]["login"] = "alexoaraujo"
-                else:
-                    rule["prevent_self_review"] = False
-                with self.assertRaises(target.GateBlocked):
+                data["protection_rules"].append(required_rule)
+                with self.assertRaisesRegex(target.GateBlocked, "MANDATORY_HUMAN_REVIEWER"):
                     target.verify_configuration(name, data, policies(name), custom())
 
     def test_custom_rule_and_wait_timer_fail(self):
