@@ -86,6 +86,7 @@ test("PR132 RBAC is exclusively bound to expiring br-crimson-mouse and an SHA-ap
 
 test("PR132 privileged lease is never sourced from the PR41 secret or Preview app runtime", () => {
   assert.match(pr132E2E, /NEON_RBAC_PR132_TEST_OWNER_DATABASE_URL/);
+  assert.match(pr132E2E, /RBAC HTTP BLOCKED: protected Preview secret NEON_RBAC_PR132_TEST_OWNER_DATABASE_URL is missing/);
   assert.doesNotMatch(pr132E2E, /process\.env\.NEON_RBAC_TEST_OWNER_DATABASE_URL/);
   assert.match(pr132E2E, /uri\.searchParams\.get\("sslmode"\) === "verify-full"/);
   assert.match(pr132E2E, /uri\.searchParams\.get\("sslrootcert"\) === "system"/);
