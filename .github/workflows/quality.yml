@@ -247,9 +247,14 @@ jobs:
       APP_BASE_URL: ${{ needs.sync-auth0-preview.outputs.app_base_url }}
       AUTH0_DOMAIN: ${{ needs.sync-auth0-preview.outputs.auth0_domain }}
       # Preview-only branch-scoped SQL connection is injected solely in E2E step.
-      E2E_RBAC_HTTP_ENABLED: ${{ github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && 'true' || 'false' }}
+      E2E_RBAC_HTTP_ENABLED: ${{ (github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' || (github.event.pull_request.number == 132 && github.event.pull_request.head.ref == 'integration/peos-g1-g2-canonical-bun-20261118' && vars.IAM_PR132_RBAC_APPROVED_SHA != '' && vars.IAM_PR132_RBAC_APPROVED_SHA == github.event.pull_request.head.sha)) && 'true' || 'false' }}
       E2E_RBAC_PROJECT_ID: tiny-rice-70320263
       E2E_RBAC_BRANCH_ID: br-quiet-night-b6cfeq4j
+      # PR132-only fixture; the PR41 child and credential remain unchanged.
+      E2E_RBAC_PR132_BRANCH_ID: ${{ github.event.pull_request.number == 132 && github.event.pull_request.head.ref == 'integration/peos-g1-g2-canonical-bun-20261118' && 'br-crimson-mouse-b6ltdbyx' || '' }}
+      E2E_PR_NUMBER: ${{ github.event.pull_request.number }}
+      E2E_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      IAM_PR132_RBAC_APPROVED_SHA: ${{ vars.IAM_PR132_RBAC_APPROVED_SHA }}
       VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
       VERCEL_TEAM_SLUG: aoa4
       VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
@@ -415,6 +420,8 @@ jobs:
         env:
           # Branch-scoped credential (never Neon API key); only this step can read it.
           NEON_RBAC_TEST_OWNER_DATABASE_URL: ${{ github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && secrets.NEON_RBAC_TEST_OWNER_DATABASE_URL || '' }}
+          # Separate owner lease for PR132; never fall back to the PR41 secret.
+          NEON_RBAC_PR132_TEST_OWNER_DATABASE_URL: ${{ github.event.pull_request.number == 132 && github.event.pull_request.head.ref == 'integration/peos-g1-g2-canonical-bun-20261118' && vars.IAM_PR132_RBAC_APPROVED_SHA != '' && vars.IAM_PR132_RBAC_APPROVED_SHA == github.event.pull_request.head.sha && secrets.NEON_RBAC_PR132_TEST_OWNER_DATABASE_URL || '' }}
         run: |
           NODE_PATH="$RUNNER_TEMP/playwright/node_modules" \
             "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" test \

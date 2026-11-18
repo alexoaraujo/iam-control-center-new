@@ -46,3 +46,17 @@ test("malformed branch, missing fixture, and invalid timestamp are rejected", ()
   assert.throws(() => assertRbacFixtureLease(valid, NaN),
     /BLOCKED_RBAC_FIXTURE_LEASE_TIMESTAMP/);
 });
+
+test("PR132 isolated fixture has a separate TTL and blocks after expiry", () => {
+  const clone = {
+    project: "tiny-rice-70320263",
+    parent: "br-muddy-bar-b63ksdy7",
+    branch: "br-crimson-mouse-b6ltdbyx",
+    expiresAt: "2026-11-20T17:03:52Z",
+  };
+  assert.equal(assertRbacFixtureLease(clone, Date.parse("2026-11-18T18:00:00Z")),
+    "PASS_RBAC_FIXTURE_LEASE_TIME_WINDOW_OFFLINE");
+  assert.throws(() => assertRbacFixtureLease(clone, Date.parse("2026-11-20T17:03:52Z")),
+    /BLOCKED_RBAC_FIXTURE_LEASE_EXPIRED_OR_EXPIRING/);
+});
+

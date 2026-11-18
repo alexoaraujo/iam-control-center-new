@@ -69,3 +69,43 @@ test("RBAC with an active tenant A grant still denies tenant B, identity spoofin
   assert.match(e2e, /status:403,body:\{allowed:false\},cache:"no-store"/);
   assert.match(e2e, /check\(zero\(result\) && result\.active_keys===1 && result\.ledger_rows===0/);
 });
+
+const pr132E2E = readFileSync(new URL("../.github/e2e/auth0-rbac-pr132.spec.cjs", import.meta.url), "utf8");
+
+test("PR132 RBAC is exclusively bound to expiring br-crimson-mouse and an SHA-approved GitHub PR", () => {
+  assert.match(pr132E2E, /branch: "br-crimson-mouse-b6ltdbyx"/);
+  assert.match(pr132E2E, /host: "ep-nameless-breeze-b6mdjzqe\.c-2\.sa-east-1\.aws\.neon\.tech"/);
+  assert.match(pr132E2E, /name: "validation\/pr-132-rbac-http-isolated-20261118"/);
+  assert.match(pr132E2E, /expiresAt: "2026-11-20T17:03:52Z"/);
+  assert.match(pr132E2E, /GITHUB_REF === "refs\/pull\/132\/merge"/);
+  assert.match(pr132E2E, /E2E_PR_HEAD_SHA === process\.env\.IAM_PR132_RBAC_APPROVED_SHA/);
+  assert.match(pr132E2E, /E2E_RBAC_PR132_BRANCH_ID === ID\.branch/);
+  assert.match(pr132E2E, /BLOCKED_PR132_ACTIVE_HMAC_KEY_NOT_BOUND_TO_CLONE/);
+  assert.doesNotMatch(pr132E2E, /br-quiet-night-b6cfeq4j|ep-broad-bonus-b6c5jc2y/);
+});
+
+test("PR132 privileged lease is never sourced from the PR41 secret or Preview app runtime", () => {
+  assert.match(pr132E2E, /NEON_RBAC_PR132_TEST_OWNER_DATABASE_URL/);
+  assert.doesNotMatch(pr132E2E, /process\.env\.NEON_RBAC_TEST_OWNER_DATABASE_URL/);
+  assert.match(pr132E2E, /uri\.searchParams\.get\("sslmode"\) === "verify-full"/);
+  assert.match(pr132E2E, /uri\.searchParams\.get\("sslrootcert"\) === "system"/);
+  assert.match(workflow, /NEON_RBAC_PR132_TEST_OWNER_DATABASE_URL: \$\{\{ github\.event\.pull_request\.number == 132/);
+  assert.match(workflow, /vars\.IAM_PR132_RBAC_APPROVED_SHA == github\.event\.pull_request\.head\.sha/);
+  assert.match(workflow, /E2E_RBAC_PR132_BRANCH_ID: \$\{\{ github\.event\.pull_request\.number == 132/);
+  const lease=pr132E2E.indexOf("assertRbacFixtureLease(ID)");
+  const secrets=pr132E2E.indexOf("const connection = process.env.NEON_RBAC_PR132_TEST_OWNER_DATABASE_URL");
+  assert.ok(lease>0 && secrets>lease);
+});
+
+test("PR132 distinct fixture denies active A grant to B and cleans synthetic rows", () => {
+  assert.match(pr132E2E, /tenant: "13200000-0000-4000-8000-000000000132"/);
+  assert.match(pr132E2E, /tenantB: "13200000-0000-4000-8000-000000000133"/);
+  assert.match(pr132E2E, /"tenants_b"/);
+  assert.match(pr132E2E, /cross-tenant-B/);
+  assert.match(pr132E2E, /cross-identity/);
+  assert.match(pr132E2E, /ungranted-permission/);
+  assert.match(pr132E2E, /await revoke\(sql\)/);
+  assert.match(pr132E2E, /if\(fixtureStarted\)/);
+  assert.match(pr132E2E, /await cleanup\(sql\)/);
+  assert.match(pr132E2E, /key=1; ledger=0/);
+});
