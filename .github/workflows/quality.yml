@@ -96,13 +96,12 @@ jobs:
     timeout-minutes: 12
     outputs:
       preview_host: ${{ steps.resolve-preview.outputs.preview_host }}
-    environment:
-      name: Preview
+    # Read-only Vercel status lookup: never use the secret-bearing Preview Environment.
+    # The protected Preview environment remains mandatory for Auth0 sync and E2E.
     permissions:
       contents: read
       statuses: read
       checks: read
-      deployments: write
     steps:
       - name: Wait for an exact-SHA READY Vercel Preview deployment
         id: resolve-preview
