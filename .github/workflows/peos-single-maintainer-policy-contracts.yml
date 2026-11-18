@@ -5,6 +5,8 @@ on:
     paths:
       - ".github/scripts/configure-iam-canonical-environment.py"
       - ".github/scripts/iam-g1-disposable-environment-bootstrap.py"
+      - ".github/scripts/iam-g1-environment-readonly-attestation.py"
+      - ".github/tests/test-iam-g1-environment-readonly-attestation.py"
       - ".github/scripts/iam-g1-disposable-emergency-revoke.py"
       - ".github/tests/test-configure-iam-canonical-environment.py"
       - ".github/tests/test-iam-g1-disposable-environment-bootstrap.py"
@@ -38,11 +40,13 @@ jobs:
         run: |
           python3 -m py_compile .github/scripts/configure-iam-canonical-environment.py
           python3 -m py_compile .github/scripts/iam-g1-disposable-environment-bootstrap.py
+          python3 -m py_compile .github/scripts/iam-g1-environment-readonly-attestation.py
           python3 -m py_compile .github/scripts/iam-g1-disposable-emergency-revoke.py
       - name: Run canonical setup and G1 synthetic tests with no secrets
         run: |
           python3 .github/tests/test-configure-iam-canonical-environment.py
           python3 .github/tests/test-iam-g1-disposable-environment-bootstrap.py
+          python3 .github/tests/test-iam-g1-environment-readonly-attestation.py
           python3 .github/tests/test-iam-g1-disposable-emergency-revoke.py
       - name: Assert policy invariants and retained technical security-gate
         run: node --test scripts/peos-single-maintainer-policy.test.mjs scripts/sync-auth0-e2e-preview.test.mjs
