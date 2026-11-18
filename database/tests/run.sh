@@ -130,3 +130,9 @@ echo "PASS: Neon ACL promotion gate denies wrong context"
 
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
   -f database/tests/future-default-acl-shadow-fixture.sql
+
+# PEOS G2: read-only canonical manifest and migration-ledger drift regression.
+# All inputs synthetic; preserve fail-closed verdicts without touching Neon.
+node --test database/offline/compare-schema-manifests.test.mjs
+node --test database/offline/compare-migration-ledgers.test.mjs
+node --test database/offline/g2-canonical-drift-contract.test.mjs
