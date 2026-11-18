@@ -539,6 +539,8 @@ jobs:
     timeout-minutes: 8
     permissions:
       contents: read
+      checks: read
+      actions: read
     steps:
       - name: Checkout PR with full history for trusted change-scope assessment
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
@@ -550,6 +552,66 @@ jobs:
         with:
           node-version: 24
 
+      - name: Verify PostgreSQL 18 contracts in trusted workflow at exact SHA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # A separate offline workflow must pass on this exact PR head.
+          # Check both the check-run identity and its owning workflow run.
+          for attempt in $(seq 1 45); do
+            checks="$(gh api "repos/${REPOSITORY}/commits/${PR_HEAD_SHA}/check-runs?per_page=100")"
+            check="$(jq -c --arg sha "${PR_HEAD_SHA}" '
+              [.check_runs[] | select(
+                .name == "pg18-security-contracts" and
+                .head_sha == $sha and
+                .app.slug == "github-actions"
+              )] | sort_by(.id) | last // {}
+            ' <<< "${checks}")"
+            status="$(jq -r '.status // "missing"' <<< "${check}")"
+            conclusion="$(jq -r '.conclusion // "missing"' <<< "${check}")"
+            if [[ "${status}" == completed ]]; then
+              [[ "${conclusion}" == success ]] || {
+                echo "::error::Exact-SHA PG18 contract is not SUCCESS: ${conclusion}"
+                exit 1
+              }
+              details="$(jq -r '.details_url // ""' <<< "${check}")"
+              if [[ "${details}" =~ ^https://github\.com/alexoaraujo/iam-control-center-new/actions/runs/([0-9]+)/job/([0-9]+)$ ]]; then
+                run_id="${BASH_REMATCH[1]}"
+              else
+                echo "::error::PG18 check is missing its trusted workflow identity"
+                exit 1
+              fi
+              run="$(gh api "repos/${REPOSITORY}/actions/runs/${run_id}")"
+              jq -e --arg sha "${PR_HEAD_SHA}" '
+                .path == ".github/workflows/iam-required-security-gate.yml" and
+                .head_sha == $sha and .event == "pull_request"
+              ' <<< "${run}" > /dev/null || {
+                echo "::error::PG18 check did not originate from the approved workflow/SHA"
+                exit 1
+              }
+              run_status="$(jq -r '.status // "missing"' <<< "${run}")"
+              run_conclusion="$(jq -r '.conclusion // "missing"' <<< "${run}")"
+              if [[ "${run_status}" == completed ]]; then
+                [[ "${run_conclusion}" == success ]] || {
+                  echo "::error::PG18 workflow did not finish SUCCESS: ${run_conclusion}"
+                  exit 1
+                }
+                echo "PASS: trusted PostgreSQL 18 contracts verified at exact PR SHA"
+                exit 0
+              fi
+              case "${run_status}" in
+                queued|in_progress|pending|waiting|requested) ;;
+                *) echo "::error::Unexpected PG18 workflow state: ${run_status}"; exit 1 ;;
+              esac
+            fi
+            sleep 8
+          done
+          echo "::error::Exact-SHA PostgreSQL 18 security contracts not verified"
+          exit 1
       - name: Reject missing security checks or unauthenticated scope exemptions
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
