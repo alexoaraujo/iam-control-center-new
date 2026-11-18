@@ -193,7 +193,6 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
           E2E_DEPLOYMENT_HOST: ${{ needs.preview-deployment.outputs.preview_host }}
           VERCEL_TEAM_SLUG: aoa4
           VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80

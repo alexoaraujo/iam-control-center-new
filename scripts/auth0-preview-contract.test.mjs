@@ -5,9 +5,11 @@ import { test } from "node:test";
 const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
 const e2e = readFileSync(".github/e2e/auth0.spec.cjs", "utf8");
 const repository = "alexoaraujo/iam-control-center-new";
-const currentAlias = "iam-control-center-new-ci-preview.vercel.app";
+import { approvedCallback } from "./bind-e2e-preview.mjs";
 test("Auth0 Preview callback is resolved from live Vercel binding for every PR", () => {
-  assert.ok(workflow.includes("iam-control-center-new-ci-preview.vercel.app"));
+  assert.equal(approvedCallback("integration/peos-g1-g2-canonical-bun-20261118"), "iam-control-center-new-ci-preview.vercel.app");
+  assert.equal(approvedCallback("feat/iam-g1-b2-readback-independent-gate"), "iam-control-center-new-pr101-ci.vercel.app");
+  assert.equal(approvedCallback("ops/g1-full-recovery-preflight-20261118"), "iam-control-center-new-pr134-ci.vercel.app");
   assert.ok(workflow.includes("VERCEL_API_TOKEN"));
   assert.ok(workflow.includes("node scripts/bind-e2e-preview.mjs"));
   assert.ok(workflow.includes("node scripts/verify-preview-alias.mjs"));
