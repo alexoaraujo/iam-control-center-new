@@ -52,3 +52,20 @@ test("RBAC credentials remain scoped to one protected Preview E2E step", () => {
   assert.doesNotMatch(workflow, /^\\s+NEON_RBAC_TEST_OWNER_DATABASE_URL: \\$\\{\\{ secrets\\.NEON_RBAC_TEST_OWNER_DATABASE_URL \\}\\}$/m);
   assert.doesNotMatch(workflow, /NEON_API_KEY: \$\{\{ secrets\./);
 });
+
+test("RBAC with an active tenant A grant still denies tenant B, identity spoofing, and ungranted permission", () => {
+  assert.match(e2e, /tenantB: "22222222-2222-4222-8222-222222222222"/);
+  assert.match(e2e, /"tenants_b"/);
+  assert.match(e2e, /INSERT INTO iam\.tenants\(id,slug,display_name\).*peos-auth0-http-41-b/);
+  assert.match(e2e, /DELETE FROM iam\.tenants WHERE id=\$1::uuid",\[ID\.tenantB\]/);
+  for (const variant of ["cross-tenant-B", "cross-identity", "ungranted-permission"]) {
+    assert.ok(e2e.includes('["'+variant+'",'), "Missing denied selector "+variant);
+  }
+  const grant=e2e.indexOf('const yes=await checkHttp(page)');
+  const negative=e2e.indexOf('console.log("PASS: tenant B, cross-identity');
+  const revoke=e2e.indexOf('await revoke(sql)');
+  const cleanup=e2e.indexOf('await cleanup(sql)');
+  assert.ok(grant>0 && grant<negative && negative<revoke && revoke<cleanup);
+  assert.match(e2e, /status:403,body:\{allowed:false\},cache:"no-store"/);
+  assert.match(e2e, /check\(zero\(result\) && result\.active_keys===1 && result\.ledger_rows===0/);
+});
