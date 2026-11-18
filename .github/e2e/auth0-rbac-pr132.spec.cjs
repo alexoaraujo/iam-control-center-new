@@ -40,7 +40,7 @@ async function connect() {
     process.env.GITHUB_REF === "refs/pull/132/merge" &&
     process.env.E2E_PR_NUMBER === "132" &&
     /^[0-9a-f]{40}$/.test(process.env.E2E_PR_HEAD_SHA || "") &&
-    process.env.E2E_PR_HEAD_SHA === process.env.IAM_PR132_RBAC_APPROVED_SHA &&
+    process.env.E2E_PR_HEAD_SHA === process.env.IAM_RBAC_PR132_APPROVED_SHA &&
     process.env.E2E_RBAC_HTTP_ENABLED === "true" &&
     process.env.E2E_RBAC_PROJECT_ID === ID.project &&
     process.env.E2E_RBAC_PR132_BRANCH_ID === ID.branch, "RBAC HTTP gate limited to PR #132");

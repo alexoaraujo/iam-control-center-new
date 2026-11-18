@@ -65,7 +65,7 @@ test("GitHub Preview E2E retains exact-SHA callback preflight and branch-scoped 
   assert.ok(workflow.includes("E2E_CALLBACK_BRANCH: ${{ needs.sync-auth0-preview.outputs.callback_branch }}"));
   assert.ok(workflow.includes("github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110'"));
   assert.ok(workflow.includes("github.event.pull_request.number == 132"));
-  assert.ok(workflow.includes("vars.IAM_PR132_RBAC_APPROVED_SHA == github.event.pull_request.head.sha"));
+  assert.ok(workflow.includes("vars.IAM_RBAC_PR132_APPROVED_SHA == github.event.pull_request.head.sha"));
   assert.ok(workflow.includes("E2E_IDENTITY_SYNC: ${{ github.event.pull_request.head.ref == 'feat/auth0-neon-identity-sync-20261111'"));
   assert.ok(workflow.includes("github.event.pull_request.head.ref == 'feat/iam-api-rbac-lineage-20261110' && secrets.NEON_RBAC_TEST_OWNER_DATABASE_URL"));
   assert.ok(workflow.includes("node scripts/bind-e2e-preview.mjs"));

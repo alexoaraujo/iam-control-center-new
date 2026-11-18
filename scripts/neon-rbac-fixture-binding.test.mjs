@@ -78,7 +78,7 @@ test("PR132 RBAC is exclusively bound to expiring br-crimson-mouse and an SHA-ap
   assert.match(pr132E2E, /name: "validation\/pr-132-rbac-http-isolated-20261118"/);
   assert.match(pr132E2E, /expiresAt: "2026-11-20T17:03:52Z"/);
   assert.match(pr132E2E, /GITHUB_REF === "refs\/pull\/132\/merge"/);
-  assert.match(pr132E2E, /E2E_PR_HEAD_SHA === process\.env\.IAM_PR132_RBAC_APPROVED_SHA/);
+  assert.match(pr132E2E, /E2E_PR_HEAD_SHA === process\.env\.IAM_RBAC_PR132_APPROVED_SHA/);
   assert.match(pr132E2E, /E2E_RBAC_PR132_BRANCH_ID === ID\.branch/);
   assert.match(pr132E2E, /BLOCKED_PR132_ACTIVE_HMAC_KEY_NOT_BOUND_TO_CLONE/);
   assert.doesNotMatch(pr132E2E, /br-quiet-night-b6cfeq4j|ep-broad-bonus-b6c5jc2y/);
@@ -90,7 +90,7 @@ test("PR132 privileged lease is never sourced from the PR41 secret or Preview ap
   assert.match(pr132E2E, /uri\.searchParams\.get\("sslmode"\) === "verify-full"/);
   assert.match(pr132E2E, /uri\.searchParams\.get\("sslrootcert"\) === "system"/);
   assert.match(workflow, /NEON_RBAC_PR132_TEST_OWNER_DATABASE_URL: \$\{\{ github\.event\.pull_request\.number == 132/);
-  assert.match(workflow, /vars\.IAM_PR132_RBAC_APPROVED_SHA == github\.event\.pull_request\.head\.sha/);
+  assert.match(workflow, /vars\.IAM_RBAC_PR132_APPROVED_SHA == github\.event\.pull_request\.head\.sha/);
   assert.match(workflow, /E2E_RBAC_PR132_BRANCH_ID: \$\{\{ github\.event\.pull_request\.number == 132/);
   const lease=pr132E2E.indexOf("assertRbacFixtureLease(ID)");
   const secrets=pr132E2E.indexOf("const connection = process.env.NEON_RBAC_PR132_TEST_OWNER_DATABASE_URL");
