@@ -54,7 +54,7 @@ async function connect() {
   // database branch and MUST NOT be a permanent/prod connection.
   const connection = process.env.NEON_RBAC_PR132_TEST_OWNER_DATABASE_URL;
   check(typeof connection === "string" && connection.startsWith("postgresql://"),
-    "RBAC HTTP BLOCKED: protected Preview secret NEON_RBAC_TEST_OWNER_DATABASE_URL is missing");
+    "RBAC HTTP BLOCKED: protected Preview secret NEON_RBAC_PR132_TEST_OWNER_DATABASE_URL is missing");
   const uri = new URL(connection);
   check(uri.protocol === "postgresql:" && uri.hostname === ID.host &&
     uri.pathname === "/iam_database" && decodeURIComponent(uri.username) === "neondb_owner" &&
