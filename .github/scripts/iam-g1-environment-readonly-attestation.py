@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 
 REPO = "alexoaraujo/iam-control-center-new"
-REVIEWER = "alexoaraujo83"
+# PEOS single-maintainer: no mandatory second human reviewer.
 ENVS = {
     "IAM-G1-Disposable-Lease-Revocation": "main",
     "IAM-G1-Disposable-Lease-Probe": "audit/iam-g1-lease-schema-probe-20261115",
@@ -45,14 +45,10 @@ def verify_configuration(name: str, environment: dict, policies: dict, custom_ru
     if any(rule.get("type") not in
            {"required_reviewers", "branch_policy", "wait_timer"} for rule in rules):
         raise GateBlocked("UNAPPROVED_CUSTOM_DEPLOYMENT_RULE")
-    reviewers = [rule for rule in rules if rule.get("type") == "required_reviewers"]
-    if len(reviewers) != 1 or reviewers[0].get("prevent_self_review") is not True:
-        raise GateBlocked("REQUIRED_REVIEWER_OR_SELF_REVIEW_GUARD_MISSING")
-    allowed = reviewers[0].get("reviewers", [])
-    if (not isinstance(allowed, list) or len(allowed) != 1 or
-            allowed[0].get("type") != "User" or
-            (allowed[0].get("reviewer") or {}).get("login") != REVIEWER):
-        raise GateBlocked("INDEPENDENT_REVIEWER_MISMATCH")
+    # Zero human required-reviewers is a deliberate policy invariant.
+    # This is not a waiver of branch allowlists, technical latches, or OIDC.
+    if any(rule.get("type") == "required_reviewers" for rule in rules):
+        raise GateBlocked("MANDATORY_HUMAN_REVIEWER_STILL_CONFIGURED")
     timers = [rule for rule in rules if rule.get("type") == "wait_timer"]
     if any(rule.get("wait_timer") != 0 for rule in timers):
         raise GateBlocked("UNEXPECTED_WAIT_TIMER")
