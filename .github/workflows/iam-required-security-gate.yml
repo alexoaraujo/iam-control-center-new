@@ -1,7 +1,7 @@
 name: IAM required security gate — PostgreSQL 18 signed RLS
 
-# This job provides the exact "security-gate" context REQUIRED by the active
-# protect-main GitHub ruleset. It runs real behavioral checks, not a dummy pass.
+# Standalone offline PostgreSQL 18 job; its result is independently verified
+# by the unique integrated `security-gate` in quality.yml at the exact PR SHA.
 # Never changes Neon, Auth0, Vercel, environment secrets or production.
 on:
   pull_request:
@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  security-gate:
-    name: security-gate
+  pg18-security-contracts:
+    name: pg18-security-contracts
     if: github.repository == 'alexoaraujo/iam-control-center-new'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
