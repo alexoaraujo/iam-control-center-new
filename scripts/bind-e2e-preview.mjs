@@ -7,6 +7,7 @@ const branchCallbacks = new Map([
   ["ops/g1-disposable-ttl-contract-20261119", "iam-control-center-new-pr135-ci.vercel.app"],
   ["fix/g1-env-readonly-solo-metadata-20261119", "iam-control-center-new-pr136-ci.vercel.app"],
   ["fix/g1-recovery-preflight-safety-20261119", "iam-control-center-new-g1-recovery-safety-ci.vercel.app"],
+  ["fix/g1-b2-full-ciphertext-readback-20261119", "iam-control-center-new-g1-readback-ci.vercel.app"],
 ]);
 
 export function approvedCallback(branch) {
