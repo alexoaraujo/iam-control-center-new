@@ -176,6 +176,38 @@ class Contracts(TestCase):
             with self.assertRaises(target.GateBlocked):
                 target.verify_configuration(name, data, policies(name), custom())
 
+    def test_effective_disabled_branch_mode_is_reported_before_404_endpoint(self):
+        custody = set(list(target.ENVS)[-2:])
+        seen = []
+
+        def mock_get_json(path, token):
+            seen.append(path)
+            name = path.split("/")[1].split("?")[0]
+            if name in custody and "/deployment-branch-policies" in path:
+                raise AssertionError("disabled policy endpoint must not be queried")
+            if "/deployment-branch-policies" in path:
+                return policies(name)
+            if "/deployment_protection_rules" in path:
+                return custom()
+            data = env(name)
+            if name in custody:
+                data["deployment_branch_policy"]["custom_branch_policies"] = False
+            return data
+
+        output, errors = StringIO(), StringIO()
+        with (patch.dict(os.environ, {"GITHUB_REPOSITORY": target.REPO,
+                                     "GITHUB_TOKEN": "fake-token-not-a-real-credential"}),
+              patch.object(target, "get_json", side_effect=mock_get_json),
+              redirect_stdout(output), redirect_stderr(errors)):
+            with self.assertRaisesRegex(target.GateBlocked, "TOTAL_BLOCKED_ENVIRONMENTS=2"):
+                target.live_attest()
+
+        for name in custody:
+            self.assertIn(name + ": BRANCH_SELECTION_NOT_EXCLUSIVE_CUSTOM", errors.getvalue())
+            self.assertNotIn("/" + name + "/deployment-branch-policies", seen)
+        self.assertEqual(output.getvalue().count("PASS_G1_LIVE_ENV_METADATA_READONLY "), 2)
+        self.assertNotIn("PASS_G1_LIVE_ENV_METADATA_FOUR_READONLY_NO_SECRETS", output.getvalue())
+
     def test_live_audit_reports_both_custody_failures_and_blocks_total_pass(self):
         names = list(target.ENVS)
         backup, readback = names[-2:]
