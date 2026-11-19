@@ -26,6 +26,12 @@ The initial commit `991b6c1f788f6cd9491881e62e08fe885cd97c30` was deployed befor
 
 This documentation update is intentionally committed after PR #138 creation to trigger a **new, exact-SHA Vercel Preview deployment** carrying GitHub PR metadata. Require a new `quality`, `auth0-e2e` and `security-gate` PASS on the new HEAD before a merge.
 
+## Auth0 Preview diagnostic — PR #138 (19 November 2026 UTC)
+
+The newly bound PR #138 Preview passed Vercel exact-SHA callback verification, GitHub OIDC and negative/positive protection. However [CI #44540423434](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44540423434) and a subsequent exact-SHA run stopped on Auth0 `/authorize` because the Universal Login username input never rendered within the bounded 20-second check. `auth0-e2e` and `security-gate` were **FAIL**, not waived or converted to skipped. This branch now captures only the authorization HTTP status and fixed boolean indicators of callback mismatch, rate limiting and challenge. It never logs the OAuth query (`code`, `state`, `redirect_uri`), page body, secret or user identity.
+
+Do not merge if Auth0 E2E remains red. A callback allowlist mismatch must be corrected in the actual Auth0 application settings with the exact Preview callback URL and a new real test; do not open a wildcard or disable Vercel Deployment Protection.
+
 ## Non-negotiable boundaries
 
 - This workflow performs **no** Neon SQL, PostgreSQL connection, dump, DDL, upload, backup creation, AES decryption, rollback, Production promotion or cutover.
