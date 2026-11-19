@@ -50,6 +50,10 @@ A primeira execução do E2E real na PR #137 falhou por **drift de configuraçã
 
 **Contrato de sequência:** primeiro confirmar domínio Vercel `verified=true` e branch exata, depois definir as três variáveis branch-only de Preview, **somente então criar um novo deployment SHA-exato**. O próximo commit nesta PR força um novo build já sob as variáveis efetivas; exigir nova execução Auth0 E2E e `security-gate=SUCCESS` para esse SHA antes de qualquer merge. Nenhuma variável global, Production, segredo ou regra de proteção foi alterada. Como se trata de preparação do recovery, este E2E não comprova backup ou restauração reais.
 
+### Auth0 UI readiness follow-up (19/11/2026)
+
+No deployment posterior ao cadastro do ambiente, o vínculo de branch, OIDC, callback SHA-exato e controles negativos/positivos Vercel passaram, mas o teste real falhou porque o input do Auth0 não ficou visível em **5 segundos** após redirecionar ao IdP. Foi mantida a verificação obrigatória do identificador e da senha, com espera específica de **20 segundos** antes de falhar; no erro, o job imprime apenas `hostname` e `pathname` do navegador, sem `query`, `code`, `state`, credencial, cookie nem token. O `security-gate` permanece **FAIL** até novo teste real `auth0-e2e=SUCCESS` no SHA resultante. Nenhuma página alternativa é aceita automaticamente.
+
 ## Verificação offline
 
 ```bash
