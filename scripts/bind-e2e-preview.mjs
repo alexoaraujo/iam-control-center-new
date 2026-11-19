@@ -1,7 +1,14 @@
 import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const APPROVED_ALIAS = "iam-control-center-new-ci-preview.vercel.app";
+const branchCallbacks = new Map([
+  ["feat/iam-g1-b2-readback-independent-gate", "iam-control-center-new-pr101-ci.vercel.app"],
+  ["ops/g1-full-recovery-preflight-20261118", "iam-control-center-new-pr134-ci.vercel.app"],
+]);
+
+export function approvedCallback(branch) {
+  return branchCallbacks.get(branch) ?? "iam-control-center-new-ci-preview.vercel.app";
+}
 const APPROVED_PROJECT = "prj_OnuwD1iarOsXh6FFGkSpK4A5mj80";
 const APPROVED_REPO = "alexoaraujo/iam-control-center-new";
 const hostname = /^[a-zA-Z0-9-]+\.vercel\.app$/;
@@ -14,7 +21,7 @@ export function verifyPreviewBinding(env, domain, alias, deployment, previewAlia
     throw Error("Invalid PR branch");
   }
   if (!/^[a-f0-9]{40}$/.test(sha ?? "")) throw Error("Invalid PR SHA");
-  if (callback !== APPROVED_ALIAS || !hostname.test(preview ?? "")) {
+  if (callback !== approvedCallback(branch) || !hostname.test(preview ?? "")) {
     throw Error("Callback or verified Preview hostname is invalid");
   }
   if (domain?.name !== callback || domain.projectId !== APPROVED_PROJECT ||
@@ -56,8 +63,9 @@ export async function bindPreview(env, fetcher = fetch) {
     if (!response.ok) throw Error(`Vercel alias verification failed: HTTP ${response.status}`);
     return response.json();
   };
-  const domain = await get(`/v9/projects/${APPROVED_PROJECT}/domains/${APPROVED_ALIAS}`);
-  const alias = await get(`/v4/aliases/${APPROVED_ALIAS}`);
+  const callback = approvedCallback(env.PR_HEAD_BRANCH);
+  const domain = await get(`/v9/projects/${APPROVED_PROJECT}/domains/${callback}`);
+  const alias = await get(`/v4/aliases/${callback}`);
   if (!alias?.deploymentId) throw Error("Vercel callback alias has no deployment");
   const deployment = await get(`/v13/deployments/${encodeURIComponent(alias.deploymentId)}`);
   // Independently verify the host reported by Vercel's exact-SHA PR check.
