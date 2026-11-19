@@ -120,6 +120,7 @@ def live_attest() -> None:
     if os.environ.get("GITHUB_REPOSITORY") != REPO:
         raise GateBlocked("GITHUB_REPOSITORY_NOT_ALLOWLISTED")
     token = os.environ.get("GITHUB_TOKEN", "")
+    blocked = []
     for env in ENVS:
         try:
             read = get_json("/" + env, token)
@@ -127,12 +128,18 @@ def live_attest() -> None:
             custom_rules = get_json("/" + env + "/deployment_protection_rules", token)
             review_mode = verify_configuration(env, read, branch_rules, custom_rules)
         except GateBlocked as error:
-            # Environment name is non-secret and makes a live failure actionable.
-            raise GateBlocked(env + ": " + str(error)) from None
+            # Continue gathering independent Environment metadata, but NEVER
+            # return success after a partial audit or print token/API response.
+            blocked.append(env + ": " + str(error))
+            continue
         print("PASS_G1_LIVE_ENV_METADATA_READONLY " + env +
               " reviewer_mode=" + review_mode)
         if review_mode == "SOLO_NO_REQUIRED_REVIEWER":
             print("NOT_ATTESTED_G1_INDEPENDENT_REVIEW " + env)
+    if blocked:
+        for failure in blocked:
+            print("BLOCKED_G1_LIVE_ENVIRONMENT_DETAIL: " + failure, file=sys.stderr)
+        raise GateBlocked("TOTAL_BLOCKED_ENVIRONMENTS=" + str(len(blocked)))
     print("PASS_G1_LIVE_ENV_METADATA_FOUR_READONLY_NO_SECRETS")
     print("G1_PRIVILEGED_OPERATIONS=NOT_AUTHORIZED_BY_METADATA_AUDIT")
 
