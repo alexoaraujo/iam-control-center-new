@@ -171,7 +171,7 @@ class FullBackupWriterTests(unittest.TestCase):
         with patch.object(
                 writer.subprocess, "run",
                 return_value=SimpleNamespace(
-                    returncode=0, stdout=b"iam_database|neondb_owner|180007\\n")) as identity:
+                    returncode=0, stdout=b"iam_database|neondb_owner|180007\n")) as identity:
             with patch.object(writer.subprocess, "Popen",
                               return_value=SyntheticDump()) as dump:
                 writer.export_and_encrypt(source, io.BytesIO(), KEY, SHA)
@@ -185,7 +185,7 @@ class FullBackupWriterTests(unittest.TestCase):
         with patch.object(
                 writer.subprocess, "run",
                 return_value=SimpleNamespace(
-                    returncode=0, stdout=b"iam_database|neondb_owner|180007\\n")) as identity:
+                    returncode=0, stdout=b"iam_database|neondb_owner|180007\n")) as identity:
             with patch.object(writer.subprocess, "Popen",
                               return_value=SyntheticDump()) as dump:
                 writer.export_and_encrypt(source, io.BytesIO(), KEY, SHA)
