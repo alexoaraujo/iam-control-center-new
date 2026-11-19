@@ -2,6 +2,7 @@
 """G1 manual, ciphertext-only B2 full-backup readback. No backup, SQL or decryption."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -16,6 +17,11 @@ BUCKET = "iam-control-center-g1-backups"
 ENDPOINT = "https://s3.us-east-005.backblazeb2.com"
 REGION = "us-east-005"
 PREFIX = "iam-g1/full-backups/"
+# These are metadata-only capabilities; every mutation or cross-bucket grant
+# fails. A B2 Native v4 authorization response proves effective permissions.
+READ_CAPABILITIES = frozenset({
+    "readFiles", "listFiles", "listBuckets", "readBuckets", "readBucketEncryption",
+})
 # Existing and confirmed synthetic object: an independently scoped full-backup
 # reader must NOT be able to inspect even its metadata.
 NEGATIVE_PROBE = "iam-g1/probes/20261117T002204Z-43987013885.aesgcm"
@@ -129,6 +135,55 @@ def verify_scope(env: dict[str, str]) -> tuple[str, str, int]:
     return key, digest, size
 
 
+def verify_native_key_scope(payload: dict) -> None:
+    """Positive proof of one bucket, exact prefix and non-mutating permissions."""
+    api = payload.get("apiInfo") if isinstance(payload, dict) else None
+    storage = api.get("storageApi") if isinstance(api, dict) else None
+    allowed = storage.get("allowed") if isinstance(storage, dict) else None
+    if not isinstance(allowed, dict):
+        raise Blocked("BLOCKED_G1_FULL_B2_NATIVE_SCOPE_UNAVAILABLE")
+    if allowed.get("namePrefix") != PREFIX:
+        raise Blocked("BLOCKED_G1_FULL_B2_NATIVE_PREFIX_NOT_EXACT")
+    buckets = allowed.get("buckets")
+    if (not isinstance(buckets, list) or len(buckets) != 1 or
+            not isinstance(buckets[0], dict) or
+            buckets[0].get("name") != BUCKET or
+            not isinstance(buckets[0].get("id"), str) or
+            not buckets[0]["id"]):
+        raise Blocked("BLOCKED_G1_FULL_B2_NATIVE_BUCKET_NOT_EXCLUSIVE")
+    capabilities = allowed.get("capabilities")
+    if (not isinstance(capabilities, list) or
+            not all(isinstance(c, str) for c in capabilities) or
+            len(capabilities) != len(set(capabilities)) or
+            "readFiles" not in capabilities or
+            not set(capabilities).issubset(READ_CAPABILITIES)):
+        raise Blocked("BLOCKED_G1_FULL_B2_NATIVE_WRITE_OR_ADMIN_CAPABILITY")
+
+
+def attest_native_key_scope(env: dict[str, str]) -> None:
+    # Backblaze B2 Native API v4 authorizes the SAME key used by the S3 client;
+    # never retain or log the response's short-lived authorizationToken.
+    pair = (env["AWS_ACCESS_KEY_ID"] + ":" + env["AWS_SECRET_ACCESS_KEY"]).encode("utf-8")
+    basic = base64.b64encode(pair).decode("ascii")
+    request = urllib.request.Request(
+        "https://api.backblazeb2.com/b2api/v4/b2_authorize_account",
+        headers={
+            "Authorization": "Basic " + basic,
+            "Accept": "application/json",
+            "User-Agent": "iam-g1-full-b2-readback",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            if response.status != 200:
+                raise Blocked("BLOCKED_G1_FULL_B2_NATIVE_AUTH_RESPONSE")
+            metadata = json.loads(response.read(524288).decode("utf-8"))
+    except (urllib.error.URLError, ValueError, UnicodeError):
+        raise Blocked("BLOCKED_G1_FULL_B2_NATIVE_AUTH_RESPONSE") from None
+    verify_native_key_scope(metadata)
+
+
 def verify_probe_denial(code: str) -> None:
     if code not in {"AccessDenied", "Forbidden", "403"}:
         # In particular, NotFound cannot prove that this key lacks access.
@@ -180,6 +235,8 @@ def readback(env: dict[str, str]) -> None:
     key, digest, size = verify_scope(env)
     # The protected job revalidates environment protections before touching B2.
     review_mode = attest_environment(env)
+    attest_native_key_scope(env)
+    print("PASS_G1_B2_NATIVE_READ_ONLY_EXACT_BUCKET_PREFIX")
     import boto3
     from botocore.config import Config
     from botocore.exceptions import BotoCoreError, ClientError
@@ -190,14 +247,19 @@ def readback(env: dict[str, str]) -> None:
                       retries={"total_max_attempts": 1}),
     )
     try:
-        # Prove this new read-only identity cannot access the prior synthetic
-        # object. No bytes are retrieved, logged or reused.
+        # Probe the actual GetObject permission, not HEAD alone. Range prevents
+        # downloading the synthetic probe; any successful response is overbroad.
         try:
-            client.head_object(Bucket=BUCKET, Key=NEGATIVE_PROBE)
+            probe_result = client.get_object(
+                Bucket=BUCKET, Key=NEGATIVE_PROBE, Range="bytes=0-0"
+            )
         except ClientError as err:
             code = err.response.get("Error", {}).get("Code", "UNKNOWN")
             verify_probe_denial(code)
         else:
+            probe_body = probe_result.get("Body")
+            if hasattr(probe_body, "close"):
+                probe_body.close()
             raise Blocked("BLOCKED_G1_FULL_B2_CREDENTIAL_OVERBROAD")
         result = client.get_object(Bucket=BUCKET, Key=key)
         read_bytes = verify_ciphertext(result, digest, size)

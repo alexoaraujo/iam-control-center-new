@@ -120,6 +120,54 @@ class FullReadbackTest(unittest.TestCase):
             with self.subTest(meta=response["Metadata"]), self.assertRaises(gate.Blocked):
                 gate.verify_ciphertext(response, DIGEST, len(DATA))
 
+    def test_native_auth_proves_one_bucket_exact_prefix_and_read_only_permissions(self):
+        valid = {
+            "apiInfo": {"storageApi": {"allowed": {
+                "buckets": [{"id": "synthetic-bucket-id", "name": gate.BUCKET}],
+                "namePrefix": gate.PREFIX,
+                "capabilities": ["readFiles", "listFiles"],
+            }}}
+        }
+        gate.verify_native_key_scope(valid)
+        invalid = [
+            {"apiInfo": {"storageApi": {"allowed": {
+                **valid["apiInfo"]["storageApi"]["allowed"], "namePrefix": "iam-g1/",
+            }}}},
+            {"apiInfo": {"storageApi": {"allowed": {
+                **valid["apiInfo"]["storageApi"]["allowed"], "buckets": [],
+            }}}},
+            {"apiInfo": {"storageApi": {"allowed": {
+                **valid["apiInfo"]["storageApi"]["allowed"], "buckets": [
+                    {"id": "synthetic-bucket-id", "name": gate.BUCKET},
+                    {"id": "another", "name": "other-bucket"},
+                ],
+            }}}},
+            {"apiInfo": {"storageApi": {"allowed": {
+                **valid["apiInfo"]["storageApi"]["allowed"], "capabilities": [
+                    "readFiles", "writeFiles",
+                ],
+            }}}},
+            {"apiInfo": {"storageApi": {"allowed": {
+                **valid["apiInfo"]["storageApi"]["allowed"], "capabilities": [
+                    "readFiles", "deleteFiles",
+                ],
+            }}}},
+            {"apiInfo": {"storageApi": {"allowed": {
+                **valid["apiInfo"]["storageApi"]["allowed"], "capabilities": [
+                    "readFiles", "writeBucketEncryption",
+                ],
+            }}}},
+            {"apiInfo": {"storageApi": {"allowed": {
+                **valid["apiInfo"]["storageApi"]["allowed"], "capabilities": [
+                    "listFiles",
+                ],
+            }}}},
+            {},
+        ]
+        for payload in invalid:
+            with self.subTest(payload=payload), self.assertRaises(gate.Blocked):
+                gate.verify_native_key_scope(payload)
+
     def test_negative_control_proves_scope_excludes_probe(self):
         for code in ["AccessDenied", "Forbidden", "403"]:
             gate.verify_probe_denial(code)
