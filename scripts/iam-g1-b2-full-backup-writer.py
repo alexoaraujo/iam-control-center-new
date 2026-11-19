@@ -207,7 +207,7 @@ def export_and_encrypt(env: dict[str, str], dest, key: bytes, sha: str) -> tuple
     except (OSError, subprocess.TimeoutExpired):
         raise Blocked("BLOCKED_G1_WRITER_PG18_IDENTITY_PROBE_RUNTIME") from None
     if identity.returncode != 0 or not re.fullmatch(
-            rb"iam_database\\|neondb_owner\\|18[0-9]{4}\\s*", identity.stdout):
+            rb"iam_database\|neondb_owner\|18[0-9]{4}\s*", identity.stdout):
         raise Blocked("BLOCKED_G1_WRITER_PG18_SOURCE_IDENTITY_OR_VERSION")
     proc = subprocess.Popen(docker_args, env=postgres_env,
                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
