@@ -95,6 +95,7 @@ class FullBackupWriterTests(unittest.TestCase):
 
     def test_full_archive_aes_gcm_round_trip_authenticates_sha(self):
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        from cryptography.exceptions import InvalidTag
         plaintext = b"PGDMP" + b"FULL_ARCHIVE_SYNTHETIC_ONLY" * 50
         out = io.BytesIO()
         plain_len, length, digest = writer.encrypt_stream(io.BytesIO(plaintext), out, KEY, SHA)
@@ -113,7 +114,7 @@ class FullBackupWriterTests(unittest.TestCase):
             return decryptor.update(data) + decryptor.finalize()
         self.assertEqual(decrypt(body, SHA), plaintext)
         for tampered, auth_sha in [(body[:-1] + b"?", SHA), (body, "b" * 40)]:
-            with self.assertRaises(ValueError):
+            with self.assertRaises(InvalidTag):
                 decrypt(tampered, auth_sha)
 
     def test_noncustom_or_tiny_archive_rejected(self):
