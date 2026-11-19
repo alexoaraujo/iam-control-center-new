@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, unquote, urlsplit
 
 REPOSITORY = "alexoaraujo/iam-control-center-new"
@@ -17,6 +17,8 @@ TARGET_HOST = "ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech"
 SOURCE_DB = "iam_database"
 TARGET_DB = "iam_canonical_validation"
 TARGET_EXPIRY = datetime(2026, 11, 22, 9, 12, tzinfo=timezone.utc)
+# Reserved for independent ciphertext readback, restore proof, and rollback.
+MIN_TARGET_HEADROOM = timedelta(hours=24)
 B2_BUCKET = "iam-control-center-g1-backups"
 B2_ENDPOINT = "https://s3.us-east-005.backblazeb2.com"
 B2_REGION = "us-east-005"
@@ -36,7 +38,8 @@ def validate_url(raw: str, host: str, database: str) -> None:
         uri = urlsplit(raw)
         username = unquote(uri.username or "")
         password = unquote(uri.password or "")
-        port = uri.port or 5432
+        # Absence means PostgreSQL's 5432 default; an explicit 0 is invalid.
+        port = 5432 if uri.port is None else uri.port
         params = parse_qs(uri.query, keep_blank_values=True, strict_parsing=True)
     except (ValueError, UnicodeError) as exc:
         raise Blocked("BLOCKED_G1_URI_MALFORMED") from exc
@@ -62,6 +65,8 @@ def validate_scope(config: dict[str, str], now: datetime | None = None) -> None:
         raise Blocked("BLOCKED_G1_NAIVE_CLOCK")
     if current >= TARGET_EXPIRY:
         raise Blocked("BLOCKED_G1_TARGET_TTL_EXPIRED")
+    if TARGET_EXPIRY - current < MIN_TARGET_HEADROOM:
+        raise Blocked("BLOCKED_G1_TARGET_TTL_INSUFFICIENT_RECOVERY_WINDOW")
     if config.get("GITHUB_REPOSITORY") != REPOSITORY or config.get("GITHUB_REF") != "refs/heads/main":
         raise Blocked("BLOCKED_G1_NOT_TRUSTED_MAIN")
     sha = config.get("GITHUB_SHA", "")
