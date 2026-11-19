@@ -3,6 +3,8 @@
 import importlib.util
 from pathlib import Path
 from unittest import TestCase, main
+from unittest.mock import patch
+from urllib.error import HTTPError
 
 file = Path(__file__).resolve().parents[1] / "scripts/iam-g1-environment-readonly-attestation.py"
 spec = importlib.util.spec_from_file_location("g1_env_readonly", file)
@@ -37,6 +39,36 @@ def custom():
 
 
 class Contracts(TestCase):
+    def test_expected_four_environments(self):
+        self.assertEqual(
+            {
+                "IAM-G1-Disposable-Lease-Revocation": "main",
+                "IAM-G1-Disposable-Lease-Probe": "audit/iam-g1-lease-schema-probe-20261115",
+                "IAM-G1-Full-Backup-Custody": "main",
+                "IAM-G1-B2-Full-Readback-Custody": "main",
+            },
+            target.ENVS,
+        )
+
+    def test_http_errors_are_sanitized_and_scoped(self):
+        for path, stage in [
+            ("/IAM-G1-Full-Backup-Custody", "ENVIRONMENT"),
+            ("/IAM-G1-Full-Backup-Custody/deployment-branch-policies?per_page=100", "BRANCH_POLICIES"),
+            ("/IAM-G1-Full-Backup-Custody/deployment_protection_rules", "CUSTOM_RULES"),
+        ]:
+            for status, outcome in [(401, "UNAUTHORIZED"), (403, "FORBIDDEN"),
+                                    (404, "NOT_FOUND_OR_INACCESSIBLE"), (429, "RATE_LIMITED"),
+                                    (500, "OTHER")]:
+                failure = HTTPError("https://example.invalid/opaque", status, "private", None, None)
+                with patch.object(target.urllib.request, "urlopen", side_effect=failure):
+                    with self.assertRaises(target.GateBlocked) as result:
+                        target.get_json(path, "opaque-test-token")
+                self.assertEqual(
+                    "GITHUB_ENVIRONMENT_API_" + stage + "_" + outcome,
+                    str(result.exception),
+                )
+                self.assertNotIn("opaque-test-token", str(result.exception))
+
     def test_both_envs_pass(self):
         for name in target.ENVS:
             self.assertEqual("INDEPENDENT_REVIEWER",
