@@ -4,6 +4,9 @@ import importlib.util
 from pathlib import Path
 from unittest import TestCase, main
 from unittest.mock import patch
+from contextlib import redirect_stdout, redirect_stderr
+from io import StringIO
+import os
 from urllib.error import HTTPError
 
 file = Path(__file__).resolve().parents[1] / "scripts/iam-g1-environment-readonly-attestation.py"
@@ -172,6 +175,55 @@ class Contracts(TestCase):
             data["deployment_branch_policy"]["custom_branch_policies"] = False
             with self.assertRaises(target.GateBlocked):
                 target.verify_configuration(name, data, policies(name), custom())
+
+    def test_live_audit_reports_both_custody_failures_and_blocks_total_pass(self):
+        names = list(target.ENVS)
+        backup, readback = names[-2:]
+
+        def mock_get_json(path, token):
+            self.assertEqual(token, "fake-token-not-a-real-credential")
+            name = path.split("/")[1].split("?")[0]
+            if name == readback:
+                raise target.GateBlocked("GITHUB_ENVIRONMENT_API_ENVIRONMENT_NOT_FOUND_OR_INACCESSIBLE")
+            if name == backup and "/deployment-branch-policies" in path:
+                raise target.GateBlocked("GITHUB_ENVIRONMENT_API_BRANCH_POLICIES_NOT_FOUND_OR_INACCESSIBLE")
+            if "/deployment-branch-policies" in path:
+                return policies(name)
+            if "/deployment_protection_rules" in path:
+                return custom()
+            return env(name)
+
+        output, errors = StringIO(), StringIO()
+        with (patch.dict(os.environ, {"GITHUB_REPOSITORY": target.REPO,
+                                     "GITHUB_TOKEN": "fake-token-not-a-real-credential"}),
+              patch.object(target, "get_json", side_effect=mock_get_json),
+              redirect_stdout(output), redirect_stderr(errors)):
+            with self.assertRaisesRegex(target.GateBlocked, "TOTAL_BLOCKED_ENVIRONMENTS=2"):
+                target.live_attest()
+
+        self.assertEqual(output.getvalue().count("PASS_G1_LIVE_ENV_METADATA_READONLY "), 2)
+        self.assertNotIn("PASS_G1_LIVE_ENV_METADATA_FOUR_READONLY_NO_SECRETS", output.getvalue())
+        self.assertIn(backup + ": GITHUB_ENVIRONMENT_API_BRANCH_POLICIES_NOT_FOUND_OR_INACCESSIBLE", errors.getvalue())
+        self.assertIn(readback + ": GITHUB_ENVIRONMENT_API_ENVIRONMENT_NOT_FOUND_OR_INACCESSIBLE", errors.getvalue())
+        self.assertNotIn("fake-token-not-a-real-credential", errors.getvalue())
+
+    def test_live_audit_emits_four_pass_only_with_all_valid_metadata(self):
+        def mock_get_json(path, token):
+            name = path.split("/")[1].split("?")[0]
+            if "/deployment-branch-policies" in path:
+                return policies(name)
+            if "/deployment_protection_rules" in path:
+                return custom()
+            return env(name)
+
+        output = StringIO()
+        with (patch.dict(os.environ, {"GITHUB_REPOSITORY": target.REPO,
+                                     "GITHUB_TOKEN": "fake-token-not-a-real-credential"}),
+              patch.object(target, "get_json", side_effect=mock_get_json),
+              redirect_stdout(output)):
+            target.live_attest()
+        self.assertEqual(output.getvalue().count("PASS_G1_LIVE_ENV_METADATA_READONLY "), 4)
+        self.assertIn("PASS_G1_LIVE_ENV_METADATA_FOUR_READONLY_NO_SECRETS", output.getvalue())
 
 
 if __name__ == "__main__":
