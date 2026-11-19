@@ -97,7 +97,18 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   await expect(page).toHaveURL(/auth0\.com/);
 
   const identifier = page.locator('input[name="username"], input[name="email"]').first();
-  await expect(identifier).toBeVisible();
+  try {
+    // This is a network-rendered Auth0 login page; 5s causes false failures
+    // when the IdP is slow. Never skip credentialed login or accept an error UI.
+    await expect(identifier).toBeVisible({ timeout: 20000 });
+  } catch (error) {
+    // Host/path only: never print auth code, state, query, cookies or user info.
+    const current = new URL(page.url());
+    console.error(
+      `BLOCKED_AUTH0_LOGIN_IDENTIFIER_NOT_VISIBLE: host=${current.hostname}; path=${current.pathname}`
+    );
+    throw error;
+  }
   await identifier.fill(username);
 
   const passwordInput = page.locator('input[name="password"]');
