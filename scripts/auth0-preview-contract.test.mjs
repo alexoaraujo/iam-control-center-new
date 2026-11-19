@@ -15,6 +15,7 @@ test("Auth0 Preview callback is resolved from live Vercel binding for every PR",
   assert.equal(approvedCallback("fix/g1-recovery-preflight-safety-20261119"), "iam-control-center-new-g1-recovery-safety-ci.vercel.app");
   assert.equal(approvedCallback("fix/g1-b2-full-ciphertext-readback-20261119"), "iam-control-center-new-g1-readback-ci.vercel.app");
   assert.equal(approvedCallback("fix/g1-b2-env-api-diagnostics-20261119"), "iam-control-center-new-g1-env-diagnostic-ci.vercel.app");
+  assert.equal(approvedCallback("feat/g1-b2-encrypted-full-backup-writer-20261119"), "iam-control-center-new-g1-backup-writer-ci.vercel.app");
   assert.ok(workflow.includes("VERCEL_API_TOKEN"));
   assert.ok(workflow.includes("node scripts/bind-e2e-preview.mjs"));
   assert.ok(workflow.includes("node scripts/verify-preview-alias.mjs"));
