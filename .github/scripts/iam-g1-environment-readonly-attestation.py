@@ -124,6 +124,17 @@ def live_attest() -> None:
     for env in ENVS:
         try:
             read = get_json("/" + env, token)
+            # GitHub returns HTTP 404 for branch-policy listing when custom
+            # branch policies are disabled. Identify the effective setting
+            # before that endpoint, without mislabeling it as inaccessible.
+            if read.get("name") != env:
+                raise GateBlocked("ENV_NAME_MISMATCH")
+            if read.get("can_admins_bypass") is not False:
+                raise GateBlocked("ADMIN_BYPASS_ENABLED_OR_NOT_ATTESTED")
+            guard = read.get("deployment_branch_policy") or {}
+            if (guard.get("protected_branches") is not False or
+                    guard.get("custom_branch_policies") is not True):
+                raise GateBlocked("BRANCH_SELECTION_NOT_EXCLUSIVE_CUSTOM")
             branch_rules = get_json("/" + env + "/deployment-branch-policies?per_page=100", token)
             custom_rules = get_json("/" + env + "/deployment_protection_rules", token)
             review_mode = verify_configuration(env, read, branch_rules, custom_rules)
