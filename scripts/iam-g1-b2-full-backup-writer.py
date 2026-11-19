@@ -17,7 +17,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 import urllib.error
 import urllib.request
 
@@ -175,11 +175,15 @@ def encrypt_stream(source, target, key: bytes, sha: str) -> tuple[int, int, str]
 def export_and_encrypt(env: dict[str, str], dest, key: bytes, sha: str) -> tuple[int, int, str]:
     src = urlsplit(env["IAM_G1_FULL_BACKUP_SOURCE_URL"])
     guard = _recovery_guard()
+    # Preserve explicitly validated channel_binding=require across the docker
+    # boundary. libpq's default is prefer when the source URI omits this key.
+    channel_binding = parse_qs(src.query).get("channel_binding", ["prefer"])[0]
     postgres_env = os.environ.copy()
     postgres_env.update({
         "PGHOST": guard.SOURCE_HOST, "PGPORT": "5432", "PGDATABASE": guard.SOURCE_DB,
         "PGUSER": "neondb_owner", "PGPASSWORD": unquote(src.password or ""),
         "PGSSLMODE": "verify-full", "PGSSLROOTCERT": "system",
+        "PGCHANNELBINDING": channel_binding,
         "PGCONNECT_TIMEOUT": "15", "PGOPTIONS": "-c statement_timeout=900000 -c lock_timeout=10000",
     })
     # Secrets inherited by variable NAME, never placed on a command line or in logs.
@@ -188,7 +192,8 @@ def export_and_encrypt(env: dict[str, str], dest, key: bytes, sha: str) -> tuple
         "--cap-drop=ALL", "--security-opt=no-new-privileges",
         "--env", "PGHOST", "--env", "PGPORT", "--env", "PGDATABASE",
         "--env", "PGUSER", "--env", "PGPASSWORD", "--env", "PGSSLMODE",
-        "--env", "PGSSLROOTCERT", "--env", "PGCONNECT_TIMEOUT", "--env", "PGOPTIONS",
+        "--env", "PGSSLROOTCERT", "--env", "PGCHANNELBINDING",
+        "--env", "PGCONNECT_TIMEOUT", "--env", "PGOPTIONS",
         IMAGE, "pg_dump", "--format=custom", "--no-password",
         "--serializable-deferrable", "--dbname=iam_database",
     ]
