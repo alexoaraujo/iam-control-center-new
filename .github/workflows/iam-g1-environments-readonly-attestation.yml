@@ -43,4 +43,5 @@ jobs:
           set -euo pipefail
           umask 077
           python3 .github/scripts/iam-g1-environment-readonly-attestation.py
-          echo 'PASS_G1_LIVE_ENV_READONLY_NO_NEON_NO_SECRETS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'PASS_G1_LIVE_ENV_METADATA_READONLY_NO_NEON_NO_SECRETS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'G1_PRIVILEGED_OPERATIONS=NOT_AUTHORIZED_BY_METADATA_AUDIT' >> "$GITHUB_STEP_SUMMARY"

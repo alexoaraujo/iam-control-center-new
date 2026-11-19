@@ -39,7 +39,31 @@ def custom():
 class Contracts(TestCase):
     def test_both_envs_pass(self):
         for name in target.ENVS:
-            target.verify_configuration(name, env(name), policies(name), custom())
+            self.assertEqual("INDEPENDENT_REVIEWER",
+                             target.verify_configuration(name, env(name), policies(name), custom()))
+
+    def test_solo_no_required_reviewers_is_metadata_only(self):
+        for name in target.ENVS:
+            data = env(name)
+            data["protection_rules"].pop(0)
+            self.assertEqual("SOLO_NO_REQUIRED_REVIEWER",
+                             target.verify_configuration(name, data, policies(name), custom()))
+            # Solo does not excuse admin bypass or an unscoped branch pattern.
+            data["can_admins_bypass"] = True
+            with self.assertRaisesRegex(target.GateBlocked, "ADMIN_BYPASS"):
+                target.verify_configuration(name, data, policies(name), custom())
+            data["can_admins_bypass"] = False
+            broad = policies(name)
+            broad["branch_policies"][0]["name"] = "*"
+            with self.assertRaisesRegex(target.GateBlocked, "DEPLOYMENT_BRANCH_PATTERN"):
+                target.verify_configuration(name, data, broad, custom())
+
+    def test_duplicate_reviewer_rules_fail(self):
+        for name in target.ENVS:
+            data = env(name)
+            data["protection_rules"].insert(0, data["protection_rules"][0].copy())
+            with self.assertRaisesRegex(target.GateBlocked, "DUPLICATE_REQUIRED_REVIEWER"):
+                target.verify_configuration(name, data, policies(name), custom())
 
     def test_enabled_or_missing_admin_bypass_fails(self):
         for name in target.ENVS:
@@ -54,13 +78,13 @@ class Contracts(TestCase):
 
     def test_reviewers_and_self_review_mismatch_fail(self):
         for name in target.ENVS:
-            for defect in ("no_review", "wrong_review", "self_review"):
+            for defect in ("wrong_review", "self_review", "empty_reviewer"):
                 data = env(name)
                 rule = data["protection_rules"][0]
-                if defect == "no_review":
-                    data["protection_rules"].pop(0)
-                elif defect == "wrong_review":
+                if defect == "wrong_review":
                     rule["reviewers"][0]["reviewer"]["login"] = "alexoaraujo"
+                elif defect == "empty_reviewer":
+                    rule["reviewers"] = []
                 else:
                     rule["prevent_self_review"] = False
                 with self.assertRaises(target.GateBlocked):
