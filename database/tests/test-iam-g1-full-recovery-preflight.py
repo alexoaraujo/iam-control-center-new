@@ -3,7 +3,7 @@
 import importlib.util
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -75,8 +75,11 @@ class PreflightTest(unittest.TestCase):
                 guard.validate_scope({**valid(), field: value}, NOW)
 
     def test_target_ttl_and_clock_fail_closed(self):
-        for date in [datetime(2026, 11, 20, 9, 12, tzinfo=timezone.utc),
-                     datetime(2026, 11, 22, tzinfo=timezone.utc)]:
+        # The Neon lease was extended once, from 20 Nov to 22 Nov, not indefinitely.
+        self.assertEqual(guard.TARGET_EXPIRY, datetime(2026, 11, 22, 9, 12, tzinfo=timezone.utc))
+        guard.validate_scope(valid(), guard.TARGET_EXPIRY - timedelta(seconds=1))
+        for date in [guard.TARGET_EXPIRY,
+                     guard.TARGET_EXPIRY + timedelta(seconds=1)]:
             with self.assertRaisesRegex(guard.Blocked, "TTL_EXPIRED"):
                 guard.validate_scope(valid(), date)
         with self.assertRaisesRegex(guard.Blocked, "NAIVE_CLOCK"):

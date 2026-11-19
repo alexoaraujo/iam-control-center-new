@@ -1,13 +1,13 @@
 # PEOS IAM G1 — Preparação controlada do backup integral e restore isolado
 
-**Estado:** PREPARAÇÃO / NÃO EXECUTADO. **Data:** 2026-11-18. **Projeto:** `tiny-rice-70320263` (Neon Free, PostgreSQL 18).
+**Estado:** PREPARAÇÃO / NÃO EXECUTADO. **Revisão:** 2026-11-19. **Projeto:** `tiny-rice-70320263` (Neon Free, PostgreSQL 18).
 Este contrato não executa `pg_dump`, B2, DDL, migrações ou recuperação. Não declarar `G1_FULL_BACKUP_RESTORE=PASS`.
 
 ## Evidência e dependências já existentes
 
 - [PR #132](https://github.com/alexoaraujo/iam-control-center-new/pull/132): CI [#44391401472, tentativa 4](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44391401472/attempts/4), SHA `3da16f0c18f3ab4067f47ee7e6ca666862c45778`: E2E Auth0 grant HTTP 200, negativas tenant B/identidade/permissão HTTP 403, revoke HTTP 403 mesma sessão, cleanup 0 — todos PASS. Não alterar SHA da #132 para implantar este G1.
 - [B2 upload #43987013885](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/43987013885): objeto **sintético** cifrado enviado, SHA-256 registrado na [Issue #97](https://github.com/alexoaraujo/iam-control-center-new/issues/97). **Não** é backup real.
-- [PR #101](https://github.com/alexoaraujo/iam-control-center-new/pull/101): readback B2 read-only de objeto sintético (ainda não integrado). Não duplicar nem simular resultado de leitura.
+- [PR #101](https://github.com/alexoaraujo/iam-control-center-new/pull/101): integrada à `main`; readback real de objeto **sintético** aprovado em [run #44504075979, tentativa 2](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44504075979/attempts/2): `PASS_B2_INDEPENDENT_READBACK_CIPHERTEXT_SHA256`, 126 bytes. Não equivale a backup real nem decriptação/restore.
 - [Issue #15](https://github.com/alexoaraujo/iam-control-center-new/issues/15): cadeia de migrations, ledger e recuperação real; permanece aberta.
 - Neon `list_snapshots=[]` em 18/11/2026. Snapshots Neon, se houver futuramente, não substituem cópia independente com custódia.
 
@@ -21,7 +21,7 @@ Este contrato não executa `pg_dump`, B2, DDL, migrações ou recuperação. Nã
 | Database | `iam_database` | SOMENTE `iam_canonical_validation` |
 | Identidade prevista | `neondb_owner` (backup controlado) | `neondb_owner` (destino isolado) |
 
-Nunca usar o database herdado `iam_database` do destino. A origem registra 23 tabelas, 41 RLS policies e `pgcrypto` instalada. O destino está vazio para schemas IAM, `pgcrypto` **não instalada**; implantação específica da extensão exige revisão e aprovação de DDL separada. O destino **expira em 2026-11-20 09:12:00 UTC**: o preflight rejeita a execução após esse horário; substituir clone/host/TTL exige novo commit revisado.
+Nunca usar o database herdado `iam_database` do destino. A origem registra 23 tabelas, 41 RLS policies e `pgcrypto` instalada. O destino está vazio para schemas IAM, `pgcrypto` **não instalada**; implantação específica da extensão exige revisão e aprovação de DDL separada. O destino teve seu TTL estendido **somente no clone descartável** de `2026-11-20 09:12:00 UTC` para **`2026-11-22 09:12:00 UTC`** (Neon `br-sweet-union-b6j80a7j`, sem alterações em dados/DDL). Este PR sincroniza o limite local `TARGET_EXPIRY` e testes com a alteração efetiva do Neon. O preflight rejeita a execução a partir do novo limite; substituição posterior de clone/host/TTL exige novo commit revisado e validação do Neon. Esta extensão **não autoriza backup real, restauração, grant administrativo ou cutover**.
 
 ## Guardas do estágio sem acesso à rede
 

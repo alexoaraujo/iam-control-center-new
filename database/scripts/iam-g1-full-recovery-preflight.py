@@ -16,7 +16,7 @@ SOURCE_HOST = "ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech"
 TARGET_HOST = "ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech"
 SOURCE_DB = "iam_database"
 TARGET_DB = "iam_canonical_validation"
-TARGET_EXPIRY = datetime(2026, 11, 20, 9, 12, tzinfo=timezone.utc)
+TARGET_EXPIRY = datetime(2026, 11, 22, 9, 12, tzinfo=timezone.utc)
 B2_BUCKET = "iam-control-center-g1-backups"
 B2_ENDPOINT = "https://s3.us-east-005.backblazeb2.com"
 B2_REGION = "us-east-005"

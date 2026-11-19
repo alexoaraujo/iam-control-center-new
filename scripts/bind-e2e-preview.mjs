@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 const branchCallbacks = new Map([
   ["feat/iam-g1-b2-readback-independent-gate", "iam-control-center-new-pr101-ci.vercel.app"],
   ["ops/g1-full-recovery-preflight-20261118", "iam-control-center-new-pr134-ci.vercel.app"],
+  ["ops/g1-disposable-ttl-contract-20261119", "iam-control-center-new-pr135-ci.vercel.app"],
 ]);
 
 export function approvedCallback(branch) {
