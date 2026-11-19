@@ -153,6 +153,45 @@ class FullBackupWriterTests(unittest.TestCase):
         self.assertTrue(output.getvalue().startswith(writer.MAGIC))
         self.assertEqual(len(sha256), 64)
 
+    def test_explicit_channel_binding_require_propagates_to_pg18_identity_and_dump(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+
+        source = valid()
+        source["IAM_G1_FULL_BACKUP_SOURCE_URL"] += "&channel_binding=require"
+
+        class SyntheticDump:
+            def __init__(self):
+                self.stdout = io.BytesIO(b"PGDMP" + b"encrypted-test-only" * 80)
+            def wait(self, **kwargs):
+                return 0
+            def poll(self):
+                return 0
+
+        with patch.object(
+                writer.subprocess, "run",
+                return_value=SimpleNamespace(
+                    returncode=0, stdout=b"iam_database|neondb_owner|180007\\n")) as identity:
+            with patch.object(writer.subprocess, "Popen",
+                              return_value=SyntheticDump()) as dump:
+                writer.export_and_encrypt(source, io.BytesIO(), KEY, SHA)
+        self.assertEqual(identity.call_args.kwargs["env"]["PGCHANNELBINDING"], "require")
+        self.assertIn("PGCHANNELBINDING", identity.call_args.args[0])
+        self.assertEqual(dump.call_args.kwargs["env"]["PGCHANNELBINDING"], "require")
+        self.assertIn("PGCHANNELBINDING", dump.call_args.args[0])
+
+        # No explicit channel_binding requirement => libpq's documented prefer.
+        source = valid()
+        with patch.object(
+                writer.subprocess, "run",
+                return_value=SimpleNamespace(
+                    returncode=0, stdout=b"iam_database|neondb_owner|180007\\n")) as identity:
+            with patch.object(writer.subprocess, "Popen",
+                              return_value=SyntheticDump()) as dump:
+                writer.export_and_encrypt(source, io.BytesIO(), KEY, SHA)
+        self.assertEqual(identity.call_args.kwargs["env"]["PGCHANNELBINDING"], "prefer")
+        self.assertEqual(dump.call_args.kwargs["env"]["PGCHANNELBINDING"], "prefer")
+
     def test_unique_object_name_exact_sha_and_run(self):
         key = writer.object_key(SHA, "123", NOW)
         self.assertEqual(key, writer.PREFIX + SHA + "/20261119T150000Z-123.pgdump.aesgcm")
