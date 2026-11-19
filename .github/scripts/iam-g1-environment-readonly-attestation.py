@@ -17,6 +17,8 @@ REVIEWER = "alexoaraujo83"
 ENVS = {
     "IAM-G1-Disposable-Lease-Revocation": "main",
     "IAM-G1-Disposable-Lease-Probe": "audit/iam-g1-lease-schema-probe-20261115",
+    "IAM-G1-Full-Backup-Custody": "main",
+    "IAM-G1-B2-Full-Readback-Custody": "main",
 }
 API_ROOT = f"https://api.github.com/repos/{REPO}/environments"
 
@@ -97,6 +99,15 @@ def get_json(path: str, token: str) -> dict:
             if response.status != 200:
                 raise GateBlocked("GITHUB_ENVIRONMENT_API_BAD_STATUS")
             obj = json.loads(response.read(524288).decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        # Explicit HTTP classification without echoing the URL, headers or body.
+        stage = ("BRANCH_POLICIES" if "/deployment-branch-policies" in path
+                 else "CUSTOM_RULES" if "/deployment_protection_rules" in path
+                 else "ENVIRONMENT")
+        outcome = {401: "UNAUTHORIZED", 403: "FORBIDDEN",
+                   404: "NOT_FOUND_OR_INACCESSIBLE",
+                   429: "RATE_LIMITED"}.get(error.code, "OTHER")
+        raise GateBlocked("GITHUB_ENVIRONMENT_API_" + stage + "_" + outcome) from None
     except (urllib.error.URLError, ValueError, UnicodeError):
         # Never print request headers: they contain the workflow token.
         raise GateBlocked("GITHUB_ENVIRONMENT_API_READ_FAILED") from None
@@ -110,10 +121,10 @@ def live_attest() -> None:
         raise GateBlocked("GITHUB_REPOSITORY_NOT_ALLOWLISTED")
     token = os.environ.get("GITHUB_TOKEN", "")
     for env in ENVS:
-        read = get_json("/" + env, token)
-        branch_rules = get_json("/" + env + "/deployment-branch-policies?per_page=100", token)
-        custom_rules = get_json("/" + env + "/deployment_protection_rules", token)
         try:
+            read = get_json("/" + env, token)
+            branch_rules = get_json("/" + env + "/deployment-branch-policies?per_page=100", token)
+            custom_rules = get_json("/" + env + "/deployment_protection_rules", token)
             review_mode = verify_configuration(env, read, branch_rules, custom_rules)
         except GateBlocked as error:
             # Environment name is non-secret and makes a live failure actionable.
@@ -122,7 +133,7 @@ def live_attest() -> None:
               " reviewer_mode=" + review_mode)
         if review_mode == "SOLO_NO_REQUIRED_REVIEWER":
             print("NOT_ATTESTED_G1_INDEPENDENT_REVIEW " + env)
-    print("PASS_G1_LIVE_ENV_METADATA_BOTH_READONLY_NO_SECRETS")
+    print("PASS_G1_LIVE_ENV_METADATA_FOUR_READONLY_NO_SECRETS")
     print("G1_PRIVILEGED_OPERATIONS=NOT_AUTHORIZED_BY_METADATA_AUDIT")
 
 
