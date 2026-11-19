@@ -122,6 +122,37 @@ class FullBackupWriterTests(unittest.TestCase):
             with self.subTest(length=len(payload)), self.assertRaises(writer.Blocked):
                 writer.encrypt_stream(io.BytesIO(payload), io.BytesIO(), KEY, SHA)
 
+    def test_authenticated_pg18_identity_required_before_dump(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        source = valid()
+        identity_failed = SimpleNamespace(returncode=0,
+                                          stdout=b"iam_database|neondb_owner|170007\n")
+        with patch.object(writer.subprocess, "run", return_value=identity_failed) as run:
+            with patch.object(writer.subprocess, "Popen",
+                              side_effect=AssertionError("must never export")):
+                with self.assertRaisesRegex(writer.Blocked, "PG18_SOURCE_IDENTITY_OR_VERSION"):
+                    writer.export_and_encrypt(source, io.BytesIO(), KEY, SHA)
+        self.assertNotIn("SYNTHETIC_PASSWORD_TEST_ONLY", str(run.call_args.args[0]))
+
+        class SyntheticDump:
+            def __init__(self):
+                self.stdout = io.BytesIO(b"PGDMP" + b"synthetic-ci-only" * 80)
+            def wait(self, **kwargs):
+                return 0
+            def poll(self):
+                return 0
+        with patch.object(writer.subprocess, "run",
+                          return_value=SimpleNamespace(returncode=0,
+                                                       stdout=b"iam_database|neondb_owner|180007\n")):
+            with patch.object(writer.subprocess, "Popen", return_value=SyntheticDump()):
+                output = io.BytesIO()
+                plain, size, sha256 = writer.export_and_encrypt(source, output, KEY, SHA)
+        self.assertGreater(plain, 256)
+        self.assertEqual(len(output.getvalue()), size)
+        self.assertTrue(output.getvalue().startswith(writer.MAGIC))
+        self.assertEqual(len(sha256), 64)
+
     def test_unique_object_name_exact_sha_and_run(self):
         key = writer.object_key(SHA, "123", NOW)
         self.assertEqual(key, writer.PREFIX + SHA + "/20261119T150000Z-123.pgdump.aesgcm")
