@@ -20,6 +20,12 @@ The existing [synthetic B2 readback](iam-g1-b2-readback.md) validates only the f
 7. The B2 reader must receive an `AccessDenied` or equivalent **403** to a metadata-only `HEAD` of the known synthetic probe. A successful probe HEAD proves the key is over-broad and fails the gate. `404`/not found is **not** accepted as scope proof.
 8. The reader only fetches the **one** approved ciphertext object. It checks SHA-256, exact length (bounded to 2 GiB), classification, archive/encryption metadata, and streams data without writing it, logging bytes or decrypting it. If all checks pass, it emits `PASS_G1_B2_FULL_CIPHERTEXT_INDEPENDENT_READBACK_SHA256` and **still prints** `G1_DECRYPTION=NOT_TESTED`, `G1_RESTORE=NOT_TESTED`, `G1_FULL_BACKUP_RESTORE=NOT_ATTESTED`.
 
+## PR #138 — Preview identity sequencing, 2026-11-19 UTC
+
+The initial commit `991b6c1f788f6cd9491881e62e08fe885cd97c30` was deployed before PR #138 existed. In [CI #44539884464](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44539884464), the Vercel alias, callback branch and OIDC steps succeeded but the `verify-preview-alias.mjs` check **failed closed** because the deployment-origin identity did not attest the expected PR number. The real Auth0 E2E therefore did **not** run, and `security-gate` cannot report success. No identity check will be bypassed.
+
+This documentation update is intentionally committed after PR #138 creation to trigger a **new, exact-SHA Vercel Preview deployment** carrying GitHub PR metadata. Require a new `quality`, `auth0-e2e` and `security-gate` PASS on the new HEAD before a merge.
+
 ## Non-negotiable boundaries
 
 - This workflow performs **no** Neon SQL, PostgreSQL connection, dump, DDL, upload, backup creation, AES decryption, rollback, Production promotion or cutover.
