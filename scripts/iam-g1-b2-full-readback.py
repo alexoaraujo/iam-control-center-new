@@ -91,8 +91,27 @@ def _github_json(path: str, token: str) -> dict:
             if response.status != 200:
                 raise Blocked("BLOCKED_G1_FULL_B2_GITHUB_API")
             data = json.loads(response.read(524288).decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        # Only the HTTP status and a fixed endpoint category are logged. Never
+        # emit the URL, body or authorization header, which contains the token.
+        stage = (
+            "BRANCH_POLICIES" if path.startswith("/deployment-branch-policies")
+            else "CUSTOM_PROTECTION_RULES" if path == "/deployment_protection_rules"
+            else "ENVIRONMENT"
+        )
+        if error.code == 404:
+            code = "NOT_FOUND_OR_INACCESSIBLE"
+        elif error.code == 403:
+            code = "FORBIDDEN"
+        elif error.code == 401:
+            code = "UNAUTHORIZED"
+        elif error.code == 429:
+            code = "RATE_LIMITED"
+        else:
+            code = "HTTP_OTHER"
+        raise Blocked(f"BLOCKED_G1_FULL_B2_GITHUB_API_{stage}_{code}") from None
     except (urllib.error.URLError, ValueError, UnicodeError):
-        raise Blocked("BLOCKED_G1_FULL_B2_GITHUB_API") from None
+        raise Blocked("BLOCKED_G1_FULL_B2_GITHUB_API_TRANSPORT_OR_JSON") from None
     if not isinstance(data, dict):
         raise Blocked("BLOCKED_G1_FULL_B2_GITHUB_RESPONSE")
     return data
