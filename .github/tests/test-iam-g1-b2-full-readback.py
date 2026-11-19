@@ -4,6 +4,8 @@ import hashlib
 import importlib.util
 import io
 import unittest
+import urllib.error
+from unittest.mock import patch
 from pathlib import Path
 
 path = Path(__file__).resolve().parents[2] / "scripts" / "iam-g1-b2-full-readback.py"
@@ -201,6 +203,38 @@ class FullReadbackTest(unittest.TestCase):
                                      "reviewers": [{"type": "User", "reviewer": {"login": "alexoaraujo83"}}]})
         with self.assertRaises(gate.Blocked):
             gate.verify_environment(e, good_branches(), good_custom())
+
+    def test_github_environment_api_classifies_denials_without_leaking_token(self):
+        # A 404 is not proof of absence: GitHub can intentionally hide a
+        # resource from an underprivileged token. Never attempt to create it.
+        token = "SYNTHETIC_PRIVATE_TEST_TOKEN"
+        fixtures = [
+            ("", 404, "ENVIRONMENT_NOT_FOUND_OR_INACCESSIBLE"),
+            ("", 403, "ENVIRONMENT_FORBIDDEN"),
+            ("", 401, "ENVIRONMENT_UNAUTHORIZED"),
+            ("/deployment-branch-policies?per_page=100", 404,
+             "BRANCH_POLICIES_NOT_FOUND_OR_INACCESSIBLE"),
+            ("/deployment_protection_rules", 403,
+             "CUSTOM_PROTECTION_RULES_FORBIDDEN"),
+        ]
+        for path, status, marker in fixtures:
+            with self.subTest(path=path, status=status):
+                error = urllib.error.HTTPError(
+                    "https://example.invalid/synthetic-endpoint", status,
+                    "synthetic error", {}, None,
+                )
+                with patch.object(gate.urllib.request, "urlopen", side_effect=error):
+                    with self.assertRaises(gate.Blocked) as caught:
+                        gate._github_json(path, token)
+                self.assertIn(marker, str(caught.exception))
+                self.assertNotIn(token, str(caught.exception))
+                self.assertNotIn("example.invalid", str(caught.exception))
+
+    def test_github_environment_api_transport_failure_fails_closed(self):
+        with patch.object(gate.urllib.request, "urlopen",
+                          side_effect=urllib.error.URLError("synthetic failure")):
+            with self.assertRaisesRegex(gate.Blocked, "TRANSPORT_OR_JSON"):
+                gate._github_json("", "SYNTHETIC_PRIVATE_TEST_TOKEN")
 
     def test_no_boto3_or_network_needed_for_contracts(self):
         # The regression suite only imports the module; the B2 SDK is loaded
