@@ -17,6 +17,8 @@ REVIEWER = "alexoaraujo83"
 ENVS = {
     "IAM-G1-Disposable-Lease-Revocation": "main",
     "IAM-G1-Disposable-Lease-Probe": "audit/iam-g1-lease-schema-probe-20261115",
+    "IAM-G1-Full-Backup-Custody": "main",
+    "IAM-G1-B2-Full-Readback-Custody": "main",
 }
 API_ROOT = f"https://api.github.com/repos/{REPO}/environments"
 
@@ -97,6 +99,15 @@ def get_json(path: str, token: str) -> dict:
             if response.status != 200:
                 raise GateBlocked("GITHUB_ENVIRONMENT_API_BAD_STATUS")
             obj = json.loads(response.read(524288).decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        # Explicit HTTP classification without echoing the URL, headers or body.
+        stage = ("BRANCH_POLICIES" if "/deployment-branch-policies" in path
+                 else "CUSTOM_RULES" if "/deployment_protection_rules" in path
+                 else "ENVIRONMENT")
+        outcome = {401: "UNAUTHORIZED", 403: "FORBIDDEN",
+                   404: "NOT_FOUND_OR_INACCESSIBLE",
+                   429: "RATE_LIMITED"}.get(error.code, "OTHER")
+        raise GateBlocked("GITHUB_ENVIRONMENT_API_" + stage + "_" + outcome) from None
     except (urllib.error.URLError, ValueError, UnicodeError):
         # Never print request headers: they contain the workflow token.
         raise GateBlocked("GITHUB_ENVIRONMENT_API_READ_FAILED") from None
@@ -109,20 +120,38 @@ def live_attest() -> None:
     if os.environ.get("GITHUB_REPOSITORY") != REPO:
         raise GateBlocked("GITHUB_REPOSITORY_NOT_ALLOWLISTED")
     token = os.environ.get("GITHUB_TOKEN", "")
+    blocked = []
     for env in ENVS:
-        read = get_json("/" + env, token)
-        branch_rules = get_json("/" + env + "/deployment-branch-policies?per_page=100", token)
-        custom_rules = get_json("/" + env + "/deployment_protection_rules", token)
         try:
+            read = get_json("/" + env, token)
+            # GitHub returns HTTP 404 for branch-policy listing when custom
+            # branch policies are disabled. Identify the effective setting
+            # before that endpoint, without mislabeling it as inaccessible.
+            if read.get("name") != env:
+                raise GateBlocked("ENV_NAME_MISMATCH")
+            if read.get("can_admins_bypass") is not False:
+                raise GateBlocked("ADMIN_BYPASS_ENABLED_OR_NOT_ATTESTED")
+            guard = read.get("deployment_branch_policy") or {}
+            if (guard.get("protected_branches") is not False or
+                    guard.get("custom_branch_policies") is not True):
+                raise GateBlocked("BRANCH_SELECTION_NOT_EXCLUSIVE_CUSTOM")
+            branch_rules = get_json("/" + env + "/deployment-branch-policies?per_page=100", token)
+            custom_rules = get_json("/" + env + "/deployment_protection_rules", token)
             review_mode = verify_configuration(env, read, branch_rules, custom_rules)
         except GateBlocked as error:
-            # Environment name is non-secret and makes a live failure actionable.
-            raise GateBlocked(env + ": " + str(error)) from None
+            # Continue gathering independent Environment metadata, but NEVER
+            # return success after a partial audit or print token/API response.
+            blocked.append(env + ": " + str(error))
+            continue
         print("PASS_G1_LIVE_ENV_METADATA_READONLY " + env +
               " reviewer_mode=" + review_mode)
         if review_mode == "SOLO_NO_REQUIRED_REVIEWER":
             print("NOT_ATTESTED_G1_INDEPENDENT_REVIEW " + env)
-    print("PASS_G1_LIVE_ENV_METADATA_BOTH_READONLY_NO_SECRETS")
+    if blocked:
+        for failure in blocked:
+            print("BLOCKED_G1_LIVE_ENVIRONMENT_DETAIL: " + failure, file=sys.stderr)
+        raise GateBlocked("TOTAL_BLOCKED_ENVIRONMENTS=" + str(len(blocked)))
+    print("PASS_G1_LIVE_ENV_METADATA_FOUR_READONLY_NO_SECRETS")
     print("G1_PRIVILEGED_OPERATIONS=NOT_AUTHORIZED_BY_METADATA_AUDIT")
 
 

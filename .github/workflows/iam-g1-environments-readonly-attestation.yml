@@ -6,6 +6,13 @@ on:
       - '.github/workflows/iam-g1-environments-readonly-attestation.yml'
       - '.github/scripts/iam-g1-environment-readonly-attestation.py'
       - '.github/tests/test-iam-g1-environment-readonly-attestation.py'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/iam-g1-environments-readonly-attestation.yml'
+      - '.github/scripts/iam-g1-environment-readonly-attestation.py'
+      - '.github/tests/test-iam-g1-environment-readonly-attestation.py'
   workflow_dispatch:
 
 permissions:
@@ -35,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/tests/test-iam-g1-environment-readonly-attestation.py
-      - name: Verify BOTH GitHub Environments via read-only Actions token
+      - name: Verify four G1 GitHub Environments via read-only Actions token
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
