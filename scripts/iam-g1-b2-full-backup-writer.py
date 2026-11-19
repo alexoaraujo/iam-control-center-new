@@ -192,6 +192,23 @@ def export_and_encrypt(env: dict[str, str], dest, key: bytes, sha: str) -> tuple
         IMAGE, "pg_dump", "--format=custom", "--no-password",
         "--serializable-deferrable", "--dbname=iam_database",
     ]
+    # Independently authenticate the actual PostgreSQL login/DB/major version
+    # before any full-data export. Only fixed SQL and sanitized comparison.
+    container_prefix = docker_args[:docker_args.index(IMAGE) + 1]
+    try:
+        identity = subprocess.run(
+            container_prefix + [
+                "psql", "-X", "-w", "-A", "-t", "-q", "-c",
+                "SELECT current_database() || '|' || current_user || '|' || "
+                "current_setting('server_version_num')"
+            ], env=postgres_env, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, timeout=45, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise Blocked("BLOCKED_G1_WRITER_PG18_IDENTITY_PROBE_RUNTIME") from None
+    if identity.returncode != 0 or not re.fullmatch(
+            rb"iam_database\\|neondb_owner\\|18[0-9]{4}\\s*", identity.stdout):
+        raise Blocked("BLOCKED_G1_WRITER_PG18_SOURCE_IDENTITY_OR_VERSION")
     proc = subprocess.Popen(docker_args, env=postgres_env,
                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     try:
