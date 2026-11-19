@@ -75,15 +75,32 @@ class PreflightTest(unittest.TestCase):
                 guard.validate_scope({**valid(), field: value}, NOW)
 
     def test_target_ttl_and_clock_fail_closed(self):
-        # The Neon lease was extended once, from 20 Nov to 22 Nov, not indefinitely.
+        # Both the hard expiry and a 24h recovery/rollback reserve are mandatory.
         self.assertEqual(guard.TARGET_EXPIRY, datetime(2026, 11, 22, 9, 12, tzinfo=timezone.utc))
-        guard.validate_scope(valid(), guard.TARGET_EXPIRY - timedelta(seconds=1))
+        self.assertEqual(guard.MIN_TARGET_HEADROOM, timedelta(hours=24))
+        guard.validate_scope(valid(), guard.TARGET_EXPIRY - timedelta(hours=24))
+        for date in [guard.TARGET_EXPIRY - timedelta(hours=24) + timedelta(seconds=1),
+                     guard.TARGET_EXPIRY - timedelta(seconds=1)]:
+            with self.assertRaisesRegex(guard.Blocked, "INSUFFICIENT_RECOVERY_WINDOW"):
+                guard.validate_scope(valid(), date)
         for date in [guard.TARGET_EXPIRY,
                      guard.TARGET_EXPIRY + timedelta(seconds=1)]:
             with self.assertRaisesRegex(guard.Blocked, "TTL_EXPIRED"):
                 guard.validate_scope(valid(), date)
         with self.assertRaisesRegex(guard.Blocked, "NAIVE_CLOCK"):
             guard.validate_scope(valid(), datetime(2026, 11, 18))
+
+    def test_explicit_port_zero_never_falls_back_to_5432(self):
+        for field, host, database in [
+            ("IAM_G1_FULL_BACKUP_SOURCE_URL", guard.SOURCE_HOST, guard.SOURCE_DB),
+            ("IAM_G1_FULL_BACKUP_TARGET_URL", guard.TARGET_HOST, guard.TARGET_DB),
+        ]:
+            invalid = url(host, database).replace(":5432/", ":0/")
+            with self.subTest(field=field), self.assertRaisesRegex(guard.Blocked, "ENDPOINT_NOT_APPROVED"):
+                guard.validate_scope({**valid(), field: invalid}, NOW)
+            # Explicit 5432 and omitted port still use the documented 5432.
+            omitted_port = url(host, database).replace(":5432/", "/")
+            guard.validate_scope({**valid(), field: omitted_port}, NOW)
 
     def test_secret_is_never_echoed_in_errors(self):
         value = url(guard.TARGET_HOST, "wrong_database", password="SUPER_PRIVATE_SHOULD_NOT_LEAK")
