@@ -44,6 +44,12 @@ O script `database/scripts/iam-g1-full-recovery-preflight.py --check` recebe ape
 5. Provar contagens e integridade dos 23 objetos/tabelas, 41 policies, RLS/ FORCE RLS, ACLs, owners, 0/ledger quando correspondente à origem, hashes e privilégio de runtime; registrar RPO/RTO e ensaiar rollback pós-commit, confirmando readback independente.
 6. Registrar IDs de GitHub run, Neon project/branch, timestamps UTC, checksums e resultado; atualizar [Issue #15](https://github.com/alexoaraujo/iam-control-center-new/issues/15). Até esses passos, `G1_FULL_BACKUP_RESTORE=NOT_ATTESTED` e `MERGE_MAIN/PRODUCTION_CUTOVER=BLOCKED`.
 
+## Diagnóstico de Preview PR #137 e ordem obrigatória do build (19/11/2026 UTC)
+
+A primeira execução do E2E real na PR #137 falhou por **drift de configuração de Preview no build**, não por um resultado positivo omitido. O deployment SHA `53c9b7e7da337c7fc1419575f102ff92d8f39c22` foi criado às **13:24:49 UTC**, antes da criação das três variáveis Preview `APP_BASE_URL`, `E2E_CALLBACK_HOST`, `E2E_CALLBACK_BRANCH` para a branch `fix/g1-recovery-preflight-safety-20261119` às **13:25:00 UTC**. Apesar de domínio, alias, OIDC e preflight Vercel PASS, o navegador foi devolvido ao callback compartilhado `iam-control-center-new-ci-preview.vercel.app` e atingiu Deployment Protection. A prova de login **FAIL** não foi convertida em PASS.
+
+**Contrato de sequência:** primeiro confirmar domínio Vercel `verified=true` e branch exata, depois definir as três variáveis branch-only de Preview, **somente então criar um novo deployment SHA-exato**. O próximo commit nesta PR força um novo build já sob as variáveis efetivas; exigir nova execução Auth0 E2E e `security-gate=SUCCESS` para esse SHA antes de qualquer merge. Nenhuma variável global, Production, segredo ou regra de proteção foi alterada. Como se trata de preparação do recovery, este E2E não comprova backup ou restauração reais.
+
 ## Verificação offline
 
 ```bash
