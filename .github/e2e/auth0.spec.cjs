@@ -180,6 +180,23 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
       status: 200, body: { ok: true, database: "reachable" }, cache: "no-store",
     });
     console.log("PASS_PR128_DISPOSABLE_NEON_DATABASE_REACHABLE");
+    // Authenticated /api/ready performs a real SQL role query, rejects
+    // superusers and BYPASSRLS, and checks the configured runtime principal.
+    // This must be tested on the deployed Preview, not just as a unit mock.
+    const runtimeReady = await page.evaluate(async () => {
+      const response = await fetch("/api/ready", {
+        credentials: "same-origin", cache: "no-store",
+      });
+      return {
+        status: response.status, body: await response.json(),
+        cache: response.headers.get("cache-control"),
+      };
+    });
+    expect(runtimeReady, "PR128 deployed SQL principal must be NOBYPASSRLS").toEqual({
+      status: 200, body: { ready: true, reason: "dependencies_available" }, cache: "no-store",
+    });
+    console.log("PASS_PR128_RUNTIME_ROLE_NOBYPASSRLS_READY");
+
   }
 
   // PR #42: positive Auth0 -> Neon sync runs only on the isolated Preview.
