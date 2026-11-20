@@ -45,3 +45,13 @@
 - [ ] Autorização explícita do responsável pelo ambiente de produção registrada.
 
 **Política:** alterações de `DATABASE_URL` Production, DDL persistente ou cópia de dados entre organizações não são autorizadas por mera aprovação do PR. Exigem gate operacional e autorização próprios.
+
+## Politica de atualizacao da branch (PEOS)
+
+**Padrao:** `Update with merge commit`. **Excecao:** `Update with rebase` apenas se inexistirem dependencias de SHA e evidencias de auditoria vinculadas a commits, conforme [politica de atualizacao](../docs/governance/pr-branch-update-policy.md).
+
+- [ ] Atualizacao por merge commit, ou rebase excepcional justificado e comprovadamente sem vinculos SHA.
+- [ ] SHA anterior, novo HEAD, base, horario UTC e link da operacao registrados (ou N/A: branch ja atualizada).
+- [ ] Gates e evidencias SHA-exatos reexecutados/renovados no novo HEAD (ou N/A justificado).
+- **Metodo utilizado / justificativa da excecao:**
+- **SHA anterior → SHA atual / URL da execucao:**
