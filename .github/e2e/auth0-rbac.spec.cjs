@@ -9,7 +9,9 @@ const ID = {
   expiresAt: "2026-11-20T01:30:00Z",
   host: "ep-broad-bonus-b6c5jc2y.c-2.sa-east-1.aws.neon.tech",
   tenant: "f65d8f1e-bcd4-4d68-927b-a8b64cda0c41",
-  tenantB: "22222222-2222-4222-8222-222222222222",
+  // The parent validation branch already owns 22222222-2222-4222-8222-222222222222.
+  // Reserve a distinct disposable ID so preflight and cleanup never touch inherited data.
+  tenantB: "f65d8f1e-bcd4-4d68-927b-a8b64cda0c42",
   identity: "c7d196ad-4e1a-498c-b4ae-3e4d0ef2a041",
   membership: "c7d196ad-4e1a-498c-b4ae-3e4d0ef2a042",
   role: "c7d196ad-4e1a-498c-b4ae-3e4d0ef2a043",
