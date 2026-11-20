@@ -103,6 +103,34 @@ def run(repo, token):
             evidence[stage] = query(url, token)
         except PolicyBlocked as exc:
             raise PolicyBlocked("G3_ENV_" + stage + "_" + str(exc)) from None
+        if stage == "METADATA":
+            # Emit only typed/allowlisted booleans and rule categories, never raw
+            # upstream metadata, secrets, arbitrary strings or HTTP bodies.
+            metadata = evidence["METADATA"]
+            dp = metadata.get("deployment_branch_policy")
+            dp = dp if isinstance(dp, dict) else {}
+            rules = metadata.get("protection_rules")
+            rules = rules if isinstance(rules, list) else []
+            kinds = [
+                r.get("type") if isinstance(r, dict) and r.get("type") in
+                ("branch_policy", "required_reviewers", "wait_timer")
+                else "unknown"
+                for r in rules[:20]
+            ]
+            snapshot = {
+                "name_matches_target": metadata.get("name") == NAME,
+                "admins_bypass_disabled": metadata.get("can_admins_bypass") is False,
+                "protected_branches": dp.get("protected_branches") is True,
+                "custom_branch_policies": dp.get("custom_branch_policies") is True,
+                "rule_types": kinds,
+            }
+            print("G3_ENV_METADATA " + json.dumps(snapshot, sort_keys=True))
+            if not snapshot["name_matches_target"]:
+                raise PolicyBlocked("G3_ENV_NAME_MISMATCH")
+            if not snapshot["admins_bypass_disabled"]:
+                raise PolicyBlocked("G3_ENV_ADMIN_BYPASS_NOT_DISABLED")
+            if not snapshot["custom_branch_policies"] or snapshot["protected_branches"]:
+                raise PolicyBlocked("G3_ENV_CUSTOM_BRANCH_POLICY_NOT_ATTESTED")
     names = verify_g3(evidence["METADATA"], evidence["BRANCH_POLICIES"], evidence["CUSTOM_RULES"])
     print("PASS_G3_ENV_EFFECTIVE_PROTECTION " + NAME)
     print("G3_ENV_ALLOWED_REFS " + json.dumps(names, separators=(",", ":")))
