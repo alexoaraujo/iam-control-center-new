@@ -1,0 +1,39 @@
+name: IAM G1 B2 full ciphertext readback contract (offline)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/iam-g1-b2-full-readback.py'
+      - '.github/tests/test-iam-g1-b2-full-readback.py'
+      - '.github/workflows/iam-g1-b2-full-readback.yml'
+      - '.github/workflows/iam-g1-b2-full-readback-regression.yml'
+      - 'docs/operations/iam-g1-b2-full-readback.md'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/iam-g1-b2-full-readback.py'
+      - '.github/tests/test-iam-g1-b2-full-readback.py'
+      - '.github/workflows/iam-g1-b2-full-readback.yml'
+      - '.github/workflows/iam-g1-b2-full-readback-regression.yml'
+      - 'docs/operations/iam-g1-b2-full-readback.md'
+
+permissions:
+  contents: read
+
+jobs:
+  full-readback-scope-offline:
+    if: github.repository == 'alexoaraujo/iam-control-center-new'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout without persistent credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Validate fail-closed B2 full backup readback contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/iam-g1-b2-full-readback.py
+          python3 .github/tests/test-iam-g1-b2-full-readback.py -v
+          echo 'PASS_G1_B2_FULL_READBACK_SCOPE_OFFLINE_ONLY'
+          echo 'G1_FULL_BACKUP_RESTORE=NOT_ATTESTED'
