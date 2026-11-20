@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """No-secret synthetic tests for the live PR128 G3 GitHub Environment gate."""
 import importlib.util
+import contextlib
+import io
 from pathlib import Path
 from unittest import TestCase, main
 from unittest.mock import patch
@@ -86,8 +88,11 @@ class Controls(TestCase):
             })
 
     def test_readonly_preflight_uses_only_three_metadata_paths(self):
-        with patch.object(mod, "query", side_effect=[good_env(), good_policies(), good_custom()]) as q:
+        # A synthetic test must not emit production-looking PASS markers.
+        capture = io.StringIO()
+        with patch.object(mod, "query", side_effect=[good_env(), good_policies(), good_custom()]) as q, contextlib.redirect_stdout(capture):
             mod.run(mod.REPO, "fake-read-token")
+        self.assertIn("PASS_G3_ENV_EFFECTIVE_PROTECTION", capture.getvalue())
         self.assertEqual(q.call_count, 3)
         urls = [args[0][0] for args in q.call_args_list]
         self.assertEqual(urls, [mod.ROOT,
