@@ -197,11 +197,53 @@ class IsolatedRunnerContract(unittest.TestCase):
              patch.object(module, "check_pgcrypto_availability"), \
              patch.object(module, "docker_run", side_effect=self.simulated_docker(calls)):
             module.execute("restore_isolated")
-        self.assertEqual(len(calls), 4)
+        self.assertEqual([call[0] for call in calls], ["pg_dump", "pg_restore", "pg_restore"])
         self.assertEqual(calls[-1][0], "pg_restore")
         self.assertIn("--dbname=iam_canonical_validation", calls[-1])
         self.assertIn("--single-transaction", calls[-1])
         self.assertNotIn("--clean", calls[-1])
+        self.assertFalse(any(call[0] == "psql" for call in calls))
+        self.assertFalse(any("CREATE EXTENSION" in str(call) for call in calls))
+
+    def test_restore_failure_never_creates_extension_before_transaction(self):
+        # Regression: an extension created by a separate psql command would
+        # survive a later pg_restore failure and violate isolated rollback.
+        calls = []
+
+        def fail_during_restore(args, credentials, workspace):
+            calls.append(args)
+            if args[0] == "pg_dump":
+                (workspace / "schema.dump").write_bytes(b"PGDMP" + b"Z" * 2049)
+            elif args[:2] == ["pg_restore", "--list"]:
+                return "; synthetic schema-only archive\n12; 1259 123 TABLE iam.tenants owner\n"
+            elif args[0] == "pg_restore":
+                raise module.GateBlocked("PG18_SCHEMA_RESTORE_UNCLASSIFIED")
+            else:
+                self.fail("unexpected operation before transactional pg_restore")
+            return ""
+
+        with (
+            self.env(approval=module.APPROVAL, confirm=module.CONFIRMATION),
+            patch.object(module, "check_source"),
+            patch.object(module, "check_target"),
+            patch.object(module, "check_authenticated_readiness"),
+            patch.object(module, "check_restore_acl_principals"),
+            patch.object(module, "check_runtime_role_contract"),
+            patch.object(module, "check_migrator_owner_membership"),
+            patch.object(module, "check_pgcrypto_availability"),
+            patch.object(module, "docker_run", side_effect=fail_during_restore),
+        ):
+            with self.assertRaisesRegex(
+                module.GateBlocked, "PG18_SCHEMA_RESTORE_UNCLASSIFIED"
+            ):
+                module.execute("restore_isolated")
+
+        self.assertEqual(
+            [call[0] for call in calls], ["pg_dump", "pg_restore", "pg_restore"]
+        )
+        self.assertIn("--single-transaction", calls[-1])
+        self.assertFalse(any(call[0] == "psql" for call in calls))
+        self.assertFalse(any("CREATE EXTENSION" in str(call) for call in calls))
 
     def test_export_detects_data_contamination(self):
         def contaminated(args, credentials, workspace):
@@ -432,12 +474,56 @@ class IsolatedRunnerContract(unittest.TestCase):
                 with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP"):
                     module.check_migrator_owner_membership({}, {}, Path("/tmp"))
 
-    def test_pgcrypto_requirement_is_source_installed_target_available(self):
-        with patch.object(module, "scalar", side_effect=["1", "1"]):
+    def test_pgcrypto_requires_preinstalled_public_extension_on_both_branches(self):
+        # A package available in pg_available_extensions is not installed:
+        # schema-only archives exclude CREATE EXTENSION in public.
+        with patch.object(module, "scalar", side_effect=["1", "1", "1"]) as query:
             module.check_pgcrypto_availability({}, {}, Path("/tmp"))
-        with patch.object(module, "scalar", side_effect=["1", "0"]):
-            with self.assertRaisesRegex(module.GateBlocked, "BLOCKED_PGCRYPTO"):
-                module.check_pgcrypto_availability({}, {}, Path("/tmp"))
+        self.assertEqual(query.call_count, 3)
+        source_sql = query.call_args_list[0].args[0]
+        installed_sql = query.call_args_list[2].args[0]
+        self.assertEqual(source_sql, installed_sql)
+        self.assertIn("pg_extension", installed_sql)
+        self.assertIn("n.nspname='public'", installed_sql)
+        self.assertIn("pg_available_extensions", query.call_args_list[1].args[0])
+
+        for source, available, installed, expected in (
+            ("0", "1", "1", "BLOCKED_PGCRYPTO"),
+            ("1", "0", "1", "BLOCKED_PGCRYPTO"),
+            ("1", "1", "0", "BLOCKED_PGCRYPTO_TARGET_NOT_INSTALLED"),
+            ("1", "1", "", "BLOCKED_PGCRYPTO_TARGET_NOT_INSTALLED"),
+        ):
+            with self.subTest(source=source, available=available, installed=installed):
+                with patch.object(module, "scalar", side_effect=[
+                    source, available, installed
+                ]):
+                    with self.assertRaisesRegex(module.GateBlocked, expected):
+                        module.check_pgcrypto_availability({}, {}, Path("/tmp"))
+
+    def test_pgcrypto_target_not_installed_blocks_before_dump_and_ddl(self):
+        for mode, approval, confirmation in (
+            ("readiness_only", "", "NO_DDL"),
+            ("export_only", "", "NO_DDL"),
+            ("restore_isolated", module.APPROVAL, module.CONFIRMATION),
+        ):
+            with (
+                self.subTest(mode=mode),
+                self.env(approval=approval, confirm=confirmation),
+                patch.object(module, "check_source"),
+                patch.object(module, "check_target"),
+                patch.object(module, "check_restore_acl_principals"),
+                patch.object(module, "check_runtime_role_contract"),
+                patch.object(module, "check_migrator_owner_membership"),
+                patch.object(module, "check_schema_export_lock_permissions"),
+                patch.object(module, "scalar", side_effect=["1", "1", "0"]),
+                patch.object(module, "docker_run") as docker,
+            ):
+                with self.assertRaisesRegex(
+                    module.GateBlocked, "BLOCKED_PGCRYPTO_TARGET_NOT_INSTALLED"
+                ):
+                    module.execute(mode)
+                docker.assert_not_called()
+
 
     def test_auth_only_checks_two_pinned_roles_without_dump_restore_or_ddl(self):
         expected = [
@@ -638,6 +724,96 @@ class IsolatedRunnerContract(unittest.TestCase):
         self.assertIn("environment:\n      name: IAM-Canonical-Isolated-Restore", auth)
         self.assertIn("IAM_CANONICAL_CONFIRMATION: ${{ inputs.confirm_isolated_ddl }}", auth)
         self.assertIn("IAM_CANONICAL_OPERATION: ${{ inputs.operation }}", auth)
+
+    def test_role_contract_diagnostics_are_strict_and_redacted(self):
+        canonical = ("iam_app_runtime_login|t|t|f|f\n"
+                     "iam_migrator_login|t|f|f|f\n"
+                     "iam_worker_login|t|f|f|f")
+        self.assertEqual(
+            module.safe_role_contract_deltas(canonical, canonical, "SOURCE"),
+            []
+        )
+        missing = "iam_app_runtime_login|t|t|f|f"
+        flags = module.safe_role_contract_deltas(missing, canonical, "SOURCE")
+        self.assertIn("SOURCE:iam_migrator_login:MISSING", flags)
+        self.assertIn("SOURCE:iam_worker_login:MISSING", flags)
+        wrong_runtime = canonical.replace(
+            "iam_app_runtime_login|t|t|f|f", "iam_app_runtime_login|t|f|f|f"
+        )
+        self.assertEqual(
+            module.safe_role_contract_deltas(wrong_runtime, canonical, "TARGET"),
+            ["TARGET:iam_app_runtime_login:OPTIONS_DRIFT"]
+        )
+        bad = canonical + "\nSECRET_PROBE_ROLE|t|t|f|f"
+        msg = str(module.safe_role_contract_deltas(bad, canonical, "SOURCE"))
+        self.assertIn("UNEXPECTED_CATALOG_OR_ORDER", msg)
+        self.assertNotIn("SECRET_PROBE_ROLE", msg)
+        for unexpected in (canonical + "\n" + canonical.splitlines()[0],
+                           "\n".join(reversed(canonical.splitlines())),
+                           canonical.replace("|f|f", "|PRIVATE_TOKEN|f")):
+            self.assertTrue(
+                module.safe_role_contract_deltas(
+                    unexpected, canonical, "SOURCE"
+                )
+            )
+            self.assertNotIn(
+                "PRIVATE_TOKEN",
+                str(module.safe_role_contract_deltas(
+                    unexpected, canonical, "SOURCE"
+                ))
+            )
+
+    def test_member_contract_diagnostics_detect_set_role_escalation(self):
+        required = ("iam_app_runtime_login|iam_app_runtime|f|t|f\n"
+                    "iam_migrator_login|iam_migrator|f|f|t\n"
+                    "iam_worker_login|iam_worker|f|t|t")
+        current = required.replace(
+            "iam_app_runtime_login|iam_app_runtime|f|t|f",
+            "iam_app_runtime_login|iam_app_runtime|f|t|t"
+        )
+        self.assertEqual(
+            module.safe_role_contract_deltas(
+                current, required, "TARGET", key_columns=2
+            ),
+            ["TARGET:iam_app_runtime_login:iam_app_runtime:OPTIONS_DRIFT"]
+        )
+        reduced = required.splitlines()[0]
+        self.assertIn(
+            "SOURCE:iam_migrator_login:iam_migrator:MISSING",
+            module.safe_role_contract_deltas(
+                reduced, required, "SOURCE", key_columns=2
+            )
+        )
+
+    def test_branch_topology_changes_remain_blocked_without_dump(self):
+        canonical = ("iam_app_runtime_login|t|t|f|f\n"
+                     "iam_migrator_login|t|f|f|f\n"
+                     "iam_worker_login|t|f|f|f")
+        drifting_source = "iam_app_runtime_login|t|t|f|f"
+        drifting_target = canonical.replace(
+            "iam_app_runtime_login|t|t|f|f",
+            "iam_app_runtime_login|t|f|f|f"
+        )
+        with patch.object(
+            module, "scalar", side_effect=[drifting_source, drifting_target]
+        ):
+            with self.assertRaisesRegex(
+                module.GateBlocked, "BLOCKED_ROLE_ATTRIBUTES"
+            ) as err:
+                module.check_runtime_role_contract({}, {}, Path("/tmp"))
+        self.assertIn("SOURCE:iam_worker_login:MISSING", str(err.exception))
+        self.assertIn(
+            "TARGET:iam_app_runtime_login:OPTIONS_DRIFT", str(err.exception)
+        )
+
+    def test_migrator_owner_missing_on_source_not_silenced(self):
+        with patch.object(module, "scalar", side_effect=["", "f|f|t"]):
+            with self.assertRaisesRegex(
+                module.GateBlocked, "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP"
+            ) as err:
+                module.check_migrator_owner_membership({}, {}, Path("/tmp"))
+        self.assertIn("SOURCE:MISSING", str(err.exception))
+        self.assertNotIn("TARGET:OPTIONS_DRIFT", str(err.exception))
 
     def test_expired_branch_fails_before_credential_use(self):
         from datetime import datetime, timezone

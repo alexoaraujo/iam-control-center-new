@@ -244,6 +244,46 @@ def check_restore_acl_principals(source_creds: dict[str, str],
         )
 
 
+def safe_role_contract_deltas(actual: str, expected: str, location: str,
+                              key_columns: int = 1) -> list[str]:
+    """Diagnose strict catalog drift without echoing raw role or query content.
+
+    Only canonical principal names from expected are eligible for messages.
+    An unexpected role, malformed row, duplicate, or changed ordering blocks.
+    This function never changes a privilege or treats source/target parity as
+    proof that either branch matches the approved canonical contract.
+    """
+    if actual == expected:
+        return []
+    expected_rows = {}
+    for line in expected.splitlines():
+        fields = line.split("|")
+        expected_rows[tuple(fields[:key_columns])] = tuple(fields[key_columns:])
+    found = {}
+    unexpected = False
+    flag_count = len(next(iter(expected_rows.values())))
+    for line in actual.splitlines():
+        fields = line.split("|")
+        key = tuple(fields[:key_columns])
+        flags = tuple(fields[key_columns:])
+        if (len(fields) != key_columns + flag_count
+                or key not in expected_rows or key in found
+                or any(flag not in ("t", "f") for flag in flags)):
+            unexpected = True
+            continue
+        found[key] = flags
+    result = []
+    for role_key, expected_flags in expected_rows.items():
+        safe_name = ":".join(role_key)
+        if role_key not in found:
+            result.append(f"{location}:{safe_name}:MISSING")
+        elif found[role_key] != expected_flags:
+            result.append(f"{location}:{safe_name}:OPTIONS_DRIFT")
+    if unexpected or not result:
+        result.append(f"{location}:UNEXPECTED_CATALOG_OR_ORDER")
+    return result
+
+
 def check_runtime_role_contract(source_creds: dict[str, str],
                                 target_creds: dict[str, str],
                                 workspace: Path) -> None:
@@ -264,11 +304,14 @@ def check_runtime_role_contract(source_creds: dict[str, str],
         "iam_migrator_login|t|f|f|f\n"
         "iam_worker_login|t|f|f|f"
     )
-    if source != expected or target != expected:
+    attribute_drift = (
+        safe_role_contract_deltas(source, expected, "SOURCE")
+        + safe_role_contract_deltas(target, expected, "TARGET")
+    )
+    if attribute_drift:
         raise GateBlocked(
-            "BLOCKED_ROLE_ATTRIBUTES: source and destination must both "
-            "match the canonical IAM runtime/migrator/worker LOGIN contract; "
-            "copying a drifted target into source is prohibited"
+            "BLOCKED_ROLE_ATTRIBUTES: " + ", ".join(attribute_drift)
+            + "; branch-wide corrections require independent approval"
         )
 
     membership_sql = """SELECT member.rolname, granted.rolname,
@@ -286,12 +329,18 @@ def check_runtime_role_contract(source_creds: dict[str, str],
         "iam_migrator_login|iam_migrator|f|f|t\n"
         "iam_worker_login|iam_worker|f|t|t"
     )
-    if (source_memberships != expected_memberships
-            or target_memberships != expected_memberships):
+    membership_drift = (
+        safe_role_contract_deltas(
+            source_memberships, expected_memberships, "SOURCE", key_columns=2
+        )
+        + safe_role_contract_deltas(
+            target_memberships, expected_memberships, "TARGET", key_columns=2
+        )
+    )
+    if membership_drift:
         raise GateBlocked(
-            "BLOCKED_ROLE_MEMBERSHIPS: source and destination must both "
-            "match canonical ADMIN=false/INHERIT/SET options; "
-            "runtime login may not SET ROLE, no extra outbound memberships"
+            "BLOCKED_ROLE_MEMBERSHIPS: " + ", ".join(membership_drift)
+            + "; runtime login cannot SET ROLE; do not auto-repair branch roles"
         )
 
 
@@ -366,24 +415,48 @@ def check_migrator_owner_membership(source_creds: dict[str, str],
      WHERE member.rolname='iam_migrator' AND granted.rolname='iam_owner'"""
     source = scalar(sql, source_creds, workspace).strip()
     target = scalar(sql, target_creds, workspace).strip()
-    if source != "f|f|t" or target != source:
+    if source != "f|f|t" or target != "f|f|t":
+        # Both branch results are checked against the fixed contract.
+        # Report only allowlisted state codes, never raw catalog values.
+        origin = "MISSING" if not source else "OPTIONS_DRIFT"
+        destination = "MISSING" if not target else "OPTIONS_DRIFT"
+        flags = []
+        if source != "f|f|t":
+            flags.append("SOURCE:" + origin)
+        if target != "f|f|t":
+            flags.append("TARGET:" + destination)
         raise GateBlocked(
-            "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP: isolated destination differs "
-            "from source (ADMIN=false, INHERIT=false, SET=true); "
-            "privileged role changes require independent approval")
+            "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP: " + ", ".join(flags)
+            + "; ADMIN=false/INHERIT=false/SET=true required; "
+            "privileged branch-wide changes require independent approval")
 
 
 def check_pgcrypto_availability(source_creds: dict[str, str],
                                target_creds: dict[str, str],
                                workspace: Path) -> None:
-    source = scalar(
-        "SELECT count(*) FROM pg_extension WHERE extname='pgcrypto'",
-        source_creds, workspace).strip()
-    target = scalar(
+    """Fail before any dump/restore if the scoped schema needs missing pgcrypto.
+
+    pg_dump --schema=iam/audit/app_private excludes the public extension
+    definition. An available *package* is not an installed extension: the
+    target must already have pgcrypto installed in public under a separate,
+    independently approved DDL change. This guard never installs it.
+    """
+    installed_in_public = """SELECT count(*) FROM pg_extension e
+      JOIN pg_namespace n ON n.oid=e.extnamespace
+      WHERE e.extname='pgcrypto' AND n.nspname='public'"""
+    source = scalar(installed_in_public, source_creds, workspace).strip()
+    target_available = scalar(
         "SELECT count(*) FROM pg_available_extensions WHERE name='pgcrypto'",
         target_creds, workspace).strip()
-    if source != "1" or target != "1":
+    target_installed = scalar(
+        installed_in_public, target_creds, workspace).strip()
+    if source != "1" or target_available != "1":
         raise GateBlocked("BLOCKED_PGCRYPTO: source extension or target package missing")
+    if target_installed != "1":
+        raise GateBlocked(
+            "BLOCKED_PGCRYPTO_TARGET_NOT_INSTALLED: extension must be present "
+            "in public before schema-only restore; target DDL approval required"
+        )
 
 
 def check_authenticated_readiness(source_creds: dict[str, str],
@@ -481,11 +554,9 @@ def execute(mode: str) -> None:
         check_migrator_owner_membership(src, dst, workspace)
         check_pgcrypto_availability(src, dst, workspace)
         # Scope is the exact isolated database, NEVER inherited iam_database.
-        # CREATE EXTENSION may remain if restore fails; other DDL is one transaction.
-        docker_run([
-            "psql", "-X", "-w", "-v", "ON_ERROR_STOP=1", "-c",
-            "CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public"
-        ], dst, workspace)
+        # pgcrypto must already be installed under separate DDL approval.
+        # Never create an extension outside pg_restore's single transaction.
+        # A failed restore must leave no implicit extension side effect.
         docker_run([
             "pg_restore", "-w", "--exit-on-error", "--single-transaction",
             "--dbname=iam_canonical_validation", "/work/schema.dump"
