@@ -17,7 +17,12 @@ const collections = {
   default_acls: x => [x.schema,x.owner,x.object_type,x.grantee,x.privilege,x.grantor].join('|'),
   database_acl: x => [x.database,x.owner,x.grantee,x.privilege,x.grantor].join('|'),
   roles: x => x.name,
-  role_memberships: x => JSON.stringify(x),
+  // PostgreSQL membership identity is (role, member, grantor). Options such
+  // as admin/inherit/set are compared as attributes, not part of the key.
+  // An ordered tuple avoids both JSON property-order false drift and delimiter
+  // collisions with unusual quoted PostgreSQL role names.
+  role_memberships: x => [x.role,x.member,x.grantor].every(v => typeof v === 'string' && v.length > 0)
+    ? JSON.stringify([x.role,x.member,x.grantor]) : '',
 };
 const canonical = value => {
   // Preserve nested PostgreSQL array order (notably pg_enum.enumsortorder).
