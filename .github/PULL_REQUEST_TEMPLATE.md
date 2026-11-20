@@ -48,9 +48,9 @@
 
 ## Politica de atualizacao da branch (PEOS)
 
-**Padrao:** `Update with merge commit`. **Excecao:** `Update with rebase` apenas se inexistirem dependencias de SHA e evidencias de auditoria vinculadas a commits, conforme [politica de atualizacao](../docs/governance/pr-branch-update-policy.md).
+**Padrao:** `Update with merge commit`. **Excecao:** `Update with rebase` apenas se inexistirem dependencias de SHA e evidencias de auditoria vinculadas a commits, conforme [política de atualização](https://github.com/alexoaraujo/iam-control-center-new/blob/main/docs/governance/pr-branch-update-policy.md).
 
-- [ ] Atualizacao por merge commit, ou rebase excepcional justificado e comprovadamente sem vinculos SHA.
+- [ ] Se a branch foi atualizada: merge commit usado, ou rebase excepcional justificado e comprovadamente sem vínculos SHA (ou N/A: sem atualização).
 - [ ] SHA anterior, novo HEAD, base, horario UTC e link da operacao registrados (ou N/A: branch ja atualizada).
 - [ ] Gates e evidencias SHA-exatos reexecutados/renovados no novo HEAD (ou N/A justificado).
 - **Metodo utilizado / justificativa da excecao:**
