@@ -10,6 +10,8 @@ on:
       - ".github/tests/test-iam-g3-environments-inventory-readonly.py"
       - ".github/scripts/iam-g3-environment-protection-readonly.py"
       - ".github/tests/test-iam-g3-environment-protection-readonly.py"
+      - ".github/scripts/iam-g3-environment-bootstrap.py"
+      - ".github/tests/test-iam-g3-environment-bootstrap.py"
   workflow_dispatch:
 
 permissions:
@@ -48,6 +50,8 @@ jobs:
       # Read effective protection rules with NO environment binding or owner secret.
       - name: Check PR128 G3 policy validation contracts
         run: python3 .github/tests/test-iam-g3-environment-protection-readonly.py
+      - name: Verify G3 local administrator bootstrap contract offline
+        run: python3 .github/tests/test-iam-g3-environment-bootstrap.py
       - name: Attest effective G3 owner Environment policies (read only)
         env:
           GITHUB_TOKEN: ${{ github.token }}
