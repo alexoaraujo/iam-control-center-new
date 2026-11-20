@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { verifyPreviewBinding } from "./bind-e2e-preview.mjs";
+import { verifyPreviewBinding, approvedCallback } from "./bind-e2e-preview.mjs";
 
 const sha = "a".repeat(40);
 const branch = "feat/auth0-neon-identity-sync-20261111";
@@ -65,4 +65,20 @@ test("rejects reassigned Preview alias pointing to another deployment or project
       { ...deployment, alias: [stableHost] }, { ...validAlias, ...change }), /verified Preview/);
   }
   assert.throws(() => verifyPreviewBinding(stableEnv, domain, alias, deployment), /verified Preview/);
+});
+
+
+test("PR143 has its own SHA-scoped callback mapping, never the shared PR132 alias", () => {
+  const prBranch = "governance/pr-update-merge-default-20261120";
+  const isolatedHost = "iam-control-center-new-pr143-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), isolatedHost);
+  assert.equal(approvedCallback("unknown-branch"), "iam-control-center-new-ci-preview.vercel.app");
+  const isolatedEnv = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: isolatedHost };
+  const isolatedDomain = { ...domain, name: isolatedHost, gitBranch: prBranch };
+  const isolatedAlias = { ...alias, alias: isolatedHost };
+  const isolatedDeploy = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.deepEqual(verifyPreviewBinding(isolatedEnv, isolatedDomain, isolatedAlias, isolatedDeploy), {
+    callbackHost: isolatedHost, callbackBranch: prBranch, callbackUrl: `https://${isolatedHost}`,
+  });
+  assert.throws(() => verifyPreviewBinding(isolatedEnv, { ...isolatedDomain, gitBranch: "integration/peos-g1-g2-canonical-bun-20261118" }, isolatedAlias, isolatedDeploy), /not bound/);
 });
