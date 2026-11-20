@@ -1,0 +1,46 @@
+name: IAM G1 branch revoker PG18 real offline rehearsal
+
+on:
+  push:
+    branches: [security/iam-g1-disposable-revoker-20261115]
+    paths:
+      - ".github/scripts/iam-g1-disposable-emergency-revoke.py"
+      - ".github/tests/iam-g1-disposable-revoker-pg18-synthetic.sh"
+      - ".github/workflows/iam-g1-disposable-revoke-pg18-synthetic.yml"
+  pull_request:
+    paths:
+      - ".github/scripts/iam-g1-disposable-emergency-revoke.py"
+      - ".github/tests/iam-g1-disposable-revoker-pg18-synthetic.sh"
+      - ".github/workflows/iam-g1-disposable-revoke-pg18-synthetic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-pg18:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Reject external database access and privileged workflow secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n .github/tests/iam-g1-disposable-revoker-pg18-synthetic.sh
+          if grep -Eq 'neon[.]tech|IAM_G1_DISPOSABLE_REVOKER_URL|IAM_CANONICAL_SOURCE_URL|NEON_API_KEY|postgresql://' \
+             .github/tests/iam-g1-disposable-revoker-pg18-synthetic.sh; then
+            echo "::error::BLOCKED_G1_PG18_EXTERNAL_ACCESS"; exit 2
+          fi
+          grep -q -- '--network none' .github/tests/iam-g1-disposable-revoker-pg18-synthetic.sh
+          echo "PASS_G1_PG18_SYNTHETIC_NO_REMOTE_ACCESS"
+      - name: Real PostgreSQL18 local lease, RLS A/B, dump and source REVOKE
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 540 bash .github/tests/iam-g1-disposable-revoker-pg18-synthetic.sh
+      - name: Confirm scope and disposal
+        if: success()
+        run: |
+          echo "PASS_G1_PG18_BRANCH_REVOKER_CI_ONLY_NO_NEON" >> "$GITHUB_STEP_SUMMARY"
