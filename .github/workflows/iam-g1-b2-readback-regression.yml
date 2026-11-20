@@ -1,0 +1,36 @@
+name: IAM-G1 B2 readback regression (offline)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/iam-g1-b2-readback.py'
+      - '.github/workflows/iam-g1-b2-readback.yml'
+      - '.github/workflows/iam-g1-b2-readback-regression.yml'
+      - 'docs/operations/iam-g1-b2-readback.md'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/iam-g1-b2-readback.py'
+      - '.github/workflows/iam-g1-b2-readback.yml'
+      - '.github/workflows/iam-g1-b2-readback-regression.yml'
+      - 'docs/operations/iam-g1-b2-readback.md'
+
+permissions:
+  contents: read
+
+jobs:
+  readback-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout with no persistent token
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Verify SHA-256, metadata and bounds with synthetic bytes only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/iam-g1-b2-readback.py
+          python3 scripts/iam-g1-b2-readback.py --self-test
