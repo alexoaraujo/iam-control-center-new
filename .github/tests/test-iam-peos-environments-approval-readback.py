@@ -70,7 +70,7 @@ class Contracts(TestCase):
     def test_live_branch_policies_must_be_read_and_counted(self):
         for name in mod.ENVIRONMENTS:
             for payload in ({}, {"total_count": 0, "branch_policies": []},
-                            {"total_count": 2, "branch_policies": policies(name)["branch_policies"]},
+                            {"total_count": 3, "branch_policies": policies(name)["branch_policies"]},
                             {"total_count": 101, "branch_policies": policies(name)["branch_policies"]}):
                 with self.subTest(name=name, payload=payload), self.assertRaises(mod.Blocked):
                     mod.verify(name, env(name), custom(), payload)
