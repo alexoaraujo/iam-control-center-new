@@ -1,0 +1,107 @@
+name: "PEOS - Update PR branch with merge commit"
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Numero da pull request aberta (branch do mesmo repositorio)"
+        required: true
+        type: string
+      expected_head_sha:
+        description: "HEAD SHA atual de 40 caracteres (bloqueio de corrida)"
+        required: true
+        type: string
+      acknowledge_sha_change:
+        description: "Reconheco que novo HEAD exige revalidar checks, gates e evidencias SHA-exatas"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: peos-pr-branch-update-${{ inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  update-with-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validar PR, SHA e consentimento sem bypass
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          ACK: ${{ inputs.acknowledge_sha_change }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$ACK" != "true" ]]; then
+            echo "::error::Obrigatorio reconhecer a necessidade de revalidar evidencias no novo SHA."
+            exit 1
+          fi
+          if ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Numero de PR invalido."
+            exit 1
+          fi
+          if ! [[ "$EXPECTED_HEAD_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::Forneca o head SHA exato de 40 caracteres."
+            exit 1
+          fi
+
+          pr_json="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+          state="$(jq -r '.state' <<< "$pr_json")"
+          actual_sha="$(jq -r '.head.sha' <<< "$pr_json")"
+          head_repo="$(jq -r '.head.repo.full_name // empty' <<< "$pr_json")"
+          base_branch="$(jq -r '.base.ref' <<< "$pr_json")"
+          base_sha="$(jq -r '.base.sha' <<< "$pr_json")"
+
+          if [[ "$state" != "open" || "$head_repo" != "$GITHUB_REPOSITORY" ]]; then
+            echo "::error::Somente PRs abertas com branch de origem neste repositorio."
+            exit 1
+          fi
+          if [[ "${actual_sha,,}" != "${EXPECTED_HEAD_SHA,,}" ]]; then
+            echo "::error::HEAD divergente. Revise a PR; atualizacao cancelada."
+            exit 1
+          fi
+
+          echo "Solicitando update via merge commit: PR #${PR_NUMBER}; base=${base_branch}; head=${actual_sha}"
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/update-branch" \
+            -f "expected_head_sha=${actual_sha}"
+
+          new_sha=""
+          for _ in $(seq 1 20); do
+            sleep 3
+            pr_after="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
+            candidate="$(jq -r '.head.sha' <<< "$pr_after")"
+            if [[ "$candidate" != "$actual_sha" ]]; then
+              new_sha="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$new_sha" ]]; then
+            echo "::error::Update solicitado, mas novo HEAD nao foi confirmado. Verifique o GitHub antes de repetir."
+            exit 1
+          fi
+
+          commit_json="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${new_sha}")"
+          if ! jq -e --arg old "$actual_sha" '
+            (.parents | length >= 2) and
+            ([.parents[].sha] | index($old) != null)
+          ' <<< "$commit_json" >/dev/null; then
+            echo "::error::Nao foi possivel comprovar merge commit com HEAD anterior como pai."
+            exit 1
+          fi
+
+          {
+            echo "### Atualizacao de PR por merge commit"
+            echo "- PR: #${PR_NUMBER}"
+            echo "- Base no inicio da operacao: \`${base_branch}\` / \`${base_sha}\`"
+            echo "- HEAD anterior: \`${actual_sha}\`"
+            echo "- Novo HEAD: \`${new_sha}\`"
+            echo "- Metodo: **merge commit** (ancestralidade validada, sem rebase)"
+            echo "- **PENDENTE:** reexecutar checks e revalidar evidencias e gates SHA-exatos. Esta execucao nao e aprovacao de merge/release."
+          } >> "$GITHUB_STEP_SUMMARY"
