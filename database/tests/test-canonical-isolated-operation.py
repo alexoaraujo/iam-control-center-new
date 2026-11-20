@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline negative contract for guarded Neon export/restore; synthetic credentials only."""
 from __future__ import annotations
+from datetime import datetime as _RealDateTime, timedelta
 import importlib.util
 import os
 from pathlib import Path
@@ -23,7 +24,21 @@ TARGET = ("postgresql://neondb_owner:TEST_ONLY@"
           "ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech:5432/"
           "iam_canonical_validation?sslmode=verify-full&sslrootcert=system")
 
+# Synthetic time is pinned to a historically valid instant for the isolated
+# fixture only. The executable runner's real expiry guard remains unchanged.
+_TEST_NOW = module.EXPIRES - timedelta(minutes=30)
+
+class _SyntheticFixtureClock(_RealDateTime):
+    @classmethod
+    def now(cls, tz=None):
+        return _TEST_NOW
+
 class IsolatedRunnerContract(unittest.TestCase):
+    def setUp(self):
+        clock = patch.object(module, "datetime", _SyntheticFixtureClock)
+        clock.start()
+        self.addCleanup(clock.stop)
+
     def env(self, approval="", confirm=""):
         return patch.dict(os.environ, {
             "IAM_CANONICAL_SOURCE_URL": SOURCE,
