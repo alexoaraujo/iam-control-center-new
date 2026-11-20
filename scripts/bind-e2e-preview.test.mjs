@@ -39,3 +39,30 @@ test("rejects Preview deployment from a different SHA", () => {
   assert.throws(() => verifyPreviewBinding({ ...env, E2E_DEPLOYMENT_HOST: "other.vercel.app" },
     domain, alias, deployment), /verified Preview/);
 });
+
+// The PR's Vercel Preview check may return a stable branch alias rather than
+// the immutable deployment URL. A live alias lookup is required because the
+// deployment.alias array can be stale after a manual alias reassignment.
+test("accepts Preview alias only when independently bound to same exact-SHA deployment", () => {
+  const stableHost = "iam-control-center-new-preview.vercel.app";
+  const stableEnv = { ...env, E2E_DEPLOYMENT_HOST: stableHost };
+  const previewAlias = { alias: stableHost, projectId: project, deploymentId: deployment.id };
+  const staleAliasList = { ...deployment, alias: ["unrelated-preview.vercel.app"] };
+  assert.deepEqual(verifyPreviewBinding(stableEnv, domain, alias, staleAliasList, previewAlias), {
+    callbackHost: aliasHost, callbackBranch: branch, callbackUrl: `https://${aliasHost}`,
+  });
+});
+test("rejects reassigned Preview alias pointing to another deployment or project", () => {
+  const stableHost = "iam-control-center-new-preview.vercel.app";
+  const stableEnv = { ...env, E2E_DEPLOYMENT_HOST: stableHost };
+  const validAlias = { alias: stableHost, projectId: project, deploymentId: deployment.id };
+  for (const change of [
+    { deploymentId: "dpl_stale" },
+    { projectId: "prj_untrusted" },
+    { alias: "other-preview.vercel.app" },
+  ]) {
+    assert.throws(() => verifyPreviewBinding(stableEnv, domain, alias,
+      { ...deployment, alias: [stableHost] }, { ...validAlias, ...change }), /verified Preview/);
+  }
+  assert.throws(() => verifyPreviewBinding(stableEnv, domain, alias, deployment), /verified Preview/);
+});
