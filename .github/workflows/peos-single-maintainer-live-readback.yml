@@ -6,6 +6,8 @@ on:
       - ".github/scripts/iam-peos-environments-approval-readback.py"
       - ".github/tests/test-iam-peos-environments-approval-readback.py"
       - ".github/workflows/peos-single-maintainer-live-readback.yml"
+      - ".github/scripts/iam-g3-environments-inventory-readonly.py"
+      - ".github/tests/test-iam-g3-environments-inventory-readonly.py"
   workflow_dispatch:
 
 permissions:
@@ -31,3 +33,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/iam-peos-environments-approval-readback.py
+      # Inventory is a diagnostic, not a privileged Environment approval.
+      # Do not set environment: here: an unknown name could auto-create an
+      # unprotected Environment. This job never receives owner credentials.
+      - name: Validate complete G3 inventory contract without secrets
+        run: python3 .github/tests/test-iam-g3-environments-inventory-readonly.py
+      - name: Discover ALL live GitHub Environments (read only)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/iam-g3-environments-inventory-readonly.py
