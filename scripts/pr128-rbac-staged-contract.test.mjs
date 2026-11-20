@@ -88,5 +88,8 @@ test("PR128 real Auth0 E2E requires read-only database health before claiming ru
   assert.match(loginSuite, /fetch\("\/api\/health\/database"/);
   assert.match(loginSuite, /status: 200, body: \{ ok: true, database: "reachable" \}, cache: "no-store"/);
   assert.match(loginSuite, /PASS_PR128_DISPOSABLE_NEON_DATABASE_REACHABLE/);
+  assert.match(loginSuite, /fetch\("\/api\/ready"/);
+  assert.match(loginSuite, /status: 200, body: \{ ready: true, reason: "dependencies_available" \}, cache: "no-store"/);
+  assert.match(loginSuite, /PASS_PR128_RUNTIME_ROLE_NOBYPASSRLS_READY/);
   assert.doesNotMatch(loginSuite, /(?:NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL|AUTHZ_CONTEXT_SIGNING_KEY_HEX)/);
 });
