@@ -1,0 +1,38 @@
+name: IAM G1 full recovery scope contract (offline)
+
+on:
+  pull_request:
+    paths:
+      - 'database/scripts/iam-g1-full-recovery-preflight.py'
+      - 'database/tests/test-iam-g1-full-recovery-preflight.py'
+      - '.github/workflows/iam-g1-full-recovery-contract.yml'
+      - 'docs/operations/iam-g1-full-recovery-staging-20261118.md'
+  push:
+    branches: [main]
+    paths:
+      - 'database/scripts/iam-g1-full-recovery-preflight.py'
+      - 'database/tests/test-iam-g1-full-recovery-preflight.py'
+      - '.github/workflows/iam-g1-full-recovery-contract.yml'
+      - 'docs/operations/iam-g1-full-recovery-staging-20261118.md'
+
+permissions:
+  contents: read
+
+jobs:
+  g1-recovery-offline-contract:
+    if: github.repository == 'alexoaraujo/iam-control-center-new'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout without persistent credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Run offline fail-closed scope and TLS tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile database/scripts/iam-g1-full-recovery-preflight.py
+          python3 database/tests/test-iam-g1-full-recovery-preflight.py -v
+          echo "PASS_G1_RECOVERY_SCOPE_OFFLINE_ONLY"
+          echo "G1_FULL_BACKUP_RESTORE=NOT_EXECUTED"
