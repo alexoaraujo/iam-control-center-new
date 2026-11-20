@@ -1,3 +1,4 @@
+import { approvedCallback } from "./bind-e2e-preview.mjs";
 import { appendFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
@@ -5,7 +6,6 @@ import { pathToFileURL } from "node:url";
 const repo = "alexoaraujo/iam-control-center-new";
 const project = "prj_OnuwD1iarOsXh6FFGkSpK4A5mj80";
 const team = "aoa4";
-const callback = "iam-control-center-new-ci-preview.vercel.app";
 const auth0Domain = "iam-control-center.us.auth0.com";
 const shaPattern = /^[a-f0-9]{40}$/;
 const branchPattern = /^[A-Za-z0-9][A-Za-z0-9/._-]*$/;
@@ -24,6 +24,7 @@ export function isAuth0GateFile(file) {
     file === "scripts/auth0-preview-contract.test.mjs";
 }
 export function decideScope(env, domain, paths) {
+  const callback = approvedCallback(env.PR_HEAD_BRANCH);
   if (env.PR_HEAD_REPOSITORY !== repo ||
       !shaPattern.test(env.PR_HEAD_SHA ?? "") ||
       !branchPattern.test(env.PR_HEAD_BRANCH ?? "")) throw Error("Untrusted repository, branch or exact SHA");
@@ -48,6 +49,7 @@ export function decideScope(env, domain, paths) {
 }
 
 export function checkAppVariables(envs, branch) {
+  const callback = approvedCallback(branch);
   if (!Array.isArray(envs)) throw Error("Vercel environment inventory unavailable");
   const effective = name => {
     const a = envs.filter(e => e.key === name && e.target?.includes("preview"));
@@ -70,6 +72,7 @@ export function checkAppVariables(envs, branch) {
 }
 
 export function verifyDeployment(env, alias, deployment, previewAlias) {
+  const callback = approvedCallback(env.PR_HEAD_BRANCH);
   if (alias?.alias !== callback || alias.projectId !== project ||
       !alias.deploymentId || alias.deploymentId !== deployment?.id) {
     throw Error("Callback alias does not resolve to expected deployment");
@@ -107,9 +110,10 @@ export async function syncPreview(env, fetcher = fetch, changedFiles = prFiles) 
     if (!res.ok) throw Error("Vercel configuration lookup failed with HTTP " + res.status);
     return res.json();
   };
+  const callback = approvedCallback(env.PR_HEAD_BRANCH);
   const paths = changedFiles(env.PR_BASE_SHA,env.PR_HEAD_SHA);
   const domain = await get("/v9/projects/" + project + "/domains/" + callback);
-  const decision = decideScope(env,domain,paths);
+  const decision = decideScope({ ...env, E2E_CALLBACK_HOST: env.E2E_CALLBACK_HOST ?? callback },domain,paths);
   if (!decision.ready) {
     // A change to the E2E policy or workflow itself is never an ordinary
     // governance skip. Fail the separate preflight check until the combined
