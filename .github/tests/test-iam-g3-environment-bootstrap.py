@@ -159,8 +159,8 @@ class G3EnvironmentBootstrapContracts(TestCase):
         self.assertFalse(any(c.args[:2] == ("-X", "PUT") for c in call.call_args_list))
 
     def test_approval_latch_blocks_apply_before_any_api_call(self):
-        with patch.object(sys, "argv", ["g3-bootstrap", "--mode", "apply"]),
-             patch.object(mod, "gh_json") as call,
+        with patch.object(sys, "argv", ["g3-bootstrap", "--mode", "apply"]), \
+             patch.object(mod, "gh_json") as call, \
              contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(mod.main(), 2)
         call.assert_not_called()
