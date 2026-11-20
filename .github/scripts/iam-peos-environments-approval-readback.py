@@ -20,7 +20,7 @@ ROOT = f"https://api.github.com/repos/{REPO}/environments"
 EXACT_BRANCHES = {
     "IAM-Canonical-Isolated-Restore": "main",
     "Neon-PR-Lifecycle": "main",
-    "IAM-Audit-Development": "feat/auth0-neon-identity-sync-20261111",
+    "IAM-Audit-Development": "main",
     "IAM-G1-Backup-Custody": "main",
     "IAM-G1-Disposable-Lease-Revocation": "main",
     "IAM-G1-Disposable-Lease-Probe": "audit/iam-g1-lease-schema-probe-20261115",

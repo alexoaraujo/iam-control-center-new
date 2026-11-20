@@ -142,6 +142,18 @@ class Contracts(TestCase):
         self.assertEqual(snapshot["total_count"], "<invalid>")
         self.assertEqual(snapshot["branch_policies"], [{"name": "<invalid>", "type": "<invalid>"}])
 
+    def test_auth0_m2m_audit_is_manual_and_main_only(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    "workflows/auth0-management-m2m-audit.yml").read_text(encoding="utf-8")
+        self.assertEqual(mod.EXACT_BRANCHES["IAM-Audit-Development"], "main")
+        self.assertIn("  workflow_dispatch:", workflow)
+        self.assertNotIn("  push:", workflow)
+        self.assertNotIn("  pull_request:", workflow)
+        self.assertIn("github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("environment: IAM-Audit-Development", workflow)
+        self.assertIn("scope: 'read:users'", workflow)
+        self.assertIn("contents: read", workflow)
+
     def test_protected_branch_mode_cannot_skip_custom_policy_readback(self):
         for name in mod.ENVIRONMENTS:
             data = env(name)
