@@ -21,7 +21,7 @@ test("Auth0 gate changes without bound callback demand explicit security review,
  const e={...env,PR_HEAD_BRANCH:"fix/vercel-production-exact-sha-release-gate-20261114"};
  for(const file of [".github/workflows/quality.yml","scripts/sync-auth0-e2e-preview.mjs","scripts/sync-auth0-e2e-preview.test.mjs","scripts/auth0-preview-contract.test.mjs"]){
   assert.equal(isAuth0GateFile(file),true);
-  assert.deepEqual(decideScope(e,domain,[file]),{ready:false,reason:"SECURITY_SCOPE_ATTESTATION_REQUIRED"});
+  assert.deepEqual(decideScope(e,domain,[file]),{ready:false,reason:"SECURITY_REVIEW_REQUIRED"});
  }
  assert.deepEqual(decideScope(e,domain,["scripts/vercel-ignore-build.mjs"]),{ready:false,reason:"BRANCH_NOT_BOUND_TO_CALLBACK"});
 });
@@ -29,7 +29,7 @@ test("unbound Auth0, web, E2E or migrations changes cannot skip",()=>{
  const e={...env,PR_HEAD_BRANCH:"feature-other"};
  for(const file of ["apps/web/src/lib/auth0.ts",".github/e2e/auth0.spec.cjs","packages/shared/index.ts","database/migrations/0002.sql","scripts/bind-e2e-preview.mjs"]){
   assert.equal(isAuth0CriticalFile(file),true);
-  assert.throws(()=>decideScope(e,domain,[file]),/require a SHA-bound, maintainer-authorized callback/);
+  assert.throws(()=>decideScope(e,domain,[file]),/require a separately authorized callback/);
  }
 });
 test("rejects untrusted repository, invalid SHA, changed callback, missing domain or unknown diff",()=>{
@@ -64,7 +64,7 @@ test("unbound security-gate changes fail the preflight job instead of silently s
  };
  await assert.rejects(
   syncPreview(unbound,fakeFetch,()=>[".github/workflows/quality.yml"]),
-  /AUTH0_GATE_MAINTAINER_ATTESTATION_REQUIRED/
+  /AUTH0_GATE_REVIEW_REQUIRED/
  );
  assert.equal(requests.length,1);
 });

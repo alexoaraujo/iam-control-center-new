@@ -105,9 +105,8 @@ jobs:
     timeout-minutes: 12
     outputs:
       preview_host: ${{ steps.resolve-preview.outputs.preview_host }}
-    # Read-only deployment discovery does not need a protected Environment.
-    # Avoid unnecessary human approval here; secrets and OIDC remain guarded
-    # in sync-auth0-preview and auth0-e2e below.
+    # Read-only Vercel status lookup: never use the secret-bearing Preview Environment.
+    # The protected Preview environment remains mandatory for Auth0 sync and E2E.
     permissions:
       contents: read
       statuses: read
@@ -203,7 +202,6 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
           E2E_DEPLOYMENT_HOST: ${{ needs.preview-deployment.outputs.preview_host }}
           VERCEL_TEAM_SLUG: aoa4
           VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
