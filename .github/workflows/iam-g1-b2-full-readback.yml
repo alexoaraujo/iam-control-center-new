@@ -1,0 +1,68 @@
+name: IAM G1 B2 full ciphertext readback (manual, read only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-g1-b2-full-ciphertext-readback
+  cancel-in-progress: false
+
+jobs:
+  preflight-environment:
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout without persistent token
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Reject missing or unprotected B2 full readback Environment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/iam-g1-b2-full-readback.py --attest-env
+      - name: Offline negative scope and checksum regressions
+        run: |
+          set -euo pipefail
+          python3 .github/tests/test-iam-g1-b2-full-readback.py -v
+
+  full-ciphertext-readback:
+    needs: preflight-environment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: IAM-G1-B2-Full-Readback-Custody
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout approved main SHA without persistent credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Verify approved object SHA, scope and independent B2 readback
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA }}
+          IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY }}
+          IAM_G1_B2_FULL_READBACK_APPROVED_SHA256: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_SHA256 }}
+          IAM_G1_B2_FULL_READBACK_APPROVED_SIZE_BYTES: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_SIZE_BYTES }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.IAM_G1_B2_FULL_READ_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.IAM_G1_B2_FULL_READ_SECRET_ACCESS_KEY }}
+          AWS_EC2_METADATA_DISABLED: 'true'
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 scripts/iam-g1-b2-full-readback.py --check
+          python3 -m venv "$RUNNER_TEMP/iam-g1-full-readback-venv"
+          "$RUNNER_TEMP/iam-g1-full-readback-venv/bin/python" -m pip install --disable-pip-version-check --quiet 'boto3>=1.35,<2'
+          "$RUNNER_TEMP/iam-g1-full-readback-venv/bin/python" scripts/iam-g1-b2-full-readback.py --readback
