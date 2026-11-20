@@ -162,6 +162,26 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   await page.reload();
   await expect(page.getByRole("status")).toHaveText("Acesso autenticado confirmado.");
 
+  // PR128 G3 staged runtime proof: an Auth0 login PASS alone could hide a
+  // missing/invalid DB URL or a Preview deployment built before its branch-
+  // scoped Neon configuration. This read-only health probe must reach Postgres
+  // in the same verified Preview deployment; it grants no tenant permissions.
+  if (process.env.E2E_CALLBACK_BRANCH === "integration/peos-single-maintainer-bun-20261117") {
+    const databaseProbe = await page.evaluate(async () => {
+      const response = await fetch("/api/health/database", {
+        credentials: "same-origin", cache: "no-store",
+      });
+      return {
+        status: response.status, body: await response.json(),
+        cache: response.headers.get("cache-control"),
+      };
+    });
+    expect(databaseProbe, "PR128 runtime must reach its branch-only Neon fixture").toEqual({
+      status: 200, body: { ok: true, database: "reachable" }, cache: "no-store",
+    });
+    console.log("PASS_PR128_DISPOSABLE_NEON_DATABASE_REACHABLE");
+  }
+
   // PR #42: positive Auth0 -> Neon sync runs only on the isolated Preview.
   if (process.env.E2E_IDENTITY_SYNC === "true") {
     const postSync = () => page.evaluate(async () => {
