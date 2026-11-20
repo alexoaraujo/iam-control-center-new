@@ -88,7 +88,11 @@ manifest AS (
       'kind', p.prokind, 'language', l.lanname,
       'return_type', pg_get_function_result(p.oid),
       'owner', pg_get_userbyid(p.proowner),
-      'security_definer', p.prosecdef, 'volatility', p.provolatile,
+      'security_definer', p.prosecdef,
+      'definition_sha256', CASE WHEN p.prokind IN ('f','p','w') THEN
+         encode(sha256(convert_to(pg_get_functiondef(p.oid),'UTF8')),'hex')
+         ELSE NULL END,
+      'volatility', p.provolatile,
       'parallel', p.proparallel, 'configuration', p.proconfig,
       'definition_included', false
     ) ORDER BY n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)), '[]'::jsonb)
