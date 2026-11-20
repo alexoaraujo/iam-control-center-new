@@ -7,7 +7,7 @@ never receives an owner credential, nor does it read environment secrets.
 import json
 import os
 import sys
-from urllib import request
+from urllib import request, error
 
 REPO = "alexoaraujo/iam-control-center-new"
 NAME = "IAM-G3-PR128-Disposable-RBAC"
@@ -81,6 +81,9 @@ def query(url, token):
     try:
         with request.urlopen(req, timeout=15) as response:
             return json.loads(response.read(524288).decode("utf-8"))
+    except error.HTTPError as exc:
+        # Status code only; NEVER include response body, auth headers or URL.
+        raise PolicyBlocked("G3_ENV_API_HTTP_" + str(exc.code)) from None
     except (OSError, ValueError, UnicodeError):
         raise PolicyBlocked("G3_ENV_API_READ_UNAVAILABLE") from None
 
@@ -90,10 +93,17 @@ def run(repo, token):
         raise PolicyBlocked("G3_ENV_UNEXPECTED_REPO")
     if not token:
         raise PolicyBlocked("G3_ENV_TOKEN_MISSING")
-    metadata = query(ROOT, token)
-    policies = query(ROOT + "/deployment-branch-policies?per_page=100", token)
-    custom = query(ROOT + "/deployment_protection_rules", token)
-    names = verify_g3(metadata, policies, custom)
+    evidence = {}
+    for stage, url in (
+        ("METADATA", ROOT),
+        ("BRANCH_POLICIES", ROOT + "/deployment-branch-policies?per_page=100"),
+        ("CUSTOM_RULES", ROOT + "/deployment_protection_rules"),
+    ):
+        try:
+            evidence[stage] = query(url, token)
+        except PolicyBlocked as exc:
+            raise PolicyBlocked("G3_ENV_" + stage + "_" + str(exc)) from None
+    names = verify_g3(evidence["METADATA"], evidence["BRANCH_POLICIES"], evidence["CUSTOM_RULES"])
     print("PASS_G3_ENV_EFFECTIVE_PROTECTION " + NAME)
     print("G3_ENV_ALLOWED_REFS " + json.dumps(names, separators=(",", ":")))
     print("G3_ENV_SECRET_NAME_AND_VALUE=NOT_ATTESTED")
