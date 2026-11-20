@@ -9,6 +9,7 @@ const ID = {
   expiresAt: "2026-11-20T01:30:00Z",
   host: "ep-broad-bonus-b6c5jc2y.c-2.sa-east-1.aws.neon.tech",
   tenant: "f65d8f1e-bcd4-4d68-927b-a8b64cda0c41",
+  tenantB: "22222222-2222-4222-8222-222222222222",
   identity: "c7d196ad-4e1a-498c-b4ae-3e4d0ef2a041",
   membership: "c7d196ad-4e1a-498c-b4ae-3e4d0ef2a042",
   role: "c7d196ad-4e1a-498c-b4ae-3e4d0ef2a043",
@@ -17,6 +18,7 @@ const ID = {
 };
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const countsQuery = "SELECT (SELECT count(*)::int FROM iam.tenants WHERE id=$1::uuid) tenants, "
+  + "(SELECT count(*)::int FROM iam.tenants WHERE id=$5::uuid) tenants_b, "
   + "(SELECT count(*)::int FROM iam.identities WHERE id=$2::uuid) identities, "
   + "(SELECT count(*)::int FROM iam.memberships WHERE id=$3::uuid) memberships, "
   + "(SELECT count(*)::int FROM iam.roles WHERE id=$4::uuid) roles, "
@@ -24,8 +26,8 @@ const countsQuery = "SELECT (SELECT count(*)::int FROM iam.tenants WHERE id=$1::
   + "(SELECT count(*)::int FROM iam.role_permissions WHERE tenant_id=$1::uuid AND role_id=$4::uuid) role_permissions, "
   + "(SELECT count(*)::int FROM app_private.context_keys WHERE active) active_keys, "
   + "(SELECT count(*)::int FROM iam.schema_migrations) ledger_rows";
-const countKeys = ["tenants", "identities", "memberships", "roles", "membership_roles", "role_permissions"];
-const counts = async (sql) => (await sql.query(countsQuery, [ID.tenant, ID.identity, ID.membership, ID.role]))[0];
+const countKeys = ["tenants", "tenants_b", "identities", "memberships", "roles", "membership_roles", "role_permissions"];
+const counts = async (sql) => (await sql.query(countsQuery, [ID.tenant, ID.identity, ID.membership, ID.role, ID.tenantB]))[0];
 const zero = (result) => countKeys.every((key) => result[key] === 0);
 async function connect() {
   // Check the pinned Neon clone TTL before any secret, connection, or DML.
@@ -80,6 +82,7 @@ async function owner(sql, queries) { return sql.transaction([q(sql,"SET LOCAL RO
 async function create(sql, subject) {
   await owner(sql, [
     q(sql,"INSERT INTO iam.tenants(id,slug,display_name) VALUES($1::uuid,'peos-auth0-http-41','PEOS disposable RBAC HTTP gate')",[ID.tenant]),
+    q(sql,"INSERT INTO iam.tenants(id,slug,display_name) VALUES($1::uuid,'peos-auth0-http-41-b','PEOS disposable RBAC tenant B')",[ID.tenantB]),
     q(sql,"INSERT INTO iam.identities(id,issuer,subject,status) VALUES($1::uuid,$2,$3,'active')",[ID.identity,ID.issuer,subject]),
     q(sql,"INSERT INTO iam.memberships(id,tenant_id,identity_id,status,joined_at) VALUES($1::uuid,$2::uuid,$3::uuid,'active',clock_timestamp())",[ID.membership,ID.tenant,ID.identity]),
     q(sql,"INSERT INTO iam.roles(id,tenant_id,role_key,display_name) VALUES($1::uuid,$2::uuid,'peos_auth0_41','PEOS temporary RBAC reader')",[ID.role,ID.tenant]),
@@ -102,21 +105,22 @@ async function cleanup(sql) {
     q(sql,"DELETE FROM iam.memberships WHERE id=$1::uuid AND tenant_id=$2::uuid AND identity_id=$3::uuid",[ID.membership,ID.tenant,ID.identity]),
     q(sql,"DELETE FROM iam.identities WHERE id=$1::uuid AND issuer=$2",[ID.identity,ID.issuer]),
     q(sql,"DELETE FROM iam.tenants WHERE id=$1::uuid",[ID.tenant]),
+    q(sql,"DELETE FROM iam.tenants WHERE id=$1::uuid",[ID.tenantB]),
   ]);
   const result=await counts(sql);
   check(zero(result) && result.active_keys===1 && result.ledger_rows===0,
     "FAIL cleanup: fixture residue or protected key/ledger baseline changed");
-  console.log("PASS cleanup: tenants=0, identities=0, memberships=0, roles=0, grants=0, role_permissions=0; key=1; ledger=0");
+  console.log("PASS cleanup: tenants A/B=0, identities=0, memberships=0, roles=0, grants=0, role_permissions=0; key=1; ledger=0");
 }
-async function checkHttp(page) {
-  return page.evaluate(async ({ tenantId,identityId })=>{
+async function checkHttp(page, selectors = {}) {
+  const {tenantId=ID.tenant, identityId=ID.identity, permission="iam.tenant.read"} = selectors;
+  return page.evaluate(async (context)=>{
     const response=await fetch("/api/authorization/check",{
       method:"POST",headers:{"Content-Type":"application/json"},
-      credentials:"same-origin",cache:"no-store",
-      body:JSON.stringify({tenantId,identityId,permission:"iam.tenant.read"}),
+      credentials:"same-origin",cache:"no-store",body:JSON.stringify(context),
     });
     return {status:response.status,body:await response.json(),cache:response.headers.get("cache-control")};
-  },{tenantId:ID.tenant,identityId:ID.identity});
+  },{tenantId,identityId,permission});
 }
 
 test("RBAC HTTP 200 grant -> 403 revoke, real Auth0, disposable Neon, zero residue",async({page})=>{
@@ -170,6 +174,18 @@ test("RBAC HTTP 200 grant -> 403 revoke, real Auth0, disposable Neon, zero resid
     const yes=await checkHttp(page);
     expect(yes).toEqual({status:200,body:{allowed:true},cache:"no-store"});
     console.log("PASS: POST /api/authorization/check HTTP 200 with real Auth0 grant");
+    // Tenant B exists but this identity belongs only to tenant A. Deny
+    // cross-tenant, unknown identity and ungranted permission BEFORE revoke.
+    for (const [label,selectors] of [
+      ["cross-tenant-B", {tenantId:ID.tenantB}],
+      ["cross-identity", {identityId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}],
+      ["ungranted-permission", {permission:"iam.tenant.manage"}],
+    ]) {
+      const denied=await checkHttp(page,selectors);
+      expect(denied, label+" must be denied during an active tenant A grant")
+        .toEqual({status:403,body:{allowed:false},cache:"no-store"});
+    }
+    console.log("PASS: tenant B, cross-identity and ungranted-permission HTTP 403 while tenant A grant active");
     await revoke(sql);
     const no=await checkHttp(page);
     expect(no).toEqual({status:403,body:{allowed:false},cache:"no-store"});

@@ -137,3 +137,6 @@ node --test database/offline/compare-schema-manifests.test.mjs
 
 # Migration ledger provenance is checked against synthetic metadata only.
 node --test database/offline/compare-migration-ledgers.test.mjs
+
+# G2 canonical drift regression uses synthetic fixtures only; no live Neon access.
+node --test database/offline/g2-canonical-drift-contract.test.mjs
