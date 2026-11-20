@@ -2,6 +2,7 @@
 """Offline/safe read-only PEOS Environment approval status (no secret retrieval)."""
 import json
 import os
+import re
 import sys
 from urllib import request, error
 
@@ -13,10 +14,65 @@ ENVIRONMENTS = (
 )
 ROOT = f"https://api.github.com/repos/{REPO}/environments"
 
+# Policy for privileged Environments is fixed by trusted workflow refs, not
+# inferred from a boolean API flag. Preview can use only explicit PR merge
+# refs or the two reviewed integration branches; wildcard patterns are denied.
+EXACT_BRANCHES = {
+    "IAM-Canonical-Isolated-Restore": "main",
+    "Neon-PR-Lifecycle": "main",
+    "IAM-Audit-Development": "feat/auth0-neon-identity-sync-20261111",
+    "IAM-G1-Backup-Custody": "main",
+    "IAM-G1-Disposable-Lease-Revocation": "main",
+    "IAM-G1-Disposable-Lease-Probe": "audit/iam-g1-lease-schema-probe-20261115",
+}
+PREVIEW_BRANCHES = {
+    "main",
+    "integration/peos-single-maintainer-bun-20261117",
+    "integration/peos-g1-g2-canonical-bun-20261118",
+    "docs/peos-g1-iam-sync-runbook-20261114",
+}
+PREVIEW_PR_REF = re.compile(r"refs/pull/[1-9][0-9]*/merge\Z")
+
+def verify_branch_policies(name, environment, policies):
+    branch = environment.get("deployment_branch_policy")
+    if not isinstance(branch, dict) or (
+        branch.get("protected_branches") is not False or
+        branch.get("custom_branch_policies") is not True
+    ):
+        raise Blocked("CUSTOM_BRANCH_RESTRICTIONS_NOT_ATTESTED")
+    if not isinstance(policies, dict):
+        raise Blocked("DEPLOYMENT_BRANCH_POLICIES_MISSING")
+    items = policies.get("branch_policies")
+    count = policies.get("total_count")
+    # per_page=100; never certify a partial/ambiguous read or page truncation.
+    if (type(count) is not int or not isinstance(items, list) or
+            count != len(items) or not 1 <= count <= 100):
+        raise Blocked("DEPLOYMENT_BRANCH_POLICY_COUNT_UNVERIFIED")
+    names = []
+    for item in items:
+        if not isinstance(item, dict) or item.get("type") != "branch":
+            raise Blocked("DEPLOYMENT_BRANCH_POLICY_TYPE_INVALID")
+        branch_name = item.get("name")
+        if not isinstance(branch_name, str) or not branch_name:
+            raise Blocked("DEPLOYMENT_BRANCH_POLICY_NAME_INVALID")
+        if name == "Preview":
+            if branch_name not in PREVIEW_BRANCHES and not PREVIEW_PR_REF.fullmatch(branch_name):
+                raise Blocked("PREVIEW_BRANCH_NOT_ALLOWLISTED")
+        elif branch_name != EXACT_BRANCHES.get(name):
+            raise Blocked("PRIVILEGED_BRANCH_NOT_ALLOWLISTED")
+        names.append(branch_name)
+    if len(names) != len(set(names)):
+        raise Blocked("DUPLICATE_DEPLOYMENT_BRANCH_POLICY")
+    if name == "Preview":
+        if "main" not in names:
+            raise Blocked("PREVIEW_MAIN_BRANCH_NOT_PRESENT")
+    elif names != [EXACT_BRANCHES[name]]:
+        raise Blocked("PRIVILEGED_BRANCH_POLICY_NOT_EXACT")
+
 class Blocked(RuntimeError):
     pass
 
-def verify(name, environment, custom):
+def verify(name, environment, custom, policies):
     if name not in ENVIRONMENTS or not isinstance(environment, dict) or environment.get("name") != name:
         raise Blocked("UNTRUSTED_ENVIRONMENT")
     rules = environment.get("protection_rules")
@@ -30,11 +86,7 @@ def verify(name, environment, custom):
         raise Blocked("WAIT_TIMER_ACTIVE")
     if environment.get("can_admins_bypass") is not False:
         raise Blocked("ADMIN_BYPASS_NOT_DISABLED")
-    branch = environment.get("deployment_branch_policy")
-    if not isinstance(branch, dict) or not (
-        branch.get("protected_branches") is True or branch.get("custom_branch_policies") is True
-    ):
-        raise Blocked("BRANCH_RESTRICTIONS_NOT_ATTESTED")
+    verify_branch_policies(name, environment, policies)
     if not isinstance(custom, dict) or custom.get("total_count") != 0 or custom.get("custom_deployment_protection_rules") != []:
         raise Blocked("CUSTOM_DEPLOYMENT_RULE_NOT_EMPTY")
 
@@ -65,7 +117,8 @@ def main():
     for name in ENVIRONMENTS:
         try:
             verify(name, api("/" + name, token),
-                   api("/" + name + "/deployment_protection_rules", token))
+                   api("/" + name + "/deployment_protection_rules", token),
+                   api("/" + name + "/deployment-branch-policies?per_page=100", token))
             print("PASS_PE0S_ENV_NO_HUMAN_APPROVAL " + name)
         except Blocked as exc:
             failures += 1
