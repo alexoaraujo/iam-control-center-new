@@ -5,11 +5,24 @@ import { test } from "node:test";
 const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
 const e2e = readFileSync(".github/e2e/auth0.spec.cjs", "utf8");
 const repository = "alexoaraujo/iam-control-center-new";
-const currentAlias = "iam-control-center-new-ci-preview.vercel.app";
+import { approvedCallback } from "./bind-e2e-preview.mjs";
 test("Auth0 Preview callback is resolved from live Vercel binding for every PR", () => {
-  assert.ok(workflow.includes("iam-control-center-new-ci-preview.vercel.app"));
+  assert.equal(approvedCallback("integration/peos-g1-g2-canonical-bun-20261118"), "iam-control-center-new-ci-preview.vercel.app");
+  assert.equal(approvedCallback("feat/iam-g1-b2-readback-independent-gate"), "iam-control-center-new-pr101-ci.vercel.app");
+  assert.equal(approvedCallback("ops/g1-full-recovery-preflight-20261118"), "iam-control-center-new-pr134-ci.vercel.app");
+  assert.equal(approvedCallback("ops/g1-disposable-ttl-contract-20261119"), "iam-control-center-new-pr135-ci.vercel.app");
+  assert.equal(approvedCallback("fix/g1-env-readonly-solo-metadata-20261119"), "iam-control-center-new-pr136-ci.vercel.app");
+  assert.equal(approvedCallback("fix/g1-recovery-preflight-safety-20261119"), "iam-control-center-new-g1-recovery-safety-ci.vercel.app");
+  assert.equal(approvedCallback("fix/g1-b2-full-ciphertext-readback-20261119"), "iam-control-center-new-g1-readback-ci.vercel.app");
+  assert.equal(approvedCallback("fix/g1-b2-env-api-diagnostics-20261119"), "iam-control-center-new-g1-env-diagnostic-ci.vercel.app");
+  assert.equal(approvedCallback("feat/g1-b2-encrypted-full-backup-writer-20261119"), "iam-control-center-new-g1-backup-writer-ci.vercel.app");
+  assert.equal(approvedCallback("fix/g1-b2-four-environments-readonly-preflight-20261119"), "iam-control-center-new-pr141-ci.vercel.app");
   assert.ok(workflow.includes("VERCEL_API_TOKEN"));
   assert.ok(workflow.includes("node scripts/bind-e2e-preview.mjs"));
+  assert.ok(workflow.includes("node scripts/verify-preview-alias.mjs"));
+  assert.ok(workflow.includes("AUTH0_E2E_EXPECTED_SUB_SHA256:"));
+  assert.ok(workflow.includes("AUTH0_E2E_SESSION_ABSOLUTE_SECONDS:"));
+  assert.ok(!workflow.includes("E2E_CALLBACK_BRANCH: feat/iam-api-rbac-lineage-20261110"));
   assert.ok(workflow.includes("PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}"));
   assert.ok(!workflow.includes("ci/optimize-pr-checks-20261110"));
 });
@@ -38,4 +51,33 @@ test("Obsolete repository and callback host cannot return unnoticed", () => {
     assert.ok(!source.includes("iam-control-center-preview.vercel.app"));
     assert.ok(!source.includes("fix/bind-preview-e2e-deployment"));
   }
+});
+
+test("uses live Vercel domain and branch-scoped variables before credentialed Auth0 E2E", () => {
+ assert.ok(workflow.includes("sync-auth0-preview:"));
+ assert.ok(workflow.includes("node scripts/sync-auth0-e2e-preview.mjs"));
+ assert.ok(workflow.includes("needs.sync-auth0-preview.outputs.auth0_ready == 'true'"));
+ assert.ok(workflow.includes("needs.sync-auth0-preview.outputs.callback_host"));
+ assert.ok(workflow.includes("needs.sync-auth0-preview.outputs.app_base_url"));
+ assert.ok(workflow.includes("needs.sync-auth0-preview.outputs.auth0_domain"));
+ assert.ok(workflow.includes("PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}"));
+ assert.ok(workflow.includes("PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}"));
+});
+
+test("never syncs protected Vercel variables from a forked pull request", () => {
+ assert.ok(workflow.includes("github.event.pull_request.head.repo.full_name == github.repository"));
+ assert.ok(workflow.includes("scope: ${{ steps.sync.outputs.scope }}"));
+});
+
+test("preflight has no self-dependency and E2E is gated by verified preflight output", () => {
+ const sync = workflow.split("\n  sync-auth0-preview:\n")[1]?.split("\n  auth0-e2e:\n")[0];
+ const e2e = workflow.split("\n  auth0-e2e:\n")[1];
+ assert.ok(sync && e2e, "both jobs must exist");
+ const syncIf = sync.match(/^    if: (.+)$/m)?.[1];
+ const e2eIf = e2e.match(/^    if: (.+)$/m)?.[1];
+ assert.ok(syncIf?.includes("needs.quality.outputs.preview_required == 'true'"));
+ assert.ok(syncIf?.includes("github.event.pull_request.head.repo.full_name == github.repository"));
+ assert.ok(!syncIf?.includes("needs.sync-auth0-preview"), "job cannot reference its own outputs");
+ assert.ok(e2eIf?.includes("needs.sync-auth0-preview.outputs.auth0_ready == 'true'"));
+ assert.ok(!e2eIf?.includes("github.event.pull_request.head.repo.full_name == github.repository") || e2e.includes("sync-auth0-preview"), "E2E requires verified preflight");
 });

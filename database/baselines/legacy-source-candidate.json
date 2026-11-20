@@ -1,0 +1,57 @@
+{
+  "format": "iam-source-baseline-candidate/v1",
+  "status": "REVIEW_CANDIDATE",
+  "approved_for_migration": false,
+  "source": {
+    "project_id": "twilight-fire-88497009",
+    "branch_id": "br-little-fire-b6adup9f",
+    "database": "iam_database",
+    "git_repository": "alexoaraujo/iam-control-center-new",
+    "pinned_main_sha": "e95b938c889c3d2d45f056f946f2351df68b7823",
+    "dump_path": "iam_database_schema.sql",
+    "git_blob_sha1": "1920b7946c88e624ec224917dc0f7742d2174904",
+    "sha256": "4baea93fcbc157b93e62259f32f2439c19c0c53489d2df06de220eec890632cb",
+    "byte_length": 87885,
+    "pg_major": 18
+  },
+  "restore_evidence": {
+    "tables": 23,
+    "policies": 41,
+    "force_rls_tables": 20,
+    "views": 1,
+    "app_routines": 9,
+    "pg_major": 18,
+    "scope": "disposable PostgreSQL 18 CI; ownership/provider ACL differences require review"
+  },
+  "legacy_ledger": {
+    "migration_id": "0001_context_key_hardening",
+    "source_sha": "b80c98c51746e1d49039015eb649b9bdd735ef7f",
+    "checksum_sha256": "2447395628fa0f1230abd95eb522e5b45d1baea1208c9c21b20346a10718fbab",
+    "adopt_without_execution": false
+  },
+  "known_deltas": [
+    {
+      "object": "iam.set_tenant_context",
+      "legacy_search_path": "pg_catalog, app_private, iam, public",
+      "new_development_search_path": "pg_catalog, app_private, iam",
+      "decision": "HARDENING_APPROVED_AS_TARGET_NOT_MIGRATED"
+    },
+    {
+      "object": "provider_roles_acls",
+      "decision": "SEPARATE_PROVISIONING_CONTRACT"
+    },
+    {
+      "object": "new_neon_development_ledger",
+      "rows": 0,
+      "decision": "DO_NOT_FABRICATE_LEGACY_LEDGER"
+    }
+  ],
+  "requires_approval": [
+    "independent_source_export_attestation",
+    "routine_body_and_owner_acl_review",
+    "migration_lineage_dag",
+    "runtime_role_and_hmac_key_contract",
+    "backup_restore_pitr_evidence",
+    "independent_approver_and_release_gate"
+  ]
+}

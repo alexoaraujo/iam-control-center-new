@@ -1,8 +1,10 @@
 import { requireSession } from "../lib/session";
+import { getReleaseSnapshot } from "../lib/github-release";
 import { navigation, Status, SectionHeading } from "../components/dashboard/presentation";
 
 export default async function HomePage() {
   await requireSession("/");
+  const github = await getReleaseSnapshot();
 
   return (
     <main className="app-shell">
@@ -139,6 +141,22 @@ export default async function HomePage() {
               <div><strong>Neon</strong><span>PostgreSQL gerenciado</span><small>Cliente server-only existente; factory não comprova conexão nem query.</small><Status tone="warning">RUNTIME NÃO VALIDADO</Status></div>
               <div><strong>GitHub</strong><span>Repositório e CI/CD</span><small>Checks devem ser associados ao SHA exato.</small><Status tone="neutral">CONSULTA NÃO AUTOMATIZADA</Status></div>
               <div><strong>Vercel</strong><span>Hospedagem e Preview</span><small>Deployment e proteção devem ser verificados separadamente.</small><Status tone="warning">PROTEÇÃO PENDENTE</Status></div>
+            </div>
+          </section>
+
+          <section className="panel-card" aria-labelledby="github-release-heading">
+            <div className="panel-title">
+              <div><span className="eyebrow">LIVE GITHUB SOURCE · READ ONLY</span><h3 id="github-release-heading">Evidência de integração e CI</h3><p>Coleta server-side sem token, vinculada ao último workflow CI da main. Não constitui aprovação de release.</p></div>
+              <Status tone={github.ci === "success" ? "success" : "warning"}>{github.error ? "FONTE INDISPONÍVEL" : github.ci === "success" ? "CI SUCCESS" : github.ci === "failure" ? "CI FAILURE" : "CI PENDENTE"}</Status>
+            </div>
+            <div className="three-column">
+              <div className="mini-control"><span>MAIN · WORKFLOW CI</span><strong>{github.mainSha ? github.mainSha.slice(0, 12) : "Não verificado"}</strong><p>SHA reportado pela API pública do GitHub.</p></div>
+              <div className="mini-control"><span>PULL REQUESTS ABERTAS</span><strong>{github.openPullRequests ?? "Não verificado"}</strong><p>Amostra da primeira página, limitada a 100 PRs.</p></div>
+              <div className="mini-control"><span>ÚLTIMA CONSULTA</span><strong>{github.error ? "Indisponível" : "Fonte consultada"}</strong><p><time dateTime={github.observedAt}>{github.observedAt}</time></p></div>
+            </div>
+            <div className="section-status">
+              <Status tone="warning">PRODUCTION GATE NÃO AVALIADO</Status>
+              <span>{github.runUrl ? <a href={github.runUrl} target="_blank" rel="noopener noreferrer">Consultar execução CI no GitHub ↗</a> : "Sem link de execução verificado"}</span>
             </div>
           </section>
 
