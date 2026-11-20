@@ -25,6 +25,20 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   const context = page.context();
   const cdp = await context.newCDPSession(page);
   const trustedHeader = "x-vercel-trusted-oidc-idp-token";
+  let authorizeHttpStatus = null;
+  // Record only the HTTP status of the Auth0 authorization endpoint, never
+  // its URL query, transaction state, code, cookies, token or response body.
+  await cdp.send("Network.enable");
+  cdp.on("Network.responseReceived", ({ response }) => {
+    try {
+      const url = new URL(response.url);
+      if (url.hostname === "iam-control-center.us.auth0.com" && url.pathname === "/authorize") {
+        authorizeHttpStatus = response.status;
+      }
+    } catch {
+      // Invalid URLs cannot establish any trust or bypass this test.
+    }
+  });
 
   // CDP Fetch pauses every network request, including redirect hops. Playwright
   // route.continue() only modified the first request in the chain, leaving the
@@ -97,7 +111,34 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
   await expect(page).toHaveURL(/auth0\.com/);
 
   const identifier = page.locator('input[name="username"], input[name="email"]').first();
-  await expect(identifier).toBeVisible();
+  try {
+    // This is a network-rendered Auth0 login page; 5s causes false failures
+    // when the IdP is slow. Never skip credentialed login or accept an error UI.
+    await expect(identifier).toBeVisible({ timeout: 20000 });
+  } catch (error) {
+    // Host/path only: never print auth code, state, query, cookies or user info.
+    const current = new URL(page.url());
+    // Known public Auth0 error classes only; don't log page text, title or
+    // sensitive callback /authorize query parameters.
+    let hints = { callbackMismatch: false, rateLimited: false, challenge: false, loginUi: false };
+    try {
+      hints = await page.evaluate(() => {
+        const text = (document.body?.innerText || "").toLowerCase();
+        return {
+          callbackMismatch: /callback url mismatch|invalid redirect_uri|redirect uri is not allowed|unauthorized redirect|callback url not allowed/.test(text),
+          rateLimited: /too many requests|rate limit|temporarily unavailable|slow down/.test(text),
+          challenge: /captcha|verify you are human|additional verification/.test(text),
+          loginUi: !!document.querySelector('input[name="username"], input[name="email"]'),
+        };
+      });
+    } catch {
+      // A navigation or sandboxed error page is also a failing login.
+    }
+    console.error(
+      `BLOCKED_AUTH0_LOGIN_IDENTIFIER_NOT_VISIBLE: host=${current.hostname}; path=${current.pathname}; authorize_http=${authorizeHttpStatus ?? "unknown"}; hints=${JSON.stringify(hints)}`
+    );
+    throw error;
+  }
   await identifier.fill(username);
 
   const passwordInput = page.locator('input[name="password"]');
