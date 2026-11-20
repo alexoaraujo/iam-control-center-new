@@ -91,7 +91,10 @@ describe("trusted server-only authorization", () => {
   it("uses a fresh secret nonce for every check and never lets a browser choose a signature", async () => {
     await checkPermission("auth0|subject-a", tenantId, identityId, "iam.tenant.read");
     await checkPermission("auth0|subject-a", tenantId, identityId, "iam.tenant.read");
-    const calls = transaction.mock.calls.map(([build]) => build(fakeTaggedSql)[0].params);
+    const calls = transaction.mock.calls.map((args: unknown[]) => {
+      const build = args[0] as (sql: typeof fakeTaggedSql) => ReturnType<typeof fakeTaggedSql>[];
+      return build(fakeTaggedSql)[0].params;
+    });
     expect(calls[0][3]).not.toBe(calls[1][3]);
     expect(calls[0][4]).not.toBe(calls[1][4]);
   });
