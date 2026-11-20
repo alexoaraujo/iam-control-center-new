@@ -1,0 +1,144 @@
+name: IAM G1 PostgreSQL18 encrypted full backup to B2 (manual, guarded)
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "No-credential metadata-only preflight, or protected full-data backup"
+        required: true
+        type: choice
+        default: preflight_only
+        options:
+          - preflight_only
+          - backup_full
+      confirmation:
+        description: "Select authorization for encrypted full-data upload; NO_BACKUP for preflight"
+        required: true
+        type: choice
+        default: NO_BACKUP
+        options:
+          - NO_BACKUP
+          - EXPORT_ENCRYPT_UPLOAD_G1_FULL_BACKUP
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-g1-full-backup-writer-main-only
+  cancel-in-progress: false
+
+jobs:
+  verify-custody-no-secrets:
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Fail closed on contradictory operation/confirmation
+        env:
+          OPERATION: ${{ inputs.operation }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$OPERATION" == "backup_full" ]]; then
+            if [[ "$CONFIRMATION" != "EXPORT_ENCRYPT_UPLOAD_G1_FULL_BACKUP" ]]; then
+              echo "::error title=Invalid backup confirmation::backup_full requires EXPORT_ENCRYPT_UPLOAD_G1_FULL_BACKUP" >&2
+              exit 2
+            fi
+          elif [[ "$OPERATION" == "preflight_only" && "$CONFIRMATION" == "NO_BACKUP" ]]; then
+            echo "PASS_G1_WRITER_PREFLIGHT_DISPATCH_PAIR"
+          else
+            echo "::error title=Invalid preflight confirmation::preflight_only requires NO_BACKUP" >&2
+            exit 2
+          fi
+      - name: Install offline encryption tests (no custody secrets)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/g1-writer-test-venv"
+          "$RUNNER_TEMP/g1-writer-test-venv/bin/python" -m pip install \
+            --disable-pip-version-check --quiet 'cryptography>=44,<47'
+          "$RUNNER_TEMP/g1-writer-test-venv/bin/python" \
+            .github/tests/test-iam-g1-b2-full-backup-writer.py -v
+          python3 database/tests/test-iam-g1-full-recovery-preflight.py -v
+      - name: Attest exact-main-only GitHub custody Environment; no B2 or Neon
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/iam-g1-b2-full-backup-writer.py --attest-env
+          echo "G1_FULL_BACKUP_RESTORE=NOT_ATTESTED" >> "$GITHUB_STEP_SUMMARY"
+
+  encrypt-and-upload-full-archive:
+    needs: verify-custody-no-secrets
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/main' && inputs.operation == 'backup_full' && inputs.confirmation == 'EXPORT_ENCRYPT_UPLOAD_G1_FULL_BACKUP'
+    environment:
+      name: IAM-G1-Full-Backup-Custody
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      IAM_G1_FULL_BACKUP_APPROVED_SHA: ${{ vars.IAM_G1_FULL_BACKUP_APPROVED_SHA }}
+      IAM_G1_ENCRYPTION_KEY_ESCROW_ATTESTATION: ${{ vars.IAM_G1_ENCRYPTION_KEY_ESCROW_ATTESTATION }}
+      IAM_G1_FULL_BACKUP_CONFIRMATION: ${{ inputs.confirmation }}
+      IAM_G1_B2_BUCKET: iam-control-center-g1-backups
+      IAM_G1_B2_ENDPOINT: https://s3.us-east-005.backblazeb2.com
+      IAM_G1_B2_REGION: us-east-005
+      IAM_G1_B2_OBJECT_PREFIX: iam-g1/full-backups/
+      IAM_G1_FULL_BACKUP_SOURCE_URL: ${{ secrets.IAM_G1_FULL_BACKUP_SOURCE_URL }}
+      IAM_G1_AES256_GCM_KEY_B64: ${{ secrets.IAM_G1_AES256_GCM_KEY_B64 }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.IAM_G1_B2_FULL_WRITER_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.IAM_G1_B2_FULL_WRITER_SECRET_ACCESS_KEY }}
+      AWS_EC2_METADATA_DISABLED: 'true'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Validate source URL TLS, main SHA, key and custody BEFORE PG/B2
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 scripts/iam-g1-b2-full-backup-writer.py --check
+          python3 scripts/iam-g1-b2-full-backup-writer.py --attest-env
+      - name: Verify B2 writer key least privileges BEFORE building PG18
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 scripts/iam-g1-b2-full-backup-writer.py --check-native-b2; then
+            {
+              echo "### G1 B2 writer authorization failed — no dump or upload"
+              echo "The dedicated writer key must be limited to bucket \`iam-control-center-g1-backups\`, prefix \`iam-g1/full-backups/\`, capability \`writeFiles\` (optionally \`listBuckets\`)."
+              echo "Do not allow \`readFiles\`, \`deleteFiles\`, administrative capabilities or a broader prefix."
+              echo "Verify that the B2 account is active, rotate any exposed key, and retry only after its native authorization succeeds."
+              echo "G1_FULL_BACKUP_RESTORE=NOT_ATTESTED"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 2
+          fi
+      - name: Build PostgreSQL 18 client with system CA roots
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull -f database/tests/fixtures/pg18-system-ca.Dockerfile \
+            -t iam-pg18-system-ca:local database/tests/fixtures
+          docker run --rm --entrypoint sh iam-pg18-system-ca:local \
+            -ec 'test -s /etc/ssl/certs/ca-certificates.crt; test "$SSL_CERT_FILE" = /etc/ssl/certs/ca-certificates.crt'
+      - name: Stream entire pg_dump to AES-256-GCM, upload ciphertext to B2
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -m venv "$RUNNER_TEMP/g1-writer-venv"
+          "$RUNNER_TEMP/g1-writer-venv/bin/python" -m pip install \
+            --disable-pip-version-check --quiet 'cryptography>=44,<47' 'boto3>=1.35,<2'
+          "$RUNNER_TEMP/g1-writer-venv/bin/python" \
+            scripts/iam-g1-b2-full-backup-writer.py --execute
