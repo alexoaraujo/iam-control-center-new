@@ -1,0 +1,40 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**",
+      "!!**/.next",
+      "!!**/out",
+      "!!**/build",
+      "!!**/coverage",
+      "!**/next-env.d.ts"
+    ]
+  },
+  "formatter": {
+    "enabled": false
+  },
+  "assist": {
+    "enabled": false
+  },
+  "linter": {
+    "enabled": true,
+    "domains": {
+      "react": "recommended",
+      "next": "recommended"
+    },
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        "useHookAtTopLevel": "error",
+        "useExhaustiveDependencies": "error"
+      },
+      "performance": {
+        "noImgElement": "error"
+      },
+      "a11y": {
+        "noStaticElementInteractions": "error"
+      }
+    }
+  }
+}
