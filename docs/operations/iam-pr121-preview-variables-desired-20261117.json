@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "status": "PROPOSED_NOT_APPLIED",
+  "requiresIndependentOperationalApproval": true,
+  "repo": "alexoaraujo/iam-control-center-new",
+  "pr": 121,
+  "sha": "55dac1c52e3b9d453d2a8db4c5c2efb2ca1ff4c7",
+  "vercel": {
+    "team": "aoa4",
+    "projectId": "prj_OnuwD1iarOsXh6FFGkSpK4A5mj80",
+    "target": "preview",
+    "gitBranch": "experiment/bun-native-tests-picomatch-removal-20261117",
+    "expectedCallbackHost": "iam-control-center-new-ci-preview.vercel.app",
+    "expectedDeploymentId": "dpl_Dnd9G351VE9Au4sm5kwYsPq92h4V",
+    "nonSensitiveVars": [
+      {
+        "key": "APP_BASE_URL",
+        "value": "https://iam-control-center-new-ci-preview.vercel.app",
+        "type": "plain"
+      },
+      {
+        "key": "E2E_CALLBACK_HOST",
+        "value": "iam-control-center-new-ci-preview.vercel.app",
+        "type": "plain"
+      },
+      {
+        "key": "E2E_CALLBACK_BRANCH",
+        "value": "experiment/bun-native-tests-picomatch-removal-20261117",
+        "type": "plain"
+      }
+    ],
+    "existingSharedToValidate": [
+      "AUTH0_DOMAIN",
+      "AUTH0_CLIENT_ID",
+      "AUTH0_CLIENT_SECRET",
+      "AUTH0_SECRET"
+    ],
+    "branchScopedSensitiveToProvisionAfterApproval": [
+      "DATABASE_URL",
+      "AUTHZ_CONTEXT_SIGNING_KEY_HEX"
+    ],
+    "optionalAdditionalNonSecretAfterApproval": [
+      {
+        "key": "DATABASE_RUNTIME_ROLE",
+        "value": "iam_app_runtime_login",
+        "type": "plain"
+      },
+      {
+        "key": "AUTH0_NEON_SYNC_ENABLED",
+        "value": "false",
+        "type": "plain"
+      }
+    ]
+  },
+  "neon": {
+    "projectId": "tiny-rice-70320263",
+    "branchId": "br-plain-cell-b68uorki",
+    "database": "iam_database",
+    "runtimeRole": "iam_app_runtime_login",
+    "computePresent": false,
+    "authenticatedSqlValidation": "BLOCKED_ENDPOINT_NOT_FOUND"
+  },
+  "gates": {
+    "auth0ManagementReadback": "UNVERIFIED",
+    "githubEnvironmentCustody": "UNVERIFIED",
+    "oidcTrustedSources": "UNVERIFIED",
+    "concurrentLease": "UNVERIFIED",
+    "independentRollbackOperator": "UNVERIFIED",
+    "callbackAliasAlignment": "FAIL",
+    "realAuth0E2E": "NOT_RUN",
+    "protectMainMerge": "BLOCKED"
+  }
+}

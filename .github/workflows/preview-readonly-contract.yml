@@ -1,0 +1,26 @@
+name: PEOS Preview read-only no-approval contract
+
+# This job never receives secrets or protected Environment grants.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/quality.yml"
+      - ".github/workflows/preview-readonly-contract.yml"
+      - "scripts/preview-readonly-approval.test.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview-readonly-contract:
+    name: preview-readonly-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact commit without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Confirm Preview lookup no longer needs manual Environment review
+        run: node --test scripts/preview-readonly-approval.test.mjs
