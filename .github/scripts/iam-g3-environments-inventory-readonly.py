@@ -14,7 +14,7 @@ REPOSITORY = "alexoaraujo/iam-control-center-new"
 TARGET_G3 = "IAM-G3-PR128-Disposable-RBAC"
 API = f"https://api.github.com/repos/{REPOSITORY}/environments?per_page=100"
 # Restrict emitted names to a bounded, non-control-character alphabet.
-SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _.-]{0,99}\\Z")
+SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _.-]{0,99}\Z")
 
 
 class InventoryBlocked(RuntimeError):
