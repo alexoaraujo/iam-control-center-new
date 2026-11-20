@@ -47,9 +47,15 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$OPERATION" == "backup_full" ]]; then
-            test "$CONFIRMATION" = "EXPORT_ENCRYPT_UPLOAD_G1_FULL_BACKUP" || exit 2
+            if [[ "$CONFIRMATION" != "EXPORT_ENCRYPT_UPLOAD_G1_FULL_BACKUP" ]]; then
+              echo "::error title=Invalid backup confirmation::backup_full requires EXPORT_ENCRYPT_UPLOAD_G1_FULL_BACKUP" >&2
+              exit 2
+            fi
+          elif [[ "$OPERATION" == "preflight_only" && "$CONFIRMATION" == "NO_BACKUP" ]]; then
+            echo "PASS_G1_WRITER_PREFLIGHT_DISPATCH_PAIR"
           else
-            test "$OPERATION" = "preflight_only" && test "$CONFIRMATION" = "NO_BACKUP" || exit 2
+            echo "::error title=Invalid preflight confirmation::preflight_only requires NO_BACKUP" >&2
+            exit 2
           fi
       - name: Install offline encryption tests (no custody secrets)
         shell: bash
