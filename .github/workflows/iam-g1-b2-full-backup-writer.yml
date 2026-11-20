@@ -104,6 +104,20 @@ jobs:
           umask 077
           python3 scripts/iam-g1-b2-full-backup-writer.py --check
           python3 scripts/iam-g1-b2-full-backup-writer.py --attest-env
+      - name: Verify B2 writer key least privileges BEFORE building PG18
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 scripts/iam-g1-b2-full-backup-writer.py --check-native-b2; then
+            {
+              echo "### G1 B2 writer authorization failed — no dump or upload"
+              echo "The dedicated writer key must be limited to bucket \`iam-control-center-g1-backups\`, prefix \`iam-g1/full-backups/\`, capability \`writeFiles\` (optionally \`listBuckets\`)."
+              echo "Do not allow \`readFiles\`, \`deleteFiles\`, administrative capabilities or a broader prefix."
+              echo "Verify that the B2 account is active, rotate any exposed key, and retry only after its native authorization succeeds."
+              echo "G1_FULL_BACKUP_RESTORE=NOT_ATTESTED"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 2
+          fi
       - name: Build PostgreSQL 18 client with system CA roots
         shell: bash
         run: |
