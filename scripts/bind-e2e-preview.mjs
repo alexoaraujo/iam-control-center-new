@@ -12,6 +12,7 @@ const branchCallbacks = new Map([
   ["feat/g1-b2-encrypted-full-backup-writer-20261119", "iam-control-center-new-g1-backup-writer-ci.vercel.app"],
   ["fix/g1-b2-four-environments-readonly-preflight-20261119", "iam-control-center-new-pr141-ci.vercel.app"],
   ["fix/g1-b2-writer-failfast-privilege-diagnostics-20261119", "iam-control-center-new-g1-writer-fix-ci.vercel.app"],
+  ["governance/pr-update-merge-default-20261120", "iam-control-center-new-pr143-ci.vercel.app"],
 ]);
 
 export function approvedCallback(branch) {
