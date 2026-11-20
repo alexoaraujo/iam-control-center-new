@@ -10,6 +10,12 @@ BOOTSTRAP_TEST_PASSWORD="${BOOTSTRAP_TEST_PASSWORD:-$(openssl rand -hex 32)}"
 MIGRATOR_TEST_PASSWORD="${MIGRATOR_TEST_PASSWORD:-$(openssl rand -hex 32)}"
 export BOOTSTRAP_TEST_PASSWORD MIGRATOR_TEST_PASSWORD
 
+# PEOS G1 role-graph diagnostics and canonical restore contract (offline).
+python3 database/tests/test-canonical-isolated-operation.py
+
+# PEOS G1 independent, non-authorizing role/recovery preflight (offline).
+node --test database/offline/g1-readiness-report.test.mjs
+
 echo "Preparing a non-superuser database-owner fixture for the role bootstrap..."
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v bootstrap_password="$BOOTSTRAP_TEST_PASSWORD" <<'SQL'
 CREATE ROLE iam_bootstrap_admin
@@ -105,3 +111,22 @@ PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 
 echo "PASS: role bootstrap, role assumption, migrations 0001/0002 plus reviewed Auth0 0004 fixture, identity sync RLS,
 transactions and rollback, and session touch regression checks"
+
+# PEOS isolated integration #45 + #47: roll back synthetic default ACL grants.
+# No Neon DDL; fixture requires disposable PostgreSQL 18 CI credentials.
+echo "Testing rollback-only future default ACL least-privilege remediation..."
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+  -f database/tests/default-acl-runtime-hardening-fixture.sql
+
+# The Development promotion preflight MUST deny this non-Neon CI database.
+echo "Verifying the Neon ACL promotion gate fails closed on unrelated CI..."
+acl_readiness="$(PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -At \
+  -f database/scripts/neon-dev-acl-promotion-readiness.sql)"
+if [[ "$acl_readiness" != *'"verdict": "BLOCKED_WRONG_CONTEXT"'* ]]; then
+  echo "ERROR: expected BLOCKED_WRONG_CONTEXT in disposable CI" >&2
+  exit 1
+fi
+echo "PASS: Neon ACL promotion gate denies wrong context"
+
+PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+  -f database/tests/future-default-acl-shadow-fixture.sql
