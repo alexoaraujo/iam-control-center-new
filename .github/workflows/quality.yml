@@ -63,6 +63,15 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # Bun is a pinned TEST TOOLCHAIN, installed only after mandatory SCA,
+      # lint and strict TypeScript have passed. It does not ship to Next.js.
+      - name: Install pinned Bun 1.4.4 for unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global --no-fund bun@1.4.4
+          test "$(bun --version)" = "1.4.4"
+
       - name: Test
         run: pnpm test
 
@@ -96,13 +105,12 @@ jobs:
     timeout-minutes: 12
     outputs:
       preview_host: ${{ steps.resolve-preview.outputs.preview_host }}
-    environment:
-      name: Preview
+    # Read-only Vercel status lookup: never use the secret-bearing Preview Environment.
+    # The protected Preview environment remains mandatory for Auth0 sync and E2E.
     permissions:
       contents: read
       statuses: read
       checks: read
-      deployments: write
     steps:
       - name: Wait for an exact-SHA READY Vercel Preview deployment
         id: resolve-preview
@@ -194,7 +202,6 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          E2E_CALLBACK_HOST: iam-control-center-new-ci-preview.vercel.app
           E2E_DEPLOYMENT_HOST: ${{ needs.preview-deployment.outputs.preview_host }}
           VERCEL_TEAM_SLUG: aoa4
           VERCEL_PROJECT_ID: prj_OnuwD1iarOsXh6FFGkSpK4A5mj80
