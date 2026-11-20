@@ -1,0 +1,47 @@
+name: IAM G1 encrypted PG18 full backup writer regression (offline)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/iam-g1-b2-full-backup-writer.py'
+      - '.github/tests/test-iam-g1-b2-full-backup-writer.py'
+      - '.github/workflows/iam-g1-b2-full-backup-writer*.yml'
+      - 'database/scripts/iam-g1-full-recovery-preflight.py'
+      - 'scripts/iam-g1-b2-full-readback.py'
+      - 'docs/operations/iam-g1-b2-full-backup-writer.md'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/iam-g1-b2-full-backup-writer.py'
+      - '.github/tests/test-iam-g1-b2-full-backup-writer.py'
+      - '.github/workflows/iam-g1-b2-full-backup-writer*.yml'
+      - 'database/scripts/iam-g1-full-recovery-preflight.py'
+      - 'scripts/iam-g1-b2-full-readback.py'
+      - 'docs/operations/iam-g1-b2-full-backup-writer.md'
+
+permissions:
+  contents: read
+
+jobs:
+  g1-full-writer-offline-contract:
+    if: github.repository == 'alexoaraujo/iam-control-center-new'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Compile writer and offline regression (no Neon or B2 access)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/iam-g1-b2-full-backup-writer.py \
+            .github/tests/test-iam-g1-b2-full-backup-writer.py
+          python3 -m venv "$RUNNER_TEMP/iam-g1-writer-tests"
+          "$RUNNER_TEMP/iam-g1-writer-tests/bin/python" -m pip install \
+            --disable-pip-version-check --quiet 'cryptography>=44,<47'
+          "$RUNNER_TEMP/iam-g1-writer-tests/bin/python" \
+            .github/tests/test-iam-g1-b2-full-backup-writer.py -v
+          python3 database/tests/test-iam-g1-full-recovery-preflight.py -v
+          echo "PASS_G1_FULL_WRITER_OFFLINE_SCOPE_AND_ENCRYPTION_ONLY"
+          echo "G1_FULL_BACKUP_RESTORE=NOT_EXECUTED"
