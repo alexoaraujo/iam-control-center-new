@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """No-secrets PEOS seven-environment synthetic policy checks."""
 import importlib.util
+import json
 from pathlib import Path
 from unittest import TestCase, main
 
@@ -114,6 +115,32 @@ class Contracts(TestCase):
             data["total_count"] += 1
             with self.subTest(name=name, kind="duplicate"), self.assertRaises(mod.Blocked):
                 mod.verify(name, env(name), custom(), data)
+
+    def test_nonsecret_policy_diagnostic_is_bounded_and_explicit(self):
+        payload = {"total_count": 2, "applicationKey": "never-log-this",
+                   "branch_policies": [
+                       {"name": "refs/pull/*/merge", "type": "branch", "token": "never-log-this"},
+                       {"name": "develop", "type": "branch"}]}
+        snapshot = mod.branch_policy_diagnostic(payload)
+        self.assertEqual(snapshot["total_count"], 2)
+        self.assertEqual(snapshot["listed_count"], 2)
+        self.assertEqual(snapshot["branch_policies"][0]["name"], "refs/pull/*/merge")
+        self.assertEqual(snapshot["branch_policies"][1]["name"], "develop")
+        self.assertNotIn("never-log-this", json.dumps(snapshot))
+
+    def test_malformed_branch_names_never_inject_log_commands(self):
+        snapshot = mod.branch_policy_diagnostic({"total_count": 101,
+            "branch_policies": [{"name": "good", "type": "branch"}] * 100 +
+                               [{"name": "evil" + chr(10) + "::error::inject", "type": "branch"}]})
+        self.assertEqual(len(snapshot["branch_policies"]), 100)
+        self.assertEqual(snapshot["listed_count"], 101)
+        self.assertNotIn("inject", json.dumps(snapshot))
+        for payload in (None, [], "bad"):
+            self.assertEqual(mod.branch_policy_diagnostic(payload), {"status": "invalid_response"})
+        snapshot = mod.branch_policy_diagnostic({"total_count": "secret",
+            "branch_policies": [{"name": "name" + chr(10) + "::error::bad", "type": "unknown"}]})
+        self.assertEqual(snapshot["total_count"], "<invalid>")
+        self.assertEqual(snapshot["branch_policies"], [{"name": "<invalid>", "type": "<invalid>"}])
 
     def test_protected_branch_mode_cannot_skip_custom_policy_readback(self):
         for name in mod.ENVIRONMENTS:

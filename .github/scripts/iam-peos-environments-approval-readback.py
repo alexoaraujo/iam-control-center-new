@@ -69,6 +69,33 @@ def verify_branch_policies(name, environment, policies):
     elif names != [EXACT_BRANCHES[name]]:
         raise Blocked("PRIVILEGED_BRANCH_POLICY_NOT_EXACT")
 
+def branch_policy_diagnostic(payload):
+    """Bounded branch-policy metadata only; never log tokens or arbitrary API fields."""
+    if not isinstance(payload, dict):
+        return {"status": "invalid_response"}
+    items = payload.get("branch_policies")
+    count = payload.get("total_count")
+    if type(count) is not int:
+        count = "<invalid>"
+    if not isinstance(items, list):
+        return {"total_count": count, "status": "missing_branch_policies"}
+    # Even malformed API payloads can never amplify job logs without bound.
+    policies = []
+    for item in items[:100]:
+        if not isinstance(item, dict):
+            policies.append({"name": "<invalid>", "type": "<invalid>"})
+            continue
+        name, kind = item.get("name"), item.get("type")
+        if not isinstance(name, str) or len(name) > 250 or any(
+            not 32 <= ord(ch) <= 126 for ch in name
+        ):
+            name = "<invalid>"
+        if kind not in ("branch", "tag"):
+            kind = "<invalid>"
+        policies.append({"name": name, "type": kind})
+    return {"total_count": count, "listed_count": len(items), "branch_policies": policies}
+
+
 class Blocked(RuntimeError):
     pass
 
@@ -115,14 +142,23 @@ def main():
     token = os.environ.get("GITHUB_TOKEN", "")
     failures = 0
     for name in ENVIRONMENTS:
+        branch_policies = None
         try:
-            verify(name, api("/" + name, token),
-                   api("/" + name + "/deployment_protection_rules", token),
-                   api("/" + name + "/deployment-branch-policies?per_page=100", token))
+            environment = api("/" + name, token)
+            custom_rules = api("/" + name + "/deployment_protection_rules", token)
+            branch_policies = api("/" + name + "/deployment-branch-policies?per_page=100", token)
+            verify(name, environment, custom_rules, branch_policies)
             print("PASS_PE0S_ENV_NO_HUMAN_APPROVAL " + name)
         except Blocked as exc:
             failures += 1
             print("BLOCKED_PE0S_ENV " + name + " " + str(exc), file=sys.stderr)
+            # GitHub Environment read APIs are inaccessible to this connector;
+            # diagnostics must be observable in the actual read-only CI run.
+            # Emit only bounded non-secret branch names/types after policy drift.
+            if branch_policies is not None and ("BRANCH" in str(exc) or "POLICY" in str(exc)):
+                print("PEOS_ENV_BRANCH_POLICY_EVIDENCE " + name + " " +
+                      json.dumps(branch_policy_diagnostic(branch_policies), sort_keys=True),
+                      file=sys.stderr)
     print(f"PEOS_ENVIRONMENTS={len(ENVIRONMENTS)} BLOCKED={failures}")
     return 2 if failures else 0
 
