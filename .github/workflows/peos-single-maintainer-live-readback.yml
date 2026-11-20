@@ -8,6 +8,8 @@ on:
       - ".github/workflows/peos-single-maintainer-live-readback.yml"
       - ".github/scripts/iam-g3-environments-inventory-readonly.py"
       - ".github/tests/test-iam-g3-environments-inventory-readonly.py"
+      - ".github/scripts/iam-g3-environment-protection-readonly.py"
+      - ".github/tests/test-iam-g3-environment-protection-readonly.py"
   workflow_dispatch:
 
 permissions:
@@ -42,3 +44,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/iam-g3-environments-inventory-readonly.py
+      # Existing G3 Environment was discovered by a full API listing.
+      # Read effective protection rules with NO environment binding or owner secret.
+      - name: Check PR128 G3 policy validation contracts
+        run: python3 .github/tests/test-iam-g3-environment-protection-readonly.py
+      - name: Attest effective G3 owner Environment policies (read only)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/iam-g3-environment-protection-readonly.py
