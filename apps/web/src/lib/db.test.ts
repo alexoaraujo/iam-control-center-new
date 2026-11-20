@@ -39,7 +39,7 @@ describe("getSql", () => {
     vi.stubEnv("DATABASE_URL", connectionString);
     neonMock.mockReturnValue(sqlClient);
 
-    expect(getSql()).toBe(sqlClient);
+    expect(Object.is(getSql(), sqlClient)).toBe(true);
     expect(neonMock).toHaveBeenCalledOnce();
     expect(neonMock).toHaveBeenCalledWith(connectionString);
   });
