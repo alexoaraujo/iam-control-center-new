@@ -32,8 +32,15 @@ describe("Biome lint replacement contracts", () => {
     expect(manifest.devDependencies).not.toHaveProperty("eslint");
   });
 
+  it("keeps vulnerable picomatch and Vitest absent from the frozen dependency graph", () => {
+    const lock = readFileSync(new URL("../../pnpm-lock.yaml", import.meta.url), "utf8");
+    expect(lock).not.toMatch(/(?:^|\\n)\\s+picomatch@/);
+    expect(lock).not.toContain("vitest@");
+    expect(lock).toContain("bun-types@1.4.4");
+  });
+
   it("leaves independent typecheck and unit test gates enabled", () => {
     expect(manifest.scripts?.typecheck).toBe("tsc --noEmit");
-    expect(manifest.scripts?.test).toBe("vitest run");
+    expect(manifest.scripts?.test).toBe("bun test --isolate --globals=vitest --preload ./test-preload.ts");
   });
 });
