@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "README.md"
+      - "SECURITY.md"
       - "SCAFFOLD-MANIFEST.json"
       - "docs/**"
       - ".github/PULL_REQUEST_TEMPLATE.md"
@@ -42,15 +43,15 @@ jobs:
           # in the separate code/Preview gate rather than treating them as docs.
           is_documentation_path() {
             case "$1" in
-              README.md|SCAFFOLD-MANIFEST.json|docs/*|.github/PULL_REQUEST_TEMPLATE.md|.github/workflows/docs-preview-gate.yml) return 0 ;;
+              README.md|SECURITY.md|SCAFFOLD-MANIFEST.json|docs/*|.github/PULL_REQUEST_TEMPLATE.md|.github/workflows/docs-preview-gate.yml) return 0 ;;
               *) return 1 ;;
             esac
           }
           # Test the allowlist itself without checking out untrusted PR code.
-          for sample in README.md docs/operations/roadmap.md .github/PULL_REQUEST_TEMPLATE.md .github/workflows/docs-preview-gate.yml; do
+          for sample in README.md SECURITY.md docs/operations/roadmap.md .github/PULL_REQUEST_TEMPLATE.md .github/workflows/docs-preview-gate.yml; do
             is_documentation_path "${sample}" || { echo "::error::Documentation classifier regression: ${sample}"; exit 1; }
           done
-          for sample in apps/web/src/app/page.tsx scripts/vercel-ignore-build.mjs .github/workflows/quality.yml .env.example SECURITY.md; do
+          for sample in apps/web/src/app/page.tsx scripts/vercel-ignore-build.mjs .github/workflows/quality.yml .env.example; do
             if is_documentation_path "${sample}"; then
               echo "::error::Code or security path classified as documentation: ${sample}"
               exit 1
