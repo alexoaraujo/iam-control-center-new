@@ -6,6 +6,13 @@ on:
       - '.github/workflows/iam-g1-environments-readonly-attestation.yml'
       - '.github/scripts/iam-g1-environment-readonly-attestation.py'
       - '.github/tests/test-iam-g1-environment-readonly-attestation.py'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/iam-g1-environments-readonly-attestation.yml'
+      - '.github/scripts/iam-g1-environment-readonly-attestation.py'
+      - '.github/tests/test-iam-g1-environment-readonly-attestation.py'
   workflow_dispatch:
 
 permissions:
@@ -35,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/tests/test-iam-g1-environment-readonly-attestation.py
-      - name: Verify BOTH GitHub Environments via read-only Actions token
+      - name: Verify four G1 GitHub Environments via read-only Actions token
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -43,4 +50,5 @@ jobs:
           set -euo pipefail
           umask 077
           python3 .github/scripts/iam-g1-environment-readonly-attestation.py
-          echo 'PASS_G1_LIVE_ENV_READONLY_NO_NEON_NO_SECRETS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'PASS_G1_LIVE_ENV_METADATA_READONLY_NO_NEON_NO_SECRETS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'G1_PRIVILEGED_OPERATIONS=NOT_AUTHORIZED_BY_METADATA_AUDIT' >> "$GITHUB_STEP_SUMMARY"
