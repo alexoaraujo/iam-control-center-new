@@ -54,7 +54,8 @@ test("RBAC credentials remain scoped to one protected Preview E2E step", () => {
 });
 
 test("RBAC with an active tenant A grant still denies tenant B, identity spoofing, and ungranted permission", () => {
-  assert.match(e2e, /tenantB: "22222222-2222-4222-8222-222222222222"/);
+  assert.match(e2e, /tenantB: "f65d8f1e-bcd4-4d68-927b-a8b64cda0c42"/);
+  assert.doesNotMatch(e2e, /tenantB: "22222222-2222-4222-8222-222222222222"/);
   assert.match(e2e, /"tenants_b"/);
   assert.match(e2e, /INSERT INTO iam\.tenants\(id,slug,display_name\).*peos-auth0-http-41-b/);
   assert.match(e2e, /DELETE FROM iam\.tenants WHERE id=\$1::uuid",\[ID\.tenantB\]/);
