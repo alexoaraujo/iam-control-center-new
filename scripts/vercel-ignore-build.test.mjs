@@ -1,3 +1,8 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { hasBuildRelevantChanges, shouldBuild } from "./vercel-ignore-build.mjs";
@@ -242,4 +247,59 @@ test("no/invalid diff cannot suppress a required Preview", () => {
   }), true);
   assert.equal(hasBuildRelevantChanges([""]), true);
   assert.equal(hasBuildRelevantChanges(["docs/runbook.md", "database/migrations/003.sql"]), true);
+});
+
+test("unknown Git diff metadata builds Preview instead of suppressing evidence", () => {
+  for (const changedFiles of [undefined, null, "docs/only.md", { "0": "docs/only.md" }]) {
+    assert.equal(shouldBuild({
+      environment: "preview", previousSha: "base", currentSha: "head",
+      changedFiles,
+    }), true);
+  }
+  for (const mergeParentChangedFiles of [null, "docs/only.md", { "0": "docs/only.md" }]) {
+    assert.equal(shouldBuild({
+      environment: "preview", previousSha: "base", currentSha: "head",
+      changedFiles: ["docs/only.md"], mergeParentChangedFiles,
+    }), true);
+  }
+});
+
+test("Preview preserves deleted source paths across code-to-doc renames", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "iam-preview-rename-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const git = (...args) => execFileSync("git", ["-C", root, ...args], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  git("init", "-q");
+  git("config", "user.name", "PEOS Synthetic Runner");
+  git("config", "user.email", "peos-synthetic@example.invalid");
+  mkdirSync(join(root, "apps", "web"), { recursive: true });
+  writeFileSync(join(root, "apps", "web", "authorization.ts"), "export const sensitiveGate = true;\n");
+  git("add", "-A");
+  git("commit", "-q", "-m", "initial application source");
+  const before = git("rev-parse", "HEAD");
+
+  mkdirSync(join(root, "docs"), { recursive: true });
+  renameSync(join(root, "apps", "web", "authorization.ts"), join(root, "docs", "archive.md"));
+  git("add", "-A");
+  git("commit", "-q", "-m", "move application code to docs path");
+  const after = git("rev-parse", "HEAD");
+
+  // Rename detection reports only the destination; the release gate must see
+  // the removed application source path, as it does with --no-renames.
+  const simplified = git("diff", "--find-renames", "--name-only", `${before}...${after}`);
+  assert.equal(simplified, "docs/archive.md");
+  const full = git("diff", "--no-renames", "--name-only", `${before}...${after}`);
+  assert.match(full, /apps\/web\/authorization\.ts/);
+  assert.match(full, /docs\/archive\.md/);
+
+  const output = join(root, "github-output");
+  writeFileSync(output, "");
+  const script = fileURLToPath(new URL("./vercel-ignore-build.mjs", import.meta.url));
+  execFileSync(process.execPath, [script, "--github-output"], {
+    cwd: root,
+    env: { ...process.env, BASE_SHA: before, HEAD_SHA: after, GITHUB_OUTPUT: output },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  assert.match(readFileSync(output, "utf8"), /^preview_required=true\n$/);
 });

@@ -35,6 +35,8 @@ export function shouldBuild({
   // the current environment; skipping would keep the stale deployment.
   if (previousSha === currentSha) return true;
 
+  // Missing/invalid Git diff metadata must BUILD Preview, never throw or skip.
+  if (!Array.isArray(changedFiles) || !Array.isArray(mergeParentChangedFiles)) return true;
   const scope = [...changedFiles, ...mergeParentChangedFiles];
   // Missing/empty diffs are not evidence that a commit is documentation-only.
   return scope.length === 0 || hasBuildRelevantChanges(scope);
@@ -45,7 +47,7 @@ function diffFiles(base, head) {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   }).trim();
-  const output = execFileSync("git", ["-C", gitRoot, "diff", "--name-only", `${base}...${head}`], {
+  const output = execFileSync("git", ["-C", gitRoot, "diff", "--no-renames", "--name-only", `${base}...${head}`], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -71,7 +73,7 @@ function diffFilesAgainstAdditionalMergeParents(head) {
     .map((line) => line.slice(7));
   if (parents.length < 2) return [];
   return parents.slice(1).flatMap((parent) => {
-    const output = execFileSync("git", ["-C", gitRoot, "diff", "--name-only", parent, head], {
+    const output = execFileSync("git", ["-C", gitRoot, "diff", "--no-renames", "--name-only", parent, head], {
       encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
     });
     return output.split("\n").map((file) => file.trim()).filter(Boolean);
