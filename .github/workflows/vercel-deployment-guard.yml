@@ -72,6 +72,14 @@ jobs:
         run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck
+      # The standalone deployment guard also executes unit tests. Provision
+      # exactly the same Bun test toolchain as required quality; do not skip it.
+      - name: Install pinned Bun 1.4.4 for unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global --no-fund bun@1.4.4
+          test "$(bun --version)" = "1.4.4"
       - name: Test
         run: pnpm test
       - name: Build with inert CI-only Auth0 values

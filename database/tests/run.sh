@@ -130,3 +130,13 @@ echo "PASS: Neon ACL promotion gate denies wrong context"
 
 PGPASSWORD="$POSTGRES_TEST_PASSWORD" psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 \
   -f database/tests/future-default-acl-shadow-fixture.sql
+
+# Offline-only schema parity checks: no Vercel Preview, Auth0 callback, Neon credentials or DDL.
+# Executed by PostgreSQL 18 CI against synthetic manifests; failures block the job.
+node --test database/offline/compare-schema-manifests.test.mjs
+
+# Migration ledger provenance is checked against synthetic metadata only.
+node --test database/offline/compare-migration-ledgers.test.mjs
+
+# G2 canonical-origin vs NEW Development drift regression; fixtures only, fail-closed.
+node --test database/offline/g2-canonical-drift-contract.test.mjs
