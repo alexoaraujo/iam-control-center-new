@@ -1,0 +1,79 @@
+name: PEOS Bun native Vitest-compat proof
+
+# Experimental only: this check does not satisfy mandatory quality or security-gate.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/bun-runner-compat-poc.yml"
+      - "apps/web/package.json"
+      - "apps/web/tsconfig.json"
+      - "apps/web/vitest-bun-compat.d.ts"
+      - "apps/web/test-preload.ts"
+      - "apps/web/biome.config.test.mjs"
+      - "pnpm-lock.yaml"
+      - "docs/security/bun-runner-migration-poc-20261117.md"
+
+permissions:
+  contents: read
+
+jobs:
+  bun-compat:
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'experiment/bun-native-tests-picomatch-removal-20261117'
+    name: bun-native-test-compat
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout PR without persistent credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.34.9
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # Existing Actions policy may reject previously unused third-party actions.
+      # Install the pinned official npm-distributed Bun CLI instead.
+      - name: Install official Bun runtime 1.4.4
+        run: npm install --global --no-audit --no-fund bun@1.4.4
+      - name: Generate reproducible pnpm lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --lockfile-only --ignore-scripts
+          test -s pnpm-lock.yaml
+          sha256sum pnpm-lock.yaml
+          echo IAM_BUN_PNPM_LOCK_BEGIN
+          base64 -w 4000 pnpm-lock.yaml
+          echo IAM_BUN_PNPM_LOCK_END
+      - name: Install frozen pnpm dependencies
+        id: frozen
+        run: pnpm install --frozen-lockfile
+      - name: Verify Bun 1.4.4 runtime
+        run: bun --version
+      - name: Run every existing test through Bun Vitest-compatible runner
+        run: pnpm test
+      - name: Run PEOS native Node contracts independently
+        if: ${{ always() && steps.frozen.outcome == 'success' }}
+        run: node --test scripts/*.test.mjs
+      - name: Biome lint
+        if: ${{ always() && steps.frozen.outcome == 'success' }}
+        run: pnpm lint
+      - name: TypeScript typecheck
+        if: ${{ always() && steps.frozen.outcome == 'success' }}
+        run: pnpm typecheck
+      - name: Next.js build with inert CI-only Auth0 values
+        if: ${{ always() && steps.frozen.outcome == 'success' }}
+        env:
+          AUTH0_DOMAIN: ci-only.invalid
+          AUTH0_CLIENT_ID: ci-build-only
+          AUTH0_CLIENT_SECRET: ci-build-only-not-a-credential
+          AUTH0_SECRET: ci-build-only-secret-not-valid-for-any-environment
+          APP_BASE_URL: http://localhost:3000
+        run: pnpm build
+      - name: Mandatory full dependency audit (no waivers)
+        if: ${{ always() && steps.frozen.outcome == 'success' }}
+        run: pnpm audit
