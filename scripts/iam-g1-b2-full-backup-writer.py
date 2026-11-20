@@ -299,6 +299,15 @@ def main() -> int:
             check_scope(dict(os.environ))
             print("PASS_G1_WRITER_LOCAL_SCOPE_AND_AES_KEY_ONLY")
             print("G1_FULL_BACKUP_RESTORE=NOT_ATTESTED")
+        elif sys.argv[1:] == ["--check-native-b2"]:
+            # Validate the exact-key scope before building PG18 or starting pg_dump.
+            # No SQL, dump, encryption, storage write or read occurs in this mode.
+            env = dict(os.environ)
+            check_scope(env)
+            attest_native_writer_key(env)
+            print("PASS_G1_WRITER_B2_NATIVE_EXACT_BUCKET_PREFIX_CAPABILITIES")
+            print("NOT_EXECUTED: no PostgreSQL connection, dump or B2 upload")
+            print("G1_FULL_BACKUP_RESTORE=NOT_ATTESTED")
         elif sys.argv[1:] == ["--execute"]:
             manifest = execute(dict(os.environ))
             summary = json.dumps(manifest, separators=(",", ":"), sort_keys=True)

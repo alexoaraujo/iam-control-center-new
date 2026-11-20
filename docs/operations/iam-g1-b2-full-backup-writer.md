@@ -33,6 +33,19 @@ Environment **variables**:
 
 The workflow itself pins non-secret B2 endpoint `https://s3.us-east-005.backblazeb2.com`, region `us-east-005`, bucket and object prefix. Previously exposed B2 keys must not be reused; revoke and replace them in the protected Environment. Do not create a fresh encryption key on a temporary runner without secure independent escrow, or the ciphertext may become unrecoverable.
 
+## B2 writer fail-fast remediation
+
+The protected backup job now authenticates the Backblaze writer key via the Native v4 API **before building the PostgreSQL 18 container**. A failing key emits a fixed error and stops without accessing PostgreSQL or uploading any file. The complete protected export path rechecks the key as defense in depth. An offline preflight success is **not** a backup.
+
+For `BLOCKED_G1_WRITER_NATIVE_OVERPRIVILEGED`, provision a **new** restricted application key, after resolving any Backblaze account suspension or billing restriction:
+
+- Bucket: `iam-control-center-g1-backups` only.
+- Exact name prefix: `iam-g1/full-backups/`.
+- Capabilities: `writeFiles` and, only if required, `listBuckets`. Do **not** include `readFiles`, `deleteFiles`, `listAllBucketNames`, bucket administration, or file retention management.
+- Store the paired values in `IAM_G1_B2_FULL_WRITER_ACCESS_KEY_ID` and `IAM_G1_B2_FULL_WRITER_SECRET_ACCESS_KEY` **only** under `IAM-G1-Full-Backup-Custody`. Revoke any previously exposed keys, and do not paste them into PRs or logs.
+
+Backblaze documents that `writeFiles` can support some delete-by-name S3 operations; therefore this restricted writer is still not WORM and does not replace separate object-lock, versioning or independent readback controls. If the B2 account is suspended, rotating keys alone cannot restore service. Resolve the account restriction with the provider; keep this gate blocked until an authorized real readback proves the object.
+
 ## Safe workflow modes
 
 [Manual workflow](https://github.com/alexoaraujo/iam-control-center-new/actions/workflows/iam-g1-b2-full-backup-writer.yml)
