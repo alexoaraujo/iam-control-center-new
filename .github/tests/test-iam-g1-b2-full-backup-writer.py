@@ -93,6 +93,42 @@ class FullBackupWriterTests(unittest.TestCase):
             with self.subTest(replacement=replacement), self.assertRaises(writer.Blocked):
                 writer.verify_native_writer_scope(root)
 
+    def test_native_b2_preflight_never_exports_and_requires_valid_scope(self):
+        from contextlib import redirect_stdout, redirect_stderr
+        from unittest.mock import patch
+
+        # With approved local scope, the probe calls only B2 authorization.
+        with patch.object(writer, "check_scope", return_value=(KEY, SHA)):
+            with patch.object(writer, "attest_native_writer_key") as b2:
+                with patch.object(writer, "export_and_encrypt",
+                                  side_effect=AssertionError("no pg_dump in B2 preflight")):
+                    with patch.object(writer.sys, "argv", ["writer", "--check-native-b2"]):
+                        with patch.dict(writer.os.environ, valid(), clear=True):
+                            with redirect_stdout(io.StringIO()) as output:
+                                self.assertEqual(writer.main(), 0)
+        b2.assert_called_once()
+        self.assertIn("PASS_G1_WRITER_B2_NATIVE_EXACT_BUCKET_PREFIX_CAPABILITIES",
+                      output.getvalue())
+        self.assertIn("NOT_ATTESTED", output.getvalue())
+
+        # Wrong main SHA or another local error must not call B2 authorization.
+        with patch.object(writer, "check_scope",
+                          side_effect=writer.Blocked("BLOCKED_G1_WRITER_UNAPPROVED_SHA")):
+            with patch.object(writer, "attest_native_writer_key") as b2:
+                with patch.object(writer.sys, "argv", ["writer", "--check-native-b2"]):
+                    with redirect_stderr(io.StringIO()):
+                        self.assertEqual(writer.main(), 2)
+        b2.assert_not_called()
+
+        # Overprivileged B2 authorizations must fail, never be treated as PASS.
+        with patch.object(writer, "check_scope", return_value=(KEY, SHA)):
+            with patch.object(writer, "attest_native_writer_key",
+                              side_effect=writer.Blocked("BLOCKED_G1_WRITER_NATIVE_OVERPRIVILEGED")):
+                with patch.object(writer.sys, "argv", ["writer", "--check-native-b2"]):
+                    with redirect_stderr(io.StringIO()) as errors:
+                        self.assertEqual(writer.main(), 2)
+        self.assertIn("NATIVE_OVERPRIVILEGED", errors.getvalue())
+
     def test_full_archive_aes_gcm_round_trip_authenticates_sha(self):
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
         from cryptography.exceptions import InvalidTag
