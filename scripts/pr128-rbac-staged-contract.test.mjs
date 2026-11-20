@@ -6,6 +6,7 @@ import { assertRbacFixtureLease } from "./neon-rbac-fixture-lease.mjs";
 const suite = readFileSync(new URL("../.github/e2e/auth0-rbac-pr128.spec.cjs", import.meta.url), "utf8");
 const workflow = readFileSync(new URL("../.github/workflows/quality.yml", import.meta.url), "utf8");
 const playwrightConfig = readFileSync(new URL("../.github/e2e/playwright.config.cjs", import.meta.url), "utf8");
+const loginSuite = readFileSync(new URL("../.github/e2e/auth0.spec.cjs", import.meta.url), "utf8");
 
 const lease = {
   project: "tiny-rice-70320263",
@@ -79,4 +80,13 @@ test("staged source is NOT deployed or granted owner secrets by the current CI",
   assert.doesNotMatch(workflow, /E2E_RBAC_PR128_BRANCH_ID/);
   assert.doesNotMatch(workflow, /IAM_RBAC_PR128_APPROVED_SHA/);
   assert.doesNotMatch(suite, /process\.env\.NEON_API_KEY|process\.env\.DATABASE_URL/);
+});
+
+
+test("PR128 real Auth0 E2E requires read-only database health before claiming runtime readiness", () => {
+  assert.match(loginSuite, /E2E_CALLBACK_BRANCH === "integration\/peos-single-maintainer-bun-20261117"/);
+  assert.match(loginSuite, /fetch\("\/api\/health\/database"/);
+  assert.match(loginSuite, /status: 200, body: \{ ok: true, database: "reachable" \}, cache: "no-store"/);
+  assert.match(loginSuite, /PASS_PR128_DISPOSABLE_NEON_DATABASE_REACHABLE/);
+  assert.doesNotMatch(loginSuite, /(?:NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL|AUTHZ_CONTEXT_SIGNING_KEY_HEX)/);
 });
