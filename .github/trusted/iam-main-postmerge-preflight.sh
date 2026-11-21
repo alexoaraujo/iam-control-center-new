@@ -4,6 +4,8 @@ set -euo pipefail
 REPO="alexoaraujo/iam-control-center-new"
 BASE_PR_HEAD="1f6073c990cca160e0c37604bd55181bc808806a"
 BASE_MAIN_MERGE="2270fac70bb588cea2ebc2e12cad5b7da96e2a38"
+REVIEWED_APP_HEAD="3e053b6c774ee77075dbd038b9a295cc07eefda4"
+REVIEWED_APP_MERGE="633ed462566c63cb0307b7266ec147a25e3f84ee"
 PREVIEW_URL="https://iam-control-center-new-pr128-ci.vercel.app"
 
 [[ "$GITHUB_REPOSITORY" == "$REPO" && "$GITHUB_REF" == "refs/heads/main" &&
@@ -50,51 +52,93 @@ jq -e --arg repo "$REPO" --arg head "$BASE_PR_HEAD" --arg merged "$BASE_MAIN_MER
   echo "::error::Merged PR128 identity, SHA or merge ancestry differs from approved baseline."
   exit 1
 }
-# Pin the ENTIRE post-merge source tree to the exact contents reviewed in PR147.
-# This rejects later modifications to even the two allowlisted CI callback scripts:
-# a path-only allowlist alone would not be sufficient before privileged execution.
-control_pr="$(gh api "repos/$REPO/pulls/147")"
+# Pin the reviewed PR150 application baseline, rather than silently accepting
+# later application/RBAC/SQL changes. PR148 and PR150 were fully gated at their
+# respective exact head SHAs. G3 itself remains on the original PR128 lease.
+reviewed_app_pr="$(gh api "repos/$REPO/pulls/150")"
+jq -e --arg repo "$REPO" --arg head "$REVIEWED_APP_HEAD" --arg merged "$REVIEWED_APP_MERGE" '
+  .number == 150 and .state == "closed" and .merged == true and
+  .head.repo.full_name == $repo and .base.ref == "main" and
+  .head.sha == $head and .merge_commit_sha == $merged
+' <<< "$reviewed_app_pr" >/dev/null || {
+  echo "::error::Reviewed PR150 identity or exact merge baseline changed."
+  exit 1
+}
+reviewed_main_tree="$(gh api "repos/$REPO/git/commits/$REVIEWED_APP_MERGE" --jq '.tree.sha')"
+reviewed_head_tree="$(gh api "repos/$REPO/git/commits/$REVIEWED_APP_HEAD" --jq '.tree.sha')"
+[[ "$reviewed_main_tree" == "$reviewed_head_tree" ]] || {
+  echo "::error::PR150 merge tree differs from its gated exact PR-head tree."
+  exit 1
+}
+
+# The whole post-merge tree must match exactly the reviewed head of this
+# narrowly-scoped control PR. This rejects hidden changes even to allowlisted paths.
+control_pr="$(gh api "repos/$REPO/pulls/151")"
 jq -e --arg repo "$REPO" '
-  .number == 147 and .state == "closed" and .merged == true and
+  .number == 151 and .state == "closed" and .merged == true and
   .head.repo.full_name == $repo and .base.ref == "main" and
   (.head.sha | test("^[a-f0-9]{40}$")) and
   (.merge_commit_sha | test("^[a-f0-9]{40}$"))
 ' <<< "$control_pr" >/dev/null || {
-  echo "::error::The post-merge G3 control PR147 must be merged and identified before use."
+  echo "::error::The reviewed G3 control PR151 must be merged before execution."
   exit 1
 }
 control_sha="$(jq -r '.head.sha' <<< "$control_pr")"
 control_merge="$(jq -r '.merge_commit_sha' <<< "$control_pr")"
 [[ "$control_merge" == "$main_sha" ]] || {
-  echo "::error::Main advanced beyond the reviewed PR147 workflow merge commit."
+  echo "::error::Main advanced beyond the reviewed PR151 merge commit."
   exit 1
 }
 main_tree="$(gh api "repos/$REPO/git/commits/$main_sha" --jq '.tree.sha')"
 control_tree="$(gh api "repos/$REPO/git/commits/$control_sha" --jq '.tree.sha')"
 [[ "$main_tree" == "$control_tree" ]] || {
-  echo "::error::The main Git tree differs from reviewed PR147 source."
+  echo "::error::The main Git tree differs from reviewed PR151 head source."
   exit 1
 }
 
-# No app/DB/runtime files may differ. Postmerge G3 adds exactly four control files
-# and two CI callback-lease-only edits needed for the PR that installed this workflow.
-scope="$(gh api "repos/$REPO/compare/$BASE_MAIN_MERGE...$main_sha")"
+# Compare original merged G3 application baseline against reviewed PR150.
+# All 13 exact paths and their change types are pinned: the trusted G3 suite
+# and disposable Neon branch have not been modified by the Production work.
+reviewed_scope="$(gh api "repos/$REPO/compare/$BASE_MAIN_MERGE...$REVIEWED_APP_MERGE")"
 jq -e '
-  .status == "ahead" and (.files | length) == 6 and
+  .status == "ahead" and (.files | length) == 13 and
   ([.files[] | select(
     (.status == "added" and
       (.filename == ".github/workflows/iam-main-postmerge-auth0-rbac.yml" or
        .filename == ".github/trusted/iam-main-postmerge-preflight.sh" or
        .filename == "scripts/iam-main-postmerge-g3-contract.test.mjs" or
-       .filename == "docs/operations/iam-main-postmerge-g3-runbook.md")) or
+       .filename == "docs/operations/iam-main-postmerge-g3-runbook.md" or
+       .filename == "apps/web/src/lib/production-branch.test.ts" or
+       .filename == "apps/web/src/lib/production-branch.ts" or
+       .filename == "docs/operations/iam-production-branch-fingerprint-readback-20261121.md" or
+       .filename == "docs/operations/iam-production-rbac-branch-attestation-20261121.md")) or
     (.status == "modified" and
       (.filename == "scripts/bind-e2e-preview.mjs" or
-       .filename == "scripts/bind-e2e-preview.test.mjs"))
-  )] | length) == 6
-' <<< "$scope" >/dev/null || {
-  echo "::error::Main drifted from PR128 application/Neon baseline or allowed control-file scope."
+       .filename == "scripts/bind-e2e-preview.test.mjs" or
+       .filename == "apps/web/src/lib/authorization.ts" or
+       .filename == "apps/web/src/lib/readiness.test.ts" or
+       .filename == "apps/web/src/lib/readiness.ts"))
+  )] | length) == 13
+' <<< "$reviewed_scope" >/dev/null || {
+  echo "::error::Reviewed PR128-to-PR150 source/SQL/G3 scope differs from the exact allowlist."
   exit 1
 }
+
+# After PR150 the ONLY permitted changes are this reviewed G3 preflight and its
+# contract tests; never allow changes to runtime code, workflows or migrations.
+scope="$(gh api "repos/$REPO/compare/$REVIEWED_APP_MERGE...$main_sha")"
+jq -e '
+  .status == "ahead" and (.files | length) == 2 and
+  ([.files[] | select(
+    .status == "modified" and
+    (.filename == ".github/trusted/iam-main-postmerge-preflight.sh" or
+     .filename == "scripts/iam-main-postmerge-g3-contract.test.mjs")
+  )] | length) == 2
+' <<< "$scope" >/dev/null || {
+  echo "::error::Post-PR150 main changes exceed the reviewed G3 control-only scope."
+  exit 1
+}
+
 pr_checks="$(gh api "repos/$REPO/commits/$BASE_PR_HEAD/check-runs?per_page=100")"
 for check in quality security-gate auth0-e2e "Execute trusted G3 Auth0/RBAC proof"; do
   jq -e --arg name "$check" '
@@ -111,6 +155,19 @@ done
 # Require the original known-good deployment-config check on the exact app
 # baseline, then require fresh main-SHA quality and PG18. Whole-tree equality
 # to merged PR147 and the six-file allowlist prohibit runtime/config drift.
+# PR150 is the last reviewed application code baseline on main. Its real
+# Auth0 E2E, Preview, security gate and PG18 are independent of old G3 proof.
+reviewed_checks="$(gh api "repos/$REPO/commits/$REVIEWED_APP_HEAD/check-runs?per_page=100")"
+for check in quality security-gate auth0-e2e preview-deployment sync-auth0-preview pg18-security-contracts deployment-config "Vercel Preview Comments"; do
+  jq -e --arg name "$check" '
+    [.check_runs[] | select(.name == $name and .status == "completed" and .conclusion == "success")]
+    | length == 1
+  ' <<< "$reviewed_checks" >/dev/null || {
+    echo "::error::Reviewed exact PR150 application check is not SUCCESS: $check"
+    exit 1
+  }
+done
+
 baseline_checks="$(gh api "repos/$REPO/commits/$BASE_MAIN_MERGE/check-runs?per_page=100")"
 jq -e '
   [.check_runs[] | select(
