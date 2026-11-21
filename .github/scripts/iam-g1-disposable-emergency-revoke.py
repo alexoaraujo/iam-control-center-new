@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Independent REVOKE-only operator for one disposable Neon G1 branch.
+"""REVOKE-only maintenance action for one disposable Neon G1 branch.
 
 Never import/execute from the Development emergency revoker; do not add GRANT,
 ALTER ROLE, backup, RESTORE or a dynamic SQL identifier here.
-This code does not establish independent human approval or branch attestation.
+This code does not establish human independent approval or a valid branch lease.
+Single-maintainer policy still requires an explicit operation latch and exact-SHA gate.
 """
 from __future__ import annotations
 
@@ -168,7 +169,7 @@ def execute(mode: str, confirm: str, config: dict[str, str],
         return "PASS_G1_DISPOSABLE_REVOKER_PREFLIGHT_NO_DDL"
     if (mode != "revoke" or confirm != LATCH
             or config.get("IAM_G1_DISPOSABLE_REVOKER_APPROVAL") != LATCH):
-        raise Blocked("INDEPENDENT_REVOKE_APPROVAL_MISSING")
+        raise Blocked("MAINTAINER_REVOKE_CONFIRMATION_MISSING")
     psql(REVOKE_SQL, env, runner)
     after = inventory(env, runner)  # DIFFERENT connection, after COMMIT.
     if after[:6] != (1, 3, 23, 1, 3, 20) or any(after[6:]):

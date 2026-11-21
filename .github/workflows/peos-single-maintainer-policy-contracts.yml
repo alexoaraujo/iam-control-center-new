@@ -1,0 +1,52 @@
+name: PEOS single-maintainer governance contracts
+
+on:
+  pull_request:
+    paths:
+      - ".github/scripts/configure-iam-canonical-environment.py"
+      - ".github/scripts/iam-g1-disposable-environment-bootstrap.py"
+      - ".github/scripts/iam-g1-environment-readonly-attestation.py"
+      - ".github/tests/test-iam-g1-environment-readonly-attestation.py"
+      - ".github/scripts/iam-g1-disposable-emergency-revoke.py"
+      - ".github/tests/test-configure-iam-canonical-environment.py"
+      - ".github/tests/test-iam-g1-disposable-environment-bootstrap.py"
+      - ".github/tests/test-iam-g1-disposable-emergency-revoke.py"
+      - ".github/workflows/iam-g1-disposable-emergency-revoke.yml"
+      - ".github/workflows/peos-single-maintainer-policy-contracts.yml"
+      - "scripts/peos-single-maintainer-policy.test.mjs"
+      - "scripts/sync-auth0-e2e-preview.mjs"
+      - "scripts/sync-auth0-e2e-preview.test.mjs"
+      - "docs/operations/peos-single-maintainer-governance.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  peos-single-maintainer-contracts:
+    name: peos-single-maintainer-contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Checkout exact PR revision without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Prepare Node.js 24 for dependency-free contract tests
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Verify Python syntax without any provider access
+        run: |
+          python3 -m py_compile .github/scripts/configure-iam-canonical-environment.py
+          python3 -m py_compile .github/scripts/iam-g1-disposable-environment-bootstrap.py
+          python3 -m py_compile .github/scripts/iam-g1-environment-readonly-attestation.py
+          python3 -m py_compile .github/scripts/iam-g1-disposable-emergency-revoke.py
+      - name: Run canonical setup and G1 synthetic tests with no secrets
+        run: |
+          python3 .github/tests/test-configure-iam-canonical-environment.py
+          python3 .github/tests/test-iam-g1-disposable-environment-bootstrap.py
+          python3 .github/tests/test-iam-g1-environment-readonly-attestation.py
+          python3 .github/tests/test-iam-g1-disposable-emergency-revoke.py
+      - name: Assert policy invariants and retained technical security-gate
+        run: node --test scripts/peos-single-maintainer-policy.test.mjs scripts/sync-auth0-e2e-preview.test.mjs

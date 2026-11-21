@@ -3,7 +3,7 @@
 ## Environments
 - Local: fake/non-sensitive data; `.env.local` ignored by Git.
 - Preview: isolated Auth0 application and isolated PostgreSQL database/branch; synthetic users only.
-- Production: separate Auth0 application and database; protected Vercel environment; approval required.
+- Production: separate Auth0 application and database; protected Vercel environment; **explicit SHA-scoped authorization by the single maintainer**, no second human required.
 
 ## Secret inventory
 Configure values directly in each provider's secret/environment UI. Never paste them into issues, PRs, logs, source files, or generated artifacts.
@@ -23,4 +23,4 @@ See [Neon connection pooling](../architecture/neon-connection-pooling.md) for th
 - Do not point Preview at production data. Do not run migrations against Production during bootstrap.
 
 ## Rollout gate
-The variables above are a target contract, not evidence that provider configuration has been completed. Verify the actual role, branch, endpoint type, Vercel environment scope, and successful database query separately. Production requires separate explicit approval.
+The variables above are a target contract, not evidence that provider configuration has been completed. Verify the actual role, branch, endpoint type, Vercel environment scope, and successful database query separately. Production requires an explicit, auditable decision by the **same maintainer**, not a mandatory independent approval; the technical release gates and rollback remain unchanged.
