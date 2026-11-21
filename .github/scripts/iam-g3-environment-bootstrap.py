@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Admin-only, local hardening of an EXISTING PR128 G3 GitHub Environment.
+"""Main-only G3 Environment readback, fail-closed for all in-process writes.
 
-Never creates Environments, handles owner secrets, executes G3, or writes Neon.
+Never creates or changes Environments, handles secrets, executes G3, or writes Neon.
 Usage:
     python3 .github/scripts/iam-g3-environment-bootstrap.py --mode plan
     python3 .github/scripts/iam-g3-environment-bootstrap.py --mode verify
-    python3 .github/scripts/iam-g3-environment-bootstrap.py --mode apply \
-      --confirm HARDEN_EXISTING_G3_ENV_NO_SECRETS
+    # Administrative changes must be made in the GitHub Environment UI.
+    # This script does not write policies or expose owner credentials.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import sys
 REPOSITORY = "alexoaraujo/iam-control-center-new"
 MAINTAINER = "alexoaraujo"
 ENVIRONMENT = "IAM-G3-PR128-Disposable-RBAC"
-PR_REF = "refs/pull/128/merge"
+PR_REF = "main"
 CONFIRMATION = "HARDEN_EXISTING_G3_ENV_NO_SECRETS"
 BASE = f"repos/{REPOSITORY}/environments/{ENVIRONMENT}"
 POLICY_PATH = BASE + "/deployment-branch-policies?per_page=100"
@@ -110,7 +110,7 @@ def assert_environment(metadata, policies, custom):
                for x in rules)):
         raise GateBlocked("G3_ENV_PROTECTION_RULES_INVALID")
     if not policies_exact(policies):
-        raise GateBlocked("G3_EXACT_PR128_BRANCH_REF_NOT_PROVEN")
+        raise GateBlocked("G3_MAIN_ONLY_BRANCH_REF_NOT_PROVEN")
     if (not isinstance(custom, dict) or custom.get("total_count") != 0
         or custom.get("custom_deployment_protection_rules") != []):
         raise GateBlocked("G3_UNKNOWN_CUSTOM_DEPLOYMENT_RULE")
@@ -123,54 +123,16 @@ def verify():
     custom = gh_json(CUSTOM_PATH)
     assert_environment(metadata, policies, custom)
     print("PASS_G3_ADMIN_READBACK_EXISTING_ENV_ONLY")
-    print("PASS_G3_ADMIN_BYPASS_DISABLED_AND_EXACT_PR128_REF")
+    print("PASS_G3_ADMIN_BYPASS_DISABLED_AND_MAIN_ONLY_REF")
     print("G3_OWNER_SECRET=NOT_READ_NOT_PROVISIONED")
     print("G3_POSITIVE_HTTP=NOT_RUN")
 
 
 def apply():
-    if os.environ.get("GITHUB_ACTIONS") == "true" or not sys.stdin.isatty():
-        raise GateBlocked("LOCAL_INTERACTIVE_ADMIN_TERMINAL_REQUIRED")
-    assert_admin()
-    before = existing_environment()  # Fail closed: NEVER auto-create Environment.
-    rules = before.get("protection_rules")
-    if not isinstance(rules, list) or any(
-        not isinstance(rule, dict) or rule.get("type") not in
-        ("branch_policy", "wait_timer") for rule in rules
-    ):
-        raise GateBlocked("EXISTING_UNEXPECTED_PROTECTION_RULES")
-    if any(rule.get("type") == "wait_timer" and rule.get("wait_timer") != 0
-           for rule in rules):
-        raise GateBlocked("EXISTING_WAIT_TIMER_REQUIRES_REVIEW")
-    mode = before.get("deployment_branch_policy")
-    if isinstance(mode, dict) and mode.get("custom_branch_policies") is True:
-        current = gh_json(POLICY_PATH)
-        if not (policies_empty(current) or policies_exact(current)):
-            raise GateBlocked("EXISTING_BRANCH_RULES_NOT_SAFE_TO_REPLACE")
-    # Never reference this environment via a workflow merely to create it.
-    payload = {
-        "wait_timer": 0,
-        "prevent_self_review": False,
-        "can_admins_bypass": False,
-        "reviewers": [],
-        "deployment_branch_policy": {
-            "protected_branches": False, "custom_branch_policies": True
-        },
-    }
-    updated = gh_json("-X", "PUT", BASE, payload=payload)
-    if not isinstance(updated, dict) or updated.get("name") != ENVIRONMENT:
-        raise GateBlocked("G3_ENV_UPDATE_NOT_CONFIRMED")
-    current = gh_json(POLICY_PATH)
-    if policies_empty(current):
-        added = gh_json(
-            "-X", "POST", BASE + "/deployment-branch-policies",
-            payload={"name": PR_REF, "type": "branch"},
-        )
-        if not isinstance(added, dict) or added.get("name") != PR_REF:
-            raise GateBlocked("G3_PR128_BRANCH_RULE_CREATE_NOT_CONFIRMED")
-    elif not policies_exact(current):
-        raise GateBlocked("G3_EXISTING_BRANCH_RULES_UNEXPECTED")
-    verify()
+    # Fail closed rather than using the obsolete PR-merge-ref setup. Updating
+    # Environment branch policies is an administrative operation, not code CI.
+    # The owner secret must never be released before main-only readback.
+    raise GateBlocked("G3_MAIN_ONLY_REQUIRES_ADMIN_UI_AND_READBACK")
 
 
 def main():
