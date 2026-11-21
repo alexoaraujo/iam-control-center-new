@@ -46,6 +46,8 @@ test("only the exact dedicated G3 Environment can release owner credentials", ()
 
 test("OIDC identity is bound to the immutable repository, G3 Environment and main workflow", () => {
   assert.match(workflow, /repo:alexoaraujo@325264809\/iam-control-center-new@1451861889:environment:IAM-G3-PR128-Disposable-RBAC/);
+  assert.match(workflow, /claims\.workflow_ref !== expectedWorkflow/);
+  assert.match(workflow, /claims\.workflow_sha !== process\.env\.GITHUB_SHA/);
   assert.match(workflow, /iam-control-center-new\/\.github\/workflows\/iam-g3-pr128-trusted-executor\.yml@refs\/heads\/main/);
   assert.match(workflow, /x-vercel-trusted-oidc-idp-token/);
   assert.match(workflow, /PASS_G3_VERCEL_ANONYMOUS_NEGATIVE_CONTROL/);
