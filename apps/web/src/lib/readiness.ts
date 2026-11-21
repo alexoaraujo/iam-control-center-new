@@ -1,4 +1,5 @@
 import { getSql } from "./db";
+import { g3PreviewBranchValid, g3PreviewLeaseValid } from "./g3-preview-lease";
 
 /** Dependency readiness only; not evidence of tenant authorization or RLS isolation. */
 export async function checkReadiness() {
@@ -6,17 +7,24 @@ export async function checkReadiness() {
   if (!authKeys.every((key) => process.env[key]?.trim()) || !process.env.DATABASE_URL?.trim()) {
     return { ready: false, reason: "configuration_incomplete" } as const;
   }
+  // Readiness and authorization share the same short-lived G3 guard.
+  if (!g3PreviewLeaseValid()) {
+    return { ready: false, reason: "g3_fixture_lease_rejected" } as const;
+  }
   const expectedRole = process.env.DATABASE_RUNTIME_ROLE?.trim();
   if (!expectedRole) return { ready: false, reason: "runtime_role_unconfigured" } as const;
   try {
     const rows = await getSql().query(
-      "SELECT current_user AS role, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user",
+      "SELECT current_user AS role, rolsuper, rolbypassrls, current_setting('neon.branch_id',true) AS branch_id FROM pg_roles WHERE rolname = current_user",
       [],
       { fetchOptions: { signal: AbortSignal.timeout(3000), cache: "no-store" } },
     );
     const role = rows[0];
     if (!role || role.role !== expectedRole || role.rolsuper !== false || role.rolbypassrls !== false) {
       return { ready: false, reason: "runtime_role_rejected" } as const;
+    }
+    if (!g3PreviewBranchValid(role.branch_id)) {
+      return { ready: false, reason: "g3_database_branch_rejected" } as const;
     }
     return { ready: true, reason: "dependencies_available" } as const;
   } catch {
