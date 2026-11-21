@@ -1,5 +1,8 @@
 # IAM canonical export and isolated restore — runbook vigente
 
+> **Atualização normativa PEOS (17/11/2026 UTC):** as referências abaixo a aprovação/revisor **humano independente** foram supersedidas por [governança de mantenedor único](peos-single-maintainer-governance.md). O mantenedor `alexoaraujo` pode registrar a decisão e executar/recuperar a operação sem uma segunda pessoa. **Continuam obrigatórios** SHA exato, branch allowlist, secrets privados, TLS `verify-full`, restauração isolada, ledger/ACL/RLS, rollback técnico e confirmação explícita de escopo. Esta nota **não** autoriza retroativamente qualquer lease nem ignora TTL expirada; exemplos históricos seguem preservados para rastreabilidade.
+
+
 > **Escopo operacional verificado: 13/11/2026, a partir da main `ef539ef78a7b3e2ac2b95ce39b3a21992dc3af0c`.** Esta é a fonte operacional vigente para o workflow `.github/workflows/iam-canonical-isolated-restore.yml`. Procedimentos que utilizem projetos, hosts, branches ou databases diferentes dos identificados abaixo são **não autorizados**. Esta documentação não concede permissão para executar DDL, GRANT, ALTER ROLE, backup, exportação, restore ou cutover.
 
 ## Identidade autorizada — Neon (control plane)
