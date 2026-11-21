@@ -1,4 +1,4 @@
-name: IAM G1 disposable Neon independent REVOKE (manual ONLY)
+name: IAM G1 disposable Neon revocation (single maintainer, manual ONLY)
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  independently-protected-revocation:
+  maintainer-controlled-revocation:
     if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 8
@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
           persist-credentials: false
-      - name: Fail closed until independent environment reviewer approves SHA and branch TTL
+      - name: Fail closed until single maintainer records exact SHA and branch TTL
         shell: bash
         env:
           APPROVED_SHA: ${{ vars.IAM_G1_DISPOSABLE_REVOKER_APPROVED_SHA }}
@@ -44,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$APPROVED_SHA" =~ ^[0-9a-f]{40}$ ]] && [[ "$APPROVED_SHA" == "$GITHUB_SHA" ]] || {
-            echo "::error::BLOCKED_G1_REVOKER_INDEPENDENT_SHA_REVIEW"; exit 2;
+            echo "::error::BLOCKED_G1_REVOKER_MAINTAINER_SHA_NOT_RECORDED"; exit 2;
           }
           [[ "$TARGET_PROJECT" == "tiny-rice-70320263" ]] &&
           [[ "$TARGET_BRANCH" == "br-spring-grass-b6gap6kp" ]] || {
@@ -54,7 +54,7 @@ jobs:
             echo "::error::BLOCKED_G1_DISPOSABLE_BRANCH_TTL_EXPIRED"; exit 2;
           }
           echo "PASS_G1_REVOKER_SHA_AND_TTL_CHECK"
-      - name: Verify live GitHub Environment reviewer and main-only deployment policy
+      - name: Verify live GitHub Environment no-reviewer and main-only deployment policy
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -71,12 +71,9 @@ jobs:
             and .can_admins_bypass == false
             and .deployment_branch_policy.protected_branches == false
             and .deployment_branch_policy.custom_branch_policies == true
-            and any(.protection_rules[]?;
-              .type == "required_reviewers"
-              and .prevent_self_review == true
-              and any(.reviewers[]?; .type == "User" and .reviewer.login == "alexoaraujo83"))
+            and ([.protection_rules[]? | select(.type == "required_reviewers")] | length == 0)
           ' "${RUNNER_TEMP}/iam-g1-revoke-environment.json" >/dev/null || {
-            echo "::error::BLOCKED_G1_ENV_REVIEWER_BYPASS_OR_BRANCH_POLICY"; exit 2;
+            echo "::error::BLOCKED_G1_ENV_MAINTAINER_POLICY_OR_BRANCH_POLICY"; exit 2;
           }
           curl --fail --silent --show-error --max-time 15 \
             --header "Accept: application/vnd.github+json" \
@@ -89,8 +86,8 @@ jobs:
           ' "${RUNNER_TEMP}/iam-g1-revoke-branches.json" >/dev/null || {
             echo "::error::BLOCKED_G1_ENV_NONEXCLUSIVE_DEPLOYMENT_BRANCH"; exit 2;
           }
-          echo 'PASS_G1_ENV_PROTECTION_REVIEWERS_MAIN'
-      - name: Validate independent revoke-only source offline
+          echo 'PASS_G1_ENV_SINGLE_MAINTAINER_MAIN_ONLY'
+      - name: Validate revoke-only source offline with technical session separation
         shell: bash
         run: |
           set -euo pipefail
@@ -110,7 +107,7 @@ jobs:
             --entrypoint sh iam-g1-pg18-system-ca:local \
             -ec 'test -s /etc/ssl/certs/ca-certificates.crt && test "$SSL_CERT_FILE" = /etc/ssl/certs/ca-certificates.crt && command -v psql'
           echo 'PASS_G1_REVOKER_CA_PROVISIONED_PG18_CLIENT'
-      - name: PostgreSQL 18 independent operator (preflight or revoke)
+      - name: PostgreSQL 18 single maintainer (preflight or revoke)
         shell: bash
         env:
           IAM_G1_DISPOSABLE_PROJECT_ID: ${{ vars.IAM_G1_DISPOSABLE_PROJECT_ID }}

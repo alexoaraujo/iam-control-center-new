@@ -311,7 +311,7 @@ def check_runtime_role_contract(source_creds: dict[str, str],
     if attribute_drift:
         raise GateBlocked(
             "BLOCKED_ROLE_ATTRIBUTES: " + ", ".join(attribute_drift)
-            + "; branch-wide corrections require independent approval"
+            + "; branch-wide corrections require a separately recorded, exact-SHA maintainer decision"
         )
 
     membership_sql = """SELECT member.rolname, granted.rolname,
@@ -428,7 +428,7 @@ def check_migrator_owner_membership(source_creds: dict[str, str],
         raise GateBlocked(
             "BLOCKED_MIGRATOR_OWNER_MEMBERSHIP: " + ", ".join(flags)
             + "; ADMIN=false/INHERIT=false/SET=true required; "
-            "privileged branch-wide changes require independent approval")
+            "privileged branch-wide changes require an exact-SHA maintainer decision")
 
 
 def check_pgcrypto_availability(source_creds: dict[str, str],
@@ -439,7 +439,7 @@ def check_pgcrypto_availability(source_creds: dict[str, str],
     pg_dump --schema=iam/audit/app_private excludes the public extension
     definition. An available *package* is not an installed extension: the
     target must already have pgcrypto installed in public under a separate,
-    independently approved DDL change. This guard never installs it.
+    explicitly maintainer-authorized DDL change. This guard never installs it.
     """
     installed_in_public = """SELECT count(*) FROM pg_extension e
       JOIN pg_namespace n ON n.oid=e.extnamespace
@@ -563,7 +563,7 @@ def execute(mode: str) -> None:
         ], dst, workspace)
         check_restored(dst, workspace)
         print("PASS_ISOLATED_SCHEMA_RESTORE: 23 tables, 41 policies, 20 FORCE RLS, 23 owners")
-        print("REMAINING_GATES: ledger, business data, independent rollback, RLS A/B, release")
+        print("REMAINING_GATES: ledger, business data, verified rollback, RLS A/B, release")
 
 def main() -> int:
     try:
