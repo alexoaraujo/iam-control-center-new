@@ -45,6 +45,7 @@ jobs:
       contents: read
       pull-requests: read
       checks: read
+      actions: read
     outputs:
       eligible: ${{ steps.validate.outputs.eligible }}
       head_sha: ${{ steps.validate.outputs.head_sha }}
@@ -93,23 +94,34 @@ jobs:
             exit 1
           }
 
-          checks="$(gh api "repos/${REPOSITORY}/commits/${head_sha}/check-runs?per_page=100")"
+          runs="$(gh api "repos/${REPOSITORY}/actions/runs?head_sha=${head_sha}&per_page=100")"
+          ci_run_id="$(jq -er --arg sha "${head_sha}" '
+            [.workflow_runs[]
+              | select(.name == "CI" and .event == "pull_request" and .head_sha == $sha)
+            ] | sort_by(.created_at) | last | .id
+          ' <<< "${runs}")"
+          ci_run_state="$(jq -r --arg id "${ci_run_id}" '
+            .workflow_runs[] | select((.id | tostring) == $id) | .status
+          ' <<< "${runs}")"
+          ci_run_conclusion="$(jq -r --arg id "${ci_run_id}" '
+            .workflow_runs[] | select((.id | tostring) == $id) | .conclusion
+          ' <<< "${runs}")"
+          [[ "${ci_run_state}" == "completed" && "${ci_run_conclusion}" == "success" ]] || {
+            echo "::error::Latest exact-SHA CI workflow is not SUCCESS."
+            exit 1
+          }
+          jobs="$(gh api "repos/${REPOSITORY}/actions/runs/${ci_run_id}/jobs?per_page=100")"
           for required in quality security-gate auth0-e2e preview-deployment sync-auth0-preview; do
-            jq -e --arg sha "${head_sha}" --arg name "${required}" '
-              [.check_runs[]
-                | select(
-                    .head_sha == $sha
-                    and .app.slug == "github-actions"
-                    and .name == $name
-                    and .status == "completed"
-                    and .conclusion == "success"
-                  )
+            jq -e --arg name "${required}" '
+              [.jobs[]
+                | select(.name == $name and .status == "completed" and .conclusion == "success")
               ] | length == 1
-            ' <<< "${checks}" >/dev/null || {
-              echo "::error::Required exact-SHA check did not pass: ${required}."
+            ' <<< "${jobs}" >/dev/null || {
+              echo "::error::Required job in the latest exact-SHA CI run did not pass: ${required}."
               exit 1
             }
           done
+          checks="$(gh api "repos/${REPOSITORY}/commits/${head_sha}/check-runs?per_page=100")"
           jq -e --arg sha "${head_sha}" --arg alias "iam-control-center-new-pr128-ci.vercel.app" '
             [.check_runs[]
               | select(
@@ -144,6 +156,7 @@ jobs:
       contents: read
       pull-requests: read
       checks: read
+      actions: read
       id-token: write
     env:
       G3_PR_HEAD_SHA: ${{ needs.preflight.outputs.head_sha }}
@@ -203,23 +216,34 @@ jobs:
             echo "::error::PR128 identity/state changed after preflight."
             exit 1
           }
-          checks="$(gh api "repos/${REPOSITORY}/commits/${current_sha}/check-runs?per_page=100")"
+          runs="$(gh api "repos/${REPOSITORY}/actions/runs?head_sha=${current_sha}&per_page=100")"
+          ci_run_id="$(jq -er --arg sha "${current_sha}" '
+            [.workflow_runs[]
+              | select(.name == "CI" and .event == "pull_request" and .head_sha == $sha)
+            ] | sort_by(.created_at) | last | .id
+          ' <<< "${runs}")"
+          ci_run_state="$(jq -r --arg id "${ci_run_id}" '
+            .workflow_runs[] | select((.id | tostring) == $id) | .status
+          ' <<< "${runs}")"
+          ci_run_conclusion="$(jq -r --arg id "${ci_run_id}" '
+            .workflow_runs[] | select((.id | tostring) == $id) | .conclusion
+          ' <<< "${runs}")"
+          [[ "${ci_run_state}" == "completed" && "${ci_run_conclusion}" == "success" ]] || {
+            echo "::error::Latest exact-SHA CI workflow is no longer SUCCESS."
+            exit 1
+          }
+          jobs="$(gh api "repos/${REPOSITORY}/actions/runs/${ci_run_id}/jobs?per_page=100")"
           for required in quality security-gate auth0-e2e preview-deployment sync-auth0-preview; do
-            jq -e --arg sha "${current_sha}" --arg name "${required}" '
-              [.check_runs[]
-                | select(
-                    .head_sha == $sha
-                    and .app.slug == "github-actions"
-                    and .name == $name
-                    and .status == "completed"
-                    and .conclusion == "success"
-                  )
+            jq -e --arg name "${required}" '
+              [.jobs[]
+                | select(.name == $name and .status == "completed" and .conclusion == "success")
               ] | length == 1
-            ' <<< "${checks}" >/dev/null || {
-              echo "::error::Exact-SHA prerequisite changed or is no longer successful: ${required}."
+            ' <<< "${jobs}" >/dev/null || {
+              echo "::error::Exact-SHA CI job changed or is no longer successful: ${required}."
               exit 1
             }
           done
+          checks="$(gh api "repos/${REPOSITORY}/commits/${current_sha}/check-runs?per_page=100")"
           jq -e --arg sha "${current_sha}" --arg alias "iam-control-center-new-pr128-ci.vercel.app" '
             [.check_runs[]
               | select(
