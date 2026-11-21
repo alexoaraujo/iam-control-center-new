@@ -154,7 +154,7 @@ done
 # modify app/manifest/guard source and will not schedule a new guard check.
 # Require the original known-good deployment-config check on the exact app
 # baseline, then require fresh main-SHA quality and PG18. Whole-tree equality
-# to merged PR147 and the six-file allowlist prohibit runtime/config drift.
+# with reviewed PR151 and the two-file allowlist prohibit runtime/config drift.
 # PR150 is the last reviewed application code baseline on main. Its real
 # Auth0 E2E, Preview, security gate and PG18 are independent of old G3 proof.
 reviewed_checks="$(gh api "repos/$REPO/commits/$REVIEWED_APP_HEAD/check-runs?per_page=100")"
