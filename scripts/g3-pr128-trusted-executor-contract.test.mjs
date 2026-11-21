@@ -56,6 +56,7 @@ test("the trusted suite proves grant, tenant isolation, revoke, rollback and zer
   assert.match(suite, /assertRbacFixtureLease\(ID\)/);
   assert.match(suite, /sslmode.*verify-full/);
   assert.match(suite, /sslrootcert.*system/);
+  assert.match(suite, /tls_enabled === true/);
   assert.match(suite, /SET LOCAL ROLE iam_owner/);
   assert.match(suite, /PASS_G3_GRANT_HTTP_200/);
   assert.match(suite, /cross-tenant-B/);
