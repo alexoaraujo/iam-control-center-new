@@ -384,6 +384,12 @@ jobs:
           console.log("PASS_G3_VERCEL_TRUSTED_SOURCE_POSITIVE_CONTROL");
           NODE
 
+      - name: Clear short-lived Vercel OIDC token before binding G3 credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' 'VERCEL_TRUSTED_OIDC_TOKEN=' >> "${GITHUB_ENV}"
+
       - name: Verify exact approved SHA and protected credential availability
         shell: bash
         env:

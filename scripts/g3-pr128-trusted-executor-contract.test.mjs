@@ -47,9 +47,13 @@ test("G3 job checks out the trusted workflow commit, never the PR head", () => {
 
 test("only the exact dedicated G3 Environment can release owner credentials, after live deployment identity passes", () => {
   const liveIdentity = workflow.indexOf("Verify live Preview and callback deployment identity against the approved PR128 SHA");
+  const protection = workflow.indexOf("Verify Vercel Deployment Protection negative and positive controls");
+  const tokenClear = workflow.indexOf("Clear short-lived Vercel OIDC token before binding G3 credentials");
   const credentialPreflight = workflow.indexOf("Verify exact approved SHA and protected credential availability");
   const privilegedSuite = workflow.indexOf("Execute trusted PR128 Auth0/RBAC grant, deny, revoke, cleanup and rollback suite");
-  assert.ok(liveIdentity >= 0 && credentialPreflight > liveIdentity && privilegedSuite > credentialPreflight);
+  assert.ok(liveIdentity >= 0 && protection > liveIdentity && tokenClear > protection &&
+    credentialPreflight > tokenClear && privilegedSuite > credentialPreflight);
+  assert.ok(workflow.includes("VERCEL_TRUSTED_OIDC_TOKEN="));
   assert.ok(workflow.indexOf("secrets.NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL") > liveIdentity);
   assert.match(workflow, /environment:\s*\n\s+name:\s*IAM-G3-PR128-Disposable-RBAC/);
   assert.match(workflow, /secrets\.NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL/);
