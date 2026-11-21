@@ -154,3 +154,18 @@ test("PR146 callback is exclusively bound to its own branch and exact SHA", () =
   assert.throws(() => verifyPreviewBinding(e, { ...d, name: "iam-control-center-new-pr128-ci.vercel.app" }, a, dep), /not bound/);
   assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
 });
+
+test("PR147 postmerge security gate has an exact branch-scoped Preview callback", () => {
+  const b = "security/main-postmerge-g3-exact-sha-20261121";
+  const h = "iam-control-center-new-pr147-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.deepEqual(verifyPreviewBinding(e, d, a, dep), {
+    callbackHost: h, callbackBranch: b, callbackUrl: `https://${h}`,
+  });
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "integration/peos-single-maintainer-bun-20261117" }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+});
