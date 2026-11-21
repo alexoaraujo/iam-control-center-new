@@ -124,18 +124,21 @@ jq -e '
   exit 1
 }
 
-# After PR150 the ONLY permitted changes are this reviewed G3 preflight and its
-# contract tests; never allow changes to runtime code, workflows or migrations.
+# After PR150 only this reviewed G3 preflight, its contract tests, and
+# PR151's exact branch-bound Auth0 callback map and its tests may change.
+# No runtime authorization, database, workflows, or migrations are allowed.
 scope="$(gh api "repos/$REPO/compare/$REVIEWED_APP_MERGE...$main_sha")"
 jq -e '
-  .status == "ahead" and (.files | length) == 2 and
+  .status == "ahead" and (.files | length) == 4 and
   ([.files[] | select(
     .status == "modified" and
     (.filename == ".github/trusted/iam-main-postmerge-preflight.sh" or
-     .filename == "scripts/iam-main-postmerge-g3-contract.test.mjs")
-  )] | length) == 2
+     .filename == "scripts/iam-main-postmerge-g3-contract.test.mjs" or
+     .filename == "scripts/bind-e2e-preview.mjs" or
+     .filename == "scripts/bind-e2e-preview.test.mjs")
+  )] | length) == 4
 ' <<< "$scope" >/dev/null || {
-  echo "::error::Post-PR150 main changes exceed the reviewed G3 control-only scope."
+  echo "::error::Post-PR150 main changes exceed reviewed G3/PR151 callback-only scope."
   exit 1
 }
 
@@ -154,7 +157,7 @@ done
 # modify app/manifest/guard source and will not schedule a new guard check.
 # Require the original known-good deployment-config check on the exact app
 # baseline, then require fresh main-SHA quality and PG18. Whole-tree equality
-# with reviewed PR151 and the two-file allowlist prohibit runtime/config drift.
+# with reviewed PR151 and the four-file allowlist prohibit runtime/config drift.
 # PR150 is the last reviewed application code baseline on main. Its real
 # Auth0 E2E, Preview, security gate and PG18 are independent of old G3 proof.
 reviewed_checks="$(gh api "repos/$REPO/commits/$REVIEWED_APP_HEAD/check-runs?per_page=100")"
