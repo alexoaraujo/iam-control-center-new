@@ -13,7 +13,7 @@ from urllib import request, error
 REPO = "alexoaraujo/iam-control-center-new"
 NAME = "IAM-G3-PR128-Disposable-RBAC"
 ROOT = f"https://api.github.com/repos/{REPO}/environments/{NAME}"
-ALLOWED = {"refs/pull/128/merge", "integration/peos-single-maintainer-bun-20261117"}
+ALLOWED = {"main"}
 
 
 class PolicyBlocked(RuntimeError):
@@ -53,7 +53,7 @@ def verify_g3(metadata, policies, custom):
         raise PolicyBlocked("G3_ENV_POLICIES_MISSING")
     count, items = policies.get("total_count"), policies.get("branch_policies")
     if type(count) is not int or not isinstance(items, list) or (
-        count != len(items) or not 1 <= count <= 100
+        count != len(items) or count != 1
     ):
         raise PolicyBlocked("G3_ENV_POLICY_LIST_INCOMPLETE")
     names = []
@@ -66,8 +66,8 @@ def verify_g3(metadata, policies, custom):
         names.append(name)
     if len(names) != len(set(names)):
         raise PolicyBlocked("G3_ENV_DUPLICATE_BRANCH_POLICY")
-    if "refs/pull/128/merge" not in names:
-        raise PolicyBlocked("G3_ENV_PR128_MERGE_REF_NOT_ALLOWED")
+    if names != ["main"]:
+        raise PolicyBlocked("G3_ENV_MAIN_ONLY_REF_NOT_ATTESTED")
     return sorted(names)
 
 

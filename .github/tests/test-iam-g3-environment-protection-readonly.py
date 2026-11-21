@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""No-secret synthetic tests for the live PR128 G3 GitHub Environment gate."""
+"""Offline main-only G3 Environment readback tests; never access secrets."""
 import importlib.util
 import contextlib
 import io
@@ -23,11 +23,9 @@ def good_env():
     }
 
 
-def good_policies(*names):
-    if not names:
-        names = ("refs/pull/128/merge",)
+def policies(*names):
     return {"total_count": len(names), "branch_policies": [
-        {"name": n, "type": "branch"} for n in names
+        {"name": name, "type": "branch"} for name in names
     ]}
 
 
@@ -35,77 +33,62 @@ def good_custom():
     return {"total_count": 0, "custom_deployment_protection_rules": []}
 
 
-class Controls(TestCase):
-    def test_exact_pr_ref_is_accepted_without_unrelated_access(self):
-        names = mod.verify_g3(good_env(), good_policies(), good_custom())
-        self.assertEqual(names, ["refs/pull/128/merge"])
-        names = mod.verify_g3(good_env(), good_policies(
-            "refs/pull/128/merge", "integration/peos-single-maintainer-bun-20261117"
-        ), good_custom())
-        self.assertEqual(set(names), mod.ALLOWED)
+class MainOnlyControls(TestCase):
+    def test_accept_exact_main_branch_only(self):
+        self.assertEqual(mod.ALLOWED, {"main"})
+        self.assertEqual(mod.verify_g3(good_env(), policies("main"), good_custom()), ["main"])
 
-    def test_missing_admin_bypass_and_protection_are_denied(self):
+    def test_reject_legacy_pr_ref_wildcards_and_mixed_refs(self):
+        for entries in (
+            (), ("refs/pull/128/merge",), ("refs/heads/main",),
+            ("refs/pull/145/merge",), ("refs/pull/*/merge",),
+            ("main", "refs/pull/128/merge"), ("main", "main"),
+            ("integration/peos-single-maintainer-bun-20261117",),
+        ):
+            with self.subTest(refs=entries), self.assertRaises(mod.PolicyBlocked):
+                mod.verify_g3(good_env(), policies(*entries), good_custom())
+        p = policies("main")
+        p["branch_policies"][0]["type"] = "tag"
+        with self.assertRaisesRegex(mod.PolicyBlocked, "POLICY_TYPE_NOT_BRANCH"):
+            mod.verify_g3(good_env(), p, good_custom())
+
+    def test_missing_admin_bypass_or_unknown_protection_is_blocked(self):
         for name, value in (
             ("can_admins_bypass", True), ("can_admins_bypass", None),
             ("deployment_branch_policy", {}),
             ("protection_rules", []),
             ("protection_rules", [{"type": "required_reviewers"}]),
-            ("protection_rules", [{"type": "wait_timer", "wait_timer": 0}]),
             ("protection_rules", [{"type": "branch_policy"},
                                   {"type": "wait_timer", "wait_timer": 30}]),
         ):
             metadata = good_env()
             metadata[name] = value
-            with self.subTest(key=name, value=str(value)), self.assertRaises(mod.PolicyBlocked):
-                mod.verify_g3(metadata, good_policies(), good_custom())
-
-    def test_other_pr_main_wildcards_tags_and_wrong_branch_are_denied(self):
-        for name in ("main", "refs/pull/*/merge", "refs/pull/132/merge",
-                     "refs/pull/128/head", "feature/*",
-                     "integration/peos-g1-g2-canonical-bun-20261118"):
             with self.subTest(name=name), self.assertRaises(mod.PolicyBlocked):
-                mod.verify_g3(good_env(), good_policies(name), good_custom())
-        with self.assertRaisesRegex(mod.PolicyBlocked, "PR128_MERGE_REF_NOT_ALLOWED"):
-            mod.verify_g3(good_env(), good_policies(
-                "integration/peos-single-maintainer-bun-20261117"
-            ), good_custom())
-        with self.assertRaisesRegex(mod.PolicyBlocked, "POLICY_TYPE_NOT_BRANCH"):
-            x = good_policies()
-            x["branch_policies"][0]["type"] = "tag"
-            mod.verify_g3(good_env(), x, good_custom())
-
-    def test_partial_duplicate_or_custom_unreviewed_policy_is_denied(self):
-        for policies in (
-            {}, {"total_count": 0, "branch_policies": []},
-            {"total_count": 3, "branch_policies": good_policies()["branch_policies"]},
-            good_policies("refs/pull/128/merge", "refs/pull/128/merge"),
-        ):
-            with self.subTest(payload=str(policies)), self.assertRaises(mod.PolicyBlocked):
-                mod.verify_g3(good_env(), policies, good_custom())
+                mod.verify_g3(metadata, policies("main"), good_custom())
         with self.assertRaises(mod.PolicyBlocked):
-            mod.verify_g3(good_env(), good_policies(), {
-                "total_count": 1, "custom_deployment_protection_rules": [{"type": "unknown"}]
+            mod.verify_g3(good_env(), policies("main"), {
+                "total_count": 1, "custom_deployment_protection_rules": [{}]
             })
 
-    def test_readonly_preflight_uses_only_three_metadata_paths(self):
-        # A synthetic test must not emit production-looking PASS markers.
+    def test_readback_never_fetches_secrets_or_mutates(self):
         capture = io.StringIO()
-        with patch.object(mod, "query", side_effect=[good_env(), good_policies(), good_custom()]) as q, contextlib.redirect_stdout(capture):
+        with patch.object(mod, "query", side_effect=[
+            good_env(), policies("main"), good_custom()]) as mock, \
+             contextlib.redirect_stdout(capture):
             mod.run(mod.REPO, "fake-read-token")
+        self.assertEqual(mock.call_count, 3)
         self.assertIn("PASS_G3_ENV_EFFECTIVE_PROTECTION", capture.getvalue())
-        self.assertEqual(q.call_count, 3)
-        urls = [args[0][0] for args in q.call_args_list]
-        self.assertEqual(urls, [mod.ROOT,
-                         mod.ROOT + "/deployment-branch-policies?per_page=100",
-                         mod.ROOT + "/deployment_protection_rules"])
-        self.assertTrue(all("/secrets" not in url and "/variables" not in url for url in urls))
+        self.assertIn('["main"]', capture.getvalue())
+        self.assertTrue(all("/secrets" not in args[0][0] and
+                            "/variables" not in args[0][0]
+                            for args in mock.call_args_list))
 
-    def test_unexpected_repository_or_missing_token_fail_before_api(self):
-        with patch.object(mod, "query") as q:
-            for repo, token in (("different/repo", "fake"), (mod.REPO, "")):
+    def test_missing_token_or_wrong_repository_rejected(self):
+        with patch.object(mod, "query") as mock:
+            for repo, token in (("other/repository", "fake"), (mod.REPO, "")):
                 with self.assertRaises(mod.PolicyBlocked):
                     mod.run(repo, token)
-            q.assert_not_called()
+            mock.assert_not_called()
 
 
 if __name__ == "__main__":

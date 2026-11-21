@@ -21,7 +21,7 @@ SECRET = "NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL"
 SHA_VAR = "IAM_RBAC_PR128_APPROVED_SHA"
 PR_BRANCH = "integration/peos-single-maintainer-bun-20261117"
 PR_NUMBER = 128
-EXACT_REF = "refs/pull/128/merge"
+EXACT_REF = "main"
 BASE = f"repos/{REPO}/environments/{ENV}"
 HEX_SHA = re.compile(r"[0-9a-f]{40}\Z")
 
