@@ -80,7 +80,7 @@ class G3OwnerMetadataContracts(TestCase):
             mod.inspect(*data)
 
     def test_ci_never_calls_admin_api(self):
-        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}), \\
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}), \
              patch.object(mod, "gh_api") as q, self.assertRaisesRegex(
                  mod.Blocked, "LOCAL_ADMIN_TERMINAL"):
             mod.run()
@@ -88,8 +88,8 @@ class G3OwnerMetadataContracts(TestCase):
 
     def test_local_mock_prints_no_secret_values_or_false_operational_pass(self):
         output = io.StringIO()
-        with patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}), \\
-             patch.object(mod, "gh_api", side_effect=valid()) as call, \\
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}), \
+             patch.object(mod, "gh_api", side_effect=valid()) as call, \
              contextlib.redirect_stdout(output):
             mod.run()
         self.assertEqual(call.call_count, 8)
