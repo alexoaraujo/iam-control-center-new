@@ -1,13 +1,8 @@
 name: Auth0 Management M2M audit (read-only)
 
-# Restricted to the PR #42 branch and to changes to this workflow.
-# Never run this credentialed job on pull_request or forks.
+# Manual-only on the protected main branch after PEOS Environment reconciliation.
+# Never run this credentialed job on push, pull_request or forks.
 on:
-  push:
-    branches:
-      - feat/auth0-neon-identity-sync-20261111
-    paths:
-      - .github/workflows/auth0-management-m2m-audit.yml
   workflow_dispatch:
 
 permissions:
@@ -20,7 +15,7 @@ concurrency:
 jobs:
   validate-client-credentials:
     name: Validate OAuth2 client_credentials (no user export)
-    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/feat/auth0-neon-identity-sync-20261111'
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: IAM-Audit-Development

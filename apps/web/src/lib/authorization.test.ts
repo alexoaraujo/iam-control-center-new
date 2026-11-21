@@ -28,7 +28,50 @@ describe("trusted server-only authorization", () => {
     query.mockResolvedValue([runtime]);
     transaction.mockResolvedValue([[], [{ allowed: true }]]);
   });
-  afterEach(() => vi.unstubAllEnvs());
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+
+  // PR128 G3 scoped authorizations must fail closed even when readiness is not called.
+  function pr128Lease() {
+    vi.stubEnv("APP_BASE_URL", "https://iam-control-center-new-pr128-ci.vercel.app");
+    vi.stubEnv("IAM_G3_EXPECTED_NEON_BRANCH_ID", "br-super-sound-b63gtz88");
+    vi.stubEnv("IAM_G3_NEON_LEASE_EXPIRES_AT", "2026-11-21T22:00:00Z");
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-20T21:00:00Z"));
+  }
+
+  it("rejects expired PR128 G3 authorization BEFORE any SQL or HMAC", async () => {
+    pr128Lease();
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-21T21:45:00Z"));
+    expect(await checkPermission("auth0|subject-a", tenantId, identityId, "iam.tenant.read")).toBe(false);
+    expect(getSql).not.toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing or drifted PR128 G3 lease variables before connecting", async () => {
+    pr128Lease();
+    for (const [key, value] of [
+      ["IAM_G3_EXPECTED_NEON_BRANCH_ID", "br-wrong"],
+      ["IAM_G3_NEON_LEASE_EXPIRES_AT", "2026-11-22T22:00:00Z"],
+    ]) {
+      vi.stubEnv(key, value);
+      expect(await checkPermission("auth0|subject-a", tenantId, identityId, "iam.tenant.read")).toBe(false);
+    }
+    expect(getSql).not.toHaveBeenCalled();
+  });
+
+  it("rejects correct runtime login on an unrelated Neon branch without minting a signature", async () => {
+    pr128Lease();
+    query.mockResolvedValueOnce([{ ...runtime, branch_id: "br-unrelated" }]);
+    expect(await checkPermission("auth0|subject-a", tenantId, identityId, "iam.tenant.read")).toBe(false);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("permits a correctly bound G3 Preview to continue to normal signed RBAC checks", async () => {
+    pr128Lease();
+    query.mockResolvedValueOnce([{ ...runtime, branch_id: "br-super-sound-b63gtz88" }]);
+    expect(await checkPermission("auth0|subject-a", tenantId, identityId, "iam.tenant.read")).toBe(true);
+    expect(query.mock.calls[0][0]).toContain("current_setting('neon.branch_id',true)");
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
 
   it("mints an HMAC only inside the server and binds issuer, subject and tenant in one DB transaction", async () => {
     expect(await checkPermission("auth0|subject-a", tenantId, identityId, "iam.tenant.read")).toBe(true);

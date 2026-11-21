@@ -1,6 +1,7 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { getSql } from "./db";
 import { canonicalIssuer } from "./identity-sync";
+import { g3PreviewBranchValid, g3PreviewLeaseValid } from "./g3-preview-lease";
 
 /**
  * Server-side only: a verified Auth0 session drives all permission checks.
@@ -45,6 +46,9 @@ export async function checkPermission(
   subject: string, tenantId: string, identityId: string, permission: string,
 ): Promise<boolean> {
   const authDomain = process.env.AUTH0_DOMAIN?.trim();
+  // A live Auth0 session cannot authorize on an expired or misbound G3 clone.
+  // Fail before creating a SQL session or minting a tenant-context signature.
+  if (!g3PreviewLeaseValid()) return false;
   if (!subject || subject.length > 512 || !validSelector(tenantId) || !validSelector(identityId)
     || !validPermission(permission) || process.env.DATABASE_RUNTIME_ROLE !== expectedRuntime
     || !authDomain || !/^[a-z0-9][a-z0-9.-]+$/i.test(authDomain)) return false;
@@ -63,13 +67,14 @@ export async function checkPermission(
     // The SQL client MUST be logged in as the actual non-BYPASSRLS runtime
     // principal, not SET ROLE from an owner/migrator account.
     const roles = await db.query(
-      "SELECT current_user AS role, session_user AS login, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user",
+      "SELECT current_user AS role, session_user AS login, rolsuper, rolbypassrls, current_setting('neon.branch_id',true) AS branch_id FROM pg_roles WHERE rolname = current_user",
       [],
       { fetchOptions: { signal: AbortSignal.timeout(3000), cache: "no-store" } },
     );
     const role = roles[0];
     if (!role || role.role !== expectedRuntime || role.login !== expectedRuntime
-      || role.rolsuper !== false || role.rolbypassrls !== false) return false;
+      || role.rolsuper !== false || role.rolbypassrls !== false
+      || !g3PreviewBranchValid(role.branch_id)) return false;
 
     const proof = signTenantContext(canonicalTenantId, canonicalIdentityId);
     if (!proof) return false;
