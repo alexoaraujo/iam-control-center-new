@@ -64,7 +64,7 @@ test("OIDC identity is bound to the immutable repository, G3 Environment and mai
   assert.match(workflow, /PASS_G3_VERCEL_TRUSTED_SOURCE_POSITIVE_CONTROL/);
   assert.match(workflow, /Verify live Preview and callback deployment identity against the approved PR128 SHA/);
   assert.ok(workflow.includes("node scripts/verify-preview-alias.mjs"));
-  assert.match(workflow, /PR_HEAD_SHA:.*needs\\.preflight\\.outputs\\.head_sha/);
+  assert.ok(workflow.includes("PR_HEAD_SHA: ${{ needs.preflight.outputs.head_sha }}"));
 });
 
 test("the trusted suite proves grant, tenant isolation, revoke, rollback and zero residue", () => {
