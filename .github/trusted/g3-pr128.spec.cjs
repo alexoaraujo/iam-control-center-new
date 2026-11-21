@@ -101,13 +101,15 @@ async function connect() {
   const sql = neon(connection);
   const session = await sql.query(
     "SELECT current_database() AS database_name, " +
-    "current_setting('neon.branch_id', true) AS branch_id, current_user AS principal",
+    "current_setting('neon.branch_id', true) AS branch_id, current_user AS principal, " +
+    "(SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()) AS tls_enabled",
   );
   check(
     session.length === 1 &&
       session[0].database_name === "iam_database" &&
       session[0].branch_id === ID.branch &&
-      session[0].principal === "neondb_owner",
+      session[0].principal === "neondb_owner" &&
+      session[0].tls_enabled === true,
     "G3 SQL session is not the approved disposable Neon branch",
   );
 
