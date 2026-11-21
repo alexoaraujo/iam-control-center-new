@@ -1,6 +1,6 @@
 import { getSql } from "./db";
 import { g3PreviewBranchValid, g3PreviewLeaseValid } from "./g3-preview-lease";
-import { expectedProductionBranch, productionBranchValid } from "./production-branch";
+import { expectedProductionBranch, productionBranchValid, productionBranchFingerprint } from "./production-branch";
 
 /** Dependency readiness only; not evidence of tenant authorization or RLS isolation. */
 export async function checkReadiness() {
@@ -32,7 +32,10 @@ export async function checkReadiness() {
       return { ready: false, reason: "g3_database_branch_rejected" } as const;
     }
     if (!productionBranchValid(role.branch_id)) {
-      return { ready: false, reason: "production_branch_mismatch" } as const;
+      const branchFingerprint = productionBranchFingerprint(role.branch_id);
+      return branchFingerprint
+        ? { ready: false, reason: "production_branch_mismatch", branchFingerprint } as const
+        : { ready: false, reason: "production_branch_mismatch" } as const;
     }
     return { ready: true, reason: "dependencies_available" } as const;
   } catch {
