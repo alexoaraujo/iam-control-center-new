@@ -80,7 +80,7 @@ class Contracts(unittest.TestCase):
             with self.assertRaises(rev.Blocked):
                 rev.execute("preflight","",config(),Runner([state]))
 
-    def test_revoke_requires_two_independent_approvals(self):
+    def test_revoke_requires_maintainer_confirmation_and_environment_latch(self):
         with self.assertRaises(rev.Blocked):
             rev.execute("revoke","wrong",config(),Runner([LEASED]))
         c = config()

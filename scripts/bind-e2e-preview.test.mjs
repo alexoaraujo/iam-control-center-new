@@ -84,7 +84,7 @@ test("PR143 has its own SHA-scoped callback mapping, never the shared PR132 alia
 });
 
 
-test("PEOS exact-SHA callbacks: all eight active PR branches reject shared or stale bindings", () => {
+test("PEOS exact-SHA callbacks: all nine active PR branches reject shared or stale bindings", () => {
   const mappings = [
     [
         "test/canonical-manifest-diff-gate-20261112",
@@ -117,6 +117,10 @@ test("PEOS exact-SHA callbacks: all eight active PR branches reject shared or st
     [
         "fix/g1-security-gate-on-bun-baseline-20261118",
         "iam-control-center-new-pr130-ci.vercel.app"
+    ],
+    [
+        "security/g3-pr128-trusted-executor-20261121",
+        "iam-control-center-new-pr145-ci.vercel.app"
     ]
 ];
   for (const [prBranch, isolatedHost] of mappings) {
@@ -132,4 +136,68 @@ test("PEOS exact-SHA callbacks: all eight active PR branches reject shared or st
     assert.throws(() => verifyPreviewBinding({ ...ownEnv, E2E_CALLBACK_HOST: aliasHost }, ownDomain, ownAlias, ownDeployment), /invalid/);
     assert.throws(() => verifyPreviewBinding(ownEnv, ownDomain, ownAlias, { ...ownDeployment, meta: { ...ownDeployment.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
   }
+});
+
+
+test("PR146 callback is exclusively bound to its own branch and exact SHA", () => {
+  const b = "fix/g3-main-only-environment-contracts-20261121";
+  const h = "iam-control-center-new-pr146-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.deepEqual(verifyPreviewBinding(e, d, a, dep), {
+    callbackHost: h, callbackBranch: b, callbackUrl: `https://${h}`,
+  });
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "integration/peos-single-maintainer-bun-20261117" }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, { ...d, name: "iam-control-center-new-pr128-ci.vercel.app" }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+});
+
+test("PR147 postmerge security gate has an exact branch-scoped Preview callback", () => {
+  const b = "security/main-postmerge-g3-exact-sha-20261121";
+  const h = "iam-control-center-new-pr147-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.deepEqual(verifyPreviewBinding(e, d, a, dep), {
+    callbackHost: h, callbackBranch: b, callbackUrl: `https://${h}`,
+  });
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "integration/peos-single-maintainer-bun-20261117" }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+});
+
+test("Production RBAC attestation PR callback is bound only to its exact branch and SHA", () => {
+  const b = "security/peos-prod-rbac-branch-attestation-20261121";
+  const h = "iam-control-center-new-prod-rbac-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.deepEqual(verifyPreviewBinding(e, d, a, dep), {
+    callbackHost: h, callbackBranch: b, callbackUrl: `https://${h}`,
+  });
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "integration/peos-single-maintainer-bun-20261117" }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, a,
+    { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+});
+
+test("fingerprint diagnostic Preview binds to its unique PR branch, never the merged PR148 branch", () => {
+  const b = "security/peos-prod-branch-fingerprint-20261121";
+  const h = "iam-control-center-new-branch-fingerprint-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.deepEqual(verifyPreviewBinding(e, d, a, dep), {
+    callbackHost: h, callbackBranch: b, callbackUrl: `https://${h}`,
+  });
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "security/peos-prod-rbac-branch-attestation-20261121" }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, a,
+    { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
 });

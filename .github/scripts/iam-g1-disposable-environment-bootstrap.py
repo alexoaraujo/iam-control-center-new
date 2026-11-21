@@ -16,13 +16,13 @@ import sys
 
 REPO = "alexoaraujo/iam-control-center-new"
 ENV = "IAM-G1-Disposable-Lease-Revocation"
-REVIEWER = "alexoaraujo83"
+MAINTAINER = "alexoaraujo"
 PROJECT = "tiny-rice-70320263"
 BRANCH = "br-spring-grass-b6gap6kp"
 HOST = "ep-sparkling-sea-b6iw0z9y.c-2.sa-east-1.aws.neon.tech"
 EXPIRES = "2026-11-16T12:00:00Z"
 CONFIRM = "CONFIGURE_G1_ENV_ONLY_NO_SECRETS"
-BLOCKED_SHA = "BLOCKED_UNTIL_REVIEWED_MAIN_SHA"
+BLOCKED_SHA = "BLOCKED_UNTIL_MAINTAINER_SHA_RECORDED"
 BASE = f"repos/{REPO}/environments/{ENV}"
 VARIABLES = {
     "IAM_G1_DISPOSABLE_PROJECT_ID": PROJECT,
@@ -64,14 +64,8 @@ def expected_environment(actual: dict) -> bool:
             or branch_policy.get("protected_branches") is not False
             or branch_policy.get("custom_branch_policies") is not True):
         return False
-    return any(
+    return not any(
         rule.get("type") == "required_reviewers"
-        and rule.get("prevent_self_review") is True
-        and any(
-            user.get("type") == "User"
-            and (user.get("reviewer") or {}).get("login") == REVIEWER
-            for user in rule.get("reviewers", [])
-        )
         for rule in actual.get("protection_rules", [])
     )
 
@@ -87,10 +81,10 @@ def read_protection() -> None:
     environment = gh(["api", BASE])
     policies = gh(["api", BASE + "/deployment-branch-policies"])
     if not isinstance(environment, dict) or not expected_environment(environment):
-        raise Blocked("ENV_MISSING_REVIEWER_NO_SELF_REVIEW_OR_ADMIN_BYPASS_DISABLED")
+        raise Blocked("ENV_SINGLE_MAINTAINER_POLICY_OR_ADMIN_BYPASS_INVALID")
     if not isinstance(policies, dict) or not expected_policies(policies):
         raise Blocked("ENV_MISSING_EXCLUSIVE_MAIN_POLICY")
-    print("PASS_G1_GITHUB_ENV_INDEPENDENT_REVIEW_NO_ADMIN_BYPASS_MAIN_ONLY")
+    print("PASS_G1_GITHUB_ENV_SINGLE_MAINTAINER_NO_REVIEWERS_MAIN_ONLY")
 
 
 def branch_not_expired() -> None:
@@ -103,24 +97,21 @@ def apply_environment() -> None:
     branch_not_expired()
     repo = gh(["api", f"repos/{REPO}"])
     actor = gh(["api", "user"])
-    reviewer = gh(["api", f"users/{REVIEWER}"])
-    permission = gh(["api", f"repos/{REPO}/collaborators/{REVIEWER}/permission"])
+    permission = gh(["api", f"repos/{REPO}/collaborators/{MAINTAINER}/permission"])
     if (not isinstance(repo, dict)
             or repo.get("private") is not False
             or repo.get("default_branch") != "main"
             or not isinstance(actor, dict)
-            or actor.get("login", "").casefold() == REVIEWER.casefold()
-            or not isinstance(reviewer, dict)
-            or reviewer.get("login") != REVIEWER
-            or not isinstance(reviewer.get("id"), int)
+            or actor.get("login") != MAINTAINER
+            or not isinstance(actor.get("id"), int)
             or not isinstance(permission, dict)
-            or permission.get("permission") not in ("read", "triage", "write", "maintain", "admin")):
-        raise Blocked("GITHUB_ACTOR_REVIEWER_OR_PUBLIC_REPO_PRECONDITION")
+            or permission.get("permission") != "admin"):
+        raise Blocked("GITHUB_SINGLE_MAINTAINER_ADMIN_PRECONDITION")
     body = {
         "wait_timer": 0,
-        "prevent_self_review": True,
+        "prevent_self_review": False,
         "can_admins_bypass": False,
-        "reviewers": [{"type": "User", "id": reviewer["id"]}],
+        "reviewers": [],
         "deployment_branch_policy": {
             "protected_branches": False, "custom_branch_policies": True
         },
@@ -136,7 +127,7 @@ def apply_environment() -> None:
     elif not expected_policies(policies):
         raise Blocked("UNEXPECTED_EXISTING_BRANCH_POLICIES_MANUAL_REVIEW")
     read_protection()
-    # Intentionally deny the job until a reviewed SHA is integrated on main.
+    # Intentionally deny the job until the maintainer records an exact SHA on main.
     for name, value in VARIABLES.items():
         gh(["variable", "set", name, "--repo", REPO, "--env", ENV, "--body", value])
     print("PASS_G1_PUBLIC_ENV_AND_NON_SECRET_VARS_CONFIGURED")
@@ -167,7 +158,7 @@ def main() -> int:
     args = p.parse_args()
     try:
         if args.mode == "plan":
-            print(f"PLAN_G1: repo={REPO} env={ENV} reviewer={REVIEWER} branch=main")
+            print(f"PLAN_G1: repo={REPO} env={ENV} maintainer={MAINTAINER} branch=main")
             print(f"PLAN_G1: neon_project={PROJECT} neon_branch={BRANCH} ttl={EXPIRES}")
             print("PLAN_G1: no Neon SQL, no database secrets, no live revoker activation")
             return 0
