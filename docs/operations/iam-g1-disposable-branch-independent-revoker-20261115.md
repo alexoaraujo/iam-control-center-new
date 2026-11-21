@@ -1,5 +1,8 @@
 # IAM G1 — Revogador independente para branch Neon descartável
 
+> **Atualização normativa PEOS (17/11/2026 UTC):** a necessidade de **segundo operador humano/reviewer independente** descrita nos registros históricos abaixo foi substituída por [governança de mantenedor único](peos-single-maintainer-governance.md). A revogação ainda usa **conexão administrativa distinta da sessão concedente**, COMMIT verificado, TLS `verify-full`, PG18, branch allowlisted, janela TTL e SHA exato. O **mesmo mantenedor** pode operar e confirmar, mediante registro auditável. A branch/lease antiga continua com **TTL expirado**; nenhum GRANT ou REVOKE real fica autorizado por esta nota.
+
+
 Data: 2026-11-15. Estado: PREPARADO PARA REVISÃO. NÃO APROVADO PARA GRANT NEON REAL.
 
 ## Scope lock

@@ -17,6 +17,10 @@ BUCKET = "iam-control-center-g1-backups"
 ENDPOINT = "https://s3.us-east-005.backblazeb2.com"
 REGION = "us-east-005"
 PREFIX = "iam-g1/full-backups/"
+# Immutable ciphertext provenance: never rewrite the historic backup's SHA
+# just because the reviewed trusted-main workflow has advanced.
+APPROVED_WRITER_SOURCE_SHA = "0ee3e512bb761ce4d81202eb77a48a1ef9c77109"
+APPROVED_WRITER_RUN_ID = "44655204795"
 # These are metadata-only capabilities; every mutation or cross-bucket grant
 # fails. A B2 Native v4 authorization response proves effective permissions.
 READ_CAPABILITIES = frozenset({
@@ -132,13 +136,20 @@ def attest_environment(env: dict[str, str]) -> str:
 def verify_scope(env: dict[str, str]) -> tuple[str, str, int]:
     if env.get("GITHUB_REPOSITORY") != REPO or env.get("GITHUB_REF") != "refs/heads/main":
         raise Blocked("BLOCKED_G1_FULL_B2_UNTRUSTED_REPO_OR_REF")
-    sha = env.get("GITHUB_SHA", "")
-    if (not re.fullmatch(r"[0-9a-f]{40}", sha) or
-            env.get("IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA") != sha):
-        raise Blocked("BLOCKED_G1_FULL_B2_UNAPPROVED_GITHUB_SHA")
+    # Runner identity and immutable artifact identity are distinct. The runner
+    # must come from GitHub's trusted main ref; the source SHA remains pinned
+    # to the successful writer run, regardless of subsequent main merges.
+    runner_sha = env.get("GITHUB_SHA", "")
+    approved_source_sha = env.get("IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", runner_sha):
+        raise Blocked("BLOCKED_G1_FULL_B2_INVALID_TRUSTED_RUNNER_SHA")
+    if approved_source_sha != APPROVED_WRITER_SOURCE_SHA:
+        raise Blocked("BLOCKED_G1_FULL_B2_UNAPPROVED_SOURCE_SHA")
     key = env.get("IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY", "")
     match = KEY_PATTERN.fullmatch(key)
-    if not match or match.group(1) != sha or not key.startswith(PREFIX):
+    if (not match or match.group(1) != approved_source_sha
+            or not match.group(2).endswith("-" + APPROVED_WRITER_RUN_ID + ".pgdump.aesgcm")
+            or not key.startswith(PREFIX)):
         raise Blocked("BLOCKED_G1_FULL_B2_UNAPPROVED_PREFIX_OR_KEY")
     digest = env.get("IAM_G1_B2_FULL_READBACK_APPROVED_SHA256", "")
     if not re.fullmatch(r"[a-f0-9]{64}", digest):
