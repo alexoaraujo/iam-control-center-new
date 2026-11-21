@@ -79,6 +79,38 @@ class G3OwnerMetadataContracts(TestCase):
         with self.assertRaisesRegex(mod.Blocked, "APPROVED_SHA_NOT_EXACT_PR_HEAD"):
             mod.inspect(*data)
 
+    def test_gh_api_error_reports_only_stage_and_http_status(self):
+        class Response:
+            def __init__(self, stderr):
+                self.returncode = 1
+                self.stderr = stderr
+                self.stdout = "SECRET_DATA_MUST_NOT_BE_LOGGED"
+
+        cases = (
+            ("ACTOR", "gh: Bad credentials (HTTP 401) HIDDEN_TOKEN", "401"),
+            ("SECRET_NAMES", "gh: Forbidden (HTTP 403) HIDDEN_SECRET", "403"),
+            ("APPROVED_SHA", "gh: Not Found (HTTP 404) HIDDEN_URL", "404"),
+            ("BRANCH_POLICIES", "gh: connection issue", "UNKNOWN"),
+        )
+        for stage, stderr, code in cases:
+            with self.subTest(stage=stage):
+                with patch.object(mod.subprocess, "run", return_value=Response(stderr)) as call:
+                    with self.assertRaisesRegex(
+                        mod.Blocked, "GITHUB_ADMIN_READ_" + stage + "_HTTP_" + code
+                    ) as caught:
+                        mod.gh_api(stage, "dummy")
+                for forbidden in ("HIDDEN_TOKEN", "HIDDEN_SECRET", "HIDDEN_URL",
+                                  "SECRET_DATA_MUST_NOT_BE_LOGGED"):
+                    self.assertNotIn(forbidden, str(caught.exception))
+                self.assertEqual(call.call_args[0][0][:4],
+                                 ["gh", "api", "--method", "GET"])
+
+    def test_gh_api_rejects_unauthorized_stage_before_request(self):
+        with patch.object(mod.subprocess, "run") as call:
+            with self.assertRaisesRegex(mod.Blocked, "INVALID_STAGE"):
+                mod.gh_api("UNTRUSTED", "dummy")
+        call.assert_not_called()
+
     def test_ci_never_calls_admin_api(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}), \
              patch.object(mod, "gh_api") as q, self.assertRaisesRegex(

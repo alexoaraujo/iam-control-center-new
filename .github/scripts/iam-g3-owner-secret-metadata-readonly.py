@@ -30,22 +30,36 @@ class Blocked(RuntimeError):
     pass
 
 
-def gh_api(path):
-    """Return JSON from authenticated gh; never emit stderr/body on failure."""
+READ_STAGES = (
+    "ACTOR", "MAINTAINER_PERMISSION", "PR128", "ENVIRONMENT",
+    "BRANCH_POLICIES", "CUSTOM_RULES", "SECRET_NAMES", "APPROVED_SHA",
+)
+
+
+def gh_api(stage, path):
+    """GET JSON via authenticated gh; report only stage and numeric HTTP status.
+
+    Never echo response content, stderr, URL, token or headers.
+    """
+    if stage not in READ_STAGES:
+        raise Blocked("GITHUB_ADMIN_READ_INVALID_STAGE")
     try:
         proc = subprocess.run(
-            ["gh", "api", path],
-            check=False, capture_output=True, text=True,
-            timeout=25, env={**os.environ, "GH_PAGER": "cat"},
+            ["gh", "api", "--method", "GET", path],
+            check=False, capture_output=True, text=True, timeout=25,
+            env={**os.environ, "GH_PAGER": "cat", "GH_PROMPT_DISABLED": "1"},
         )
     except (OSError, subprocess.TimeoutExpired):
-        raise Blocked("GH_ADMIN_CLI_UNAVAILABLE") from None
+        raise Blocked("GITHUB_ADMIN_READ_" + stage + "_CLI_UNAVAILABLE") from None
     if proc.returncode != 0:
-        raise Blocked("GITHUB_ADMIN_READ_UNAVAILABLE") from None
+        # Read only the status code; the raw error may contain private values.
+        status_match = re.search(r"\bHTTP\s+([1-5][0-9]{2})\b", proc.stderr or "", re.I)
+        status = status_match.group(1) if status_match else "UNKNOWN"
+        raise Blocked("GITHUB_ADMIN_READ_" + stage + "_HTTP_" + status) from None
     try:
         return json.loads(proc.stdout)
     except (ValueError, TypeError):
-        raise Blocked("GITHUB_ADMIN_READ_NOT_JSON") from None
+        raise Blocked("GITHUB_ADMIN_READ_" + stage + "_NOT_JSON") from None
 
 
 def exact_policy(info, policies, custom):
@@ -118,14 +132,18 @@ def run():
     # Deliberately never run privileged metadata inspection inside a PR job.
     if os.environ.get("GITHUB_ACTIONS") == "true":
         raise Blocked("G3_LOCAL_ADMIN_TERMINAL_ONLY")
-    actor = gh_api("user")
-    perm = gh_api(f"repos/{REPO}/collaborators/{MAINTAINER}/permission")
-    pr = gh_api(f"repos/{REPO}/pulls/{PR_NUMBER}")
-    info = gh_api(BASE)
-    policies = gh_api(BASE + "/deployment-branch-policies?per_page=100")
-    custom = gh_api(BASE + "/deployment_protection_rules")
-    metadata = gh_api(BASE + "/secrets?per_page=100")
-    variable = gh_api(BASE + "/variables/" + SHA_VAR)
+    # GH_TOKEN/GITHUB_TOKEN can override the stored gh login. Do not print
+    # the token, its prefix or scopes; only disclose whether an override exists.
+    if os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"):
+        print("G3_GH_CLI_AUTH_ENV_OVERRIDE_PRESENT")
+    actor = gh_api("ACTOR", "user")
+    perm = gh_api("MAINTAINER_PERMISSION", f"repos/{REPO}/collaborators/{MAINTAINER}/permission")
+    pr = gh_api("PR128", f"repos/{REPO}/pulls/{PR_NUMBER}")
+    info = gh_api("ENVIRONMENT", BASE)
+    policies = gh_api("BRANCH_POLICIES", BASE + "/deployment-branch-policies?per_page=100")
+    custom = gh_api("CUSTOM_RULES", BASE + "/deployment_protection_rules")
+    metadata = gh_api("SECRET_NAMES", BASE + "/secrets?per_page=100")
+    variable = gh_api("APPROVED_SHA", BASE + "/variables/" + SHA_VAR)
     sha, number = inspect(actor, perm, pr, info, policies, custom, metadata, variable)
     # Do not print any secret names apart from the expected name, timestamps,
     # URL, raw API data or environment variables.
