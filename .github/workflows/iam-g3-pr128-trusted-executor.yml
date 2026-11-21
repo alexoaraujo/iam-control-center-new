@@ -256,7 +256,8 @@ jobs:
               claims.sub !== expectedSubject ||
               claims.ref !== "refs/heads/main" ||
               claims.environment !== "IAM-G3-PR128-Disposable-RBAC" ||
-              claims.job_workflow_ref !== expectedWorkflow ||
+              claims.workflow_ref !== expectedWorkflow ||
+              claims.workflow_sha !== process.env.GITHUB_SHA ||
               String(claims.repository_id) !== "1451861889" ||
               String(claims.repository_owner_id) !== "325264809" ||
               !["pull_request_target", "issue_comment"].includes(claims.event_name) ||
