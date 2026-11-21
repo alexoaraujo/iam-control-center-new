@@ -55,8 +55,7 @@ async function connect() {
   assertRbacFixtureLease(ID);
   check(
     process.env.GITHUB_REPOSITORY === "alexoaraujo/iam-control-center-new" &&
-      process.env.GITHUB_EVENT_NAME === "pull_request_target" ||
-      process.env.GITHUB_EVENT_NAME === "issue_comment",
+      ["pull_request_target", "issue_comment"].includes(process.env.GITHUB_EVENT_NAME),
     "G3 executor repository/event is not trusted",
   );
   check(
