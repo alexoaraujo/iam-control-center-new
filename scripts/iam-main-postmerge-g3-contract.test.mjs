@@ -37,6 +37,7 @@ test("exact main source and baseline app parity fail closed before privileged Au
   ]) assert.ok(preflight.includes(s), s);
   assert.ok(!preflight.includes("GH_TOKEN="));
   assert.ok(!preflight.includes("OWNER_DATABASE_URL"));
+  for (const s of ["pulls/147", "control_merge", "control_tree", "main_tree", "Main advanced beyond the reviewed PR147"]) assert.ok(preflight.includes(s), s);
 });
 test("only protected main job can run trusted live Auth0 grant revoke rollback suite", () => {
   for (const s of [

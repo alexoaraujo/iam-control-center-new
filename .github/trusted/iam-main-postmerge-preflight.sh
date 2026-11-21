@@ -50,6 +50,32 @@ jq -e --arg repo "$REPO" --arg head "$BASE_PR_HEAD" --arg merged "$BASE_MAIN_MER
   echo "::error::Merged PR128 identity, SHA or merge ancestry differs from approved baseline."
   exit 1
 }
+# Pin the ENTIRE post-merge source tree to the exact contents reviewed in PR147.
+# This rejects later modifications to even the two allowlisted CI callback scripts:
+# a path-only allowlist alone would not be sufficient before privileged execution.
+control_pr="$(gh api "repos/$REPO/pulls/147")"
+jq -e --arg repo "$REPO" '
+  .number == 147 and .state == "closed" and .merged == true and
+  .head.repo.full_name == $repo and .base.ref == "main" and
+  (.head.sha | test("^[a-f0-9]{40}$")) and
+  (.merge_commit_sha | test("^[a-f0-9]{40}$"))
+' <<< "$control_pr" >/dev/null || {
+  echo "::error::The post-merge G3 control PR147 must be merged and identified before use."
+  exit 1
+}
+control_sha="$(jq -r '.head.sha' <<< "$control_pr")"
+control_merge="$(jq -r '.merge_commit_sha' <<< "$control_pr")"
+[[ "$control_merge" == "$main_sha" ]] || {
+  echo "::error::Main advanced beyond the reviewed PR147 workflow merge commit."
+  exit 1
+}
+main_tree="$(gh api "repos/$REPO/git/commits/$main_sha" --jq '.tree.sha')"
+control_tree="$(gh api "repos/$REPO/git/commits/$control_sha" --jq '.tree.sha')"
+[[ "$main_tree" == "$control_tree" ]] || {
+  echo "::error::The main Git tree differs from reviewed PR147 source."
+  exit 1
+}
+
 # No app/DB/runtime files may differ. Postmerge G3 adds exactly four control files
 # and two CI callback-lease-only edits needed for the PR that installed this workflow.
 scope="$(gh api "repos/$REPO/compare/$BASE_MAIN_MERGE...$main_sha")"
