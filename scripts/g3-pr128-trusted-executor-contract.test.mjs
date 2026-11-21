@@ -23,6 +23,7 @@ test("G3 trusted executor is never triggered by an ordinary pull_request workflo
   assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
   assert.match(workflow, /github\.event\.comment\.user\.login == 'alexoaraujo'/);
   assert.match(workflow, /github\.event\.comment\.body == '\/peos-g3-pr128-run'/);
+  assert.match(workflow, /if \.draft == null then "true" else \(\.draft \| tostring\) end/);
 });
 
 test("G3 job checks out the trusted workflow commit, never the PR head", () => {
@@ -31,6 +32,9 @@ test("G3 job checks out the trusted workflow commit, never the PR head", () => {
   assert.match(workflow, /GITHUB_REF.*refs\/heads\/main/);
   assert.match(workflow, /persist-credentials:\s*false/);
   assert.match(workflow, /id-token:\s*write/);
+  assert.match(workflow, /npm init -y/);
+  assert.match(workflow, /npm install --save-exact/);
+  assert.match(workflow, /npm audit --audit-level=high/);
   assert.match(workflow, /G3_APPROVED_SHA/);
   assert.match(workflow, /G3_PR_HEAD_SHA/);
   assert.match(workflow, /PASS_G3_PR128_HEAD_AND_PREVIEW_REVALIDATED_BEFORE_SECRET_USE/);
