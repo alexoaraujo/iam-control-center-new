@@ -13,7 +13,6 @@ const branchCallbacks = new Map([
   ["fix/g1-b2-four-environments-readonly-preflight-20261119", "iam-control-center-new-pr141-ci.vercel.app"],
   ["fix/g1-b2-writer-failfast-privilege-diagnostics-20261119", "iam-control-center-new-g1-writer-fix-ci.vercel.app"],
   ["governance/pr-update-merge-default-20261120", "iam-control-center-new-pr143-ci.vercel.app"],
-  ["security/g3-pr128-trusted-executor-20261121", "iam-control-center-new-pr145-ci.vercel.app"],
   ["test/canonical-manifest-diff-gate-20261112", "iam-control-center-new-pr44-ci.vercel.app"],
   ["fix/pr44-membership-canonical-drift-20261117", "iam-control-center-new-pr126-ci.vercel.app"],
   ["test/g2-readonly-canonical-drift-contracts-20261118", "iam-control-center-new-pr131-ci.vercel.app"],
@@ -21,6 +20,9 @@ const branchCallbacks = new Map([
   ["experiment/bun-native-tests-picomatch-removal-20261117", "iam-control-center-new-pr121-ci.vercel.app"],
   ["fix/preview-readonly-on-bun-security-baseline-20261117", "iam-control-center-new-pr125-ci.vercel.app"],
   ["integration/peos-single-maintainer-bun-20261117", "iam-control-center-new-pr128-ci.vercel.app"],
+  ["fix/g3-main-only-environment-contracts-20261121", "iam-control-center-new-pr146-ci.vercel.app"],
+  ["security/g3-pr128-trusted-executor-20261121", "iam-control-center-new-pr145-ci.vercel.app"],
+  ["fix/g3-pr128-rbac-isolated-lease-20261120", "iam-control-center-new-pr144-ci.vercel.app"],
   ["fix/g1-security-gate-on-bun-baseline-20261118", "iam-control-center-new-pr130-ci.vercel.app"],
 ]);
 

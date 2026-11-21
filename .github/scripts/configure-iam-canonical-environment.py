@@ -17,7 +17,7 @@ import sys
 
 REPOSITORY = "alexoaraujo/iam-control-center-new"
 ENVIRONMENT = "IAM-Canonical-Isolated-Restore"
-REVIEWER = "alexoaraujo83"
+MAINTAINER = "alexoaraujo"
 SECRET_NAMES = (
     "IAM_CANONICAL_SOURCE_URL",
     "IAM_CANONICAL_TARGET_URL",
@@ -48,51 +48,45 @@ def gh_json(*args: str, input_value: str | None = None):
     except json.JSONDecodeError as exc:
         raise RuntimeError("GitHub returned invalid JSON") from exc
 
-def verify_account_and_repo() -> int:
+def verify_account_and_repo() -> None:
     repo = gh_json("api", f"repos/{REPOSITORY}")
     if repo.get("default_branch") != "main" or repo.get("private") is not False:
         fail("expected public repository with main as default branch")
-    user = gh_json("api", "user")
-    reviewer = gh_json("api", f"users/{REVIEWER}")
-    if user.get("id") == reviewer.get("id"):
-        fail("reviewer must be a distinct GitHub identity")
-    collaborator = gh_json(
-        "api", f"repos/{REPOSITORY}/collaborators/{REVIEWER}/permission"
+    actor = gh_json("api", "user")
+    if actor.get("login") != MAINTAINER or not isinstance(actor.get("id"), int):
+        fail("single-maintainer operator identity mismatch")
+    permissions = gh_json(
+        "api", f"repos/{REPOSITORY}/collaborators/{MAINTAINER}/permission"
     )
-    if collaborator.get("permission") not in ("read", "triage", "write", "maintain", "admin"):
-        fail("reviewer has no repository access")
-    if not isinstance(reviewer.get("id"), int):
-        fail("reviewer ID unavailable")
-    return reviewer["id"]
+    if permissions.get("permission") != "admin":
+        fail("single maintainer must have repository admin permission")
 
-def verify_environment(review_id: int) -> None:
+
+def verify_environment() -> None:
     info = gh_json("api", ENV_API)
     if info.get("name") != ENVIRONMENT:
         fail("environment identity mismatch")
     bp = info.get("deployment_branch_policy") or {}
     if bp.get("protected_branches") is not False or bp.get("custom_branch_policies") is not True:
         fail("environment branch policy is not custom-only")
-    reviewers = [rule for rule in info.get("protection_rules", [])
-                 if rule.get("type") == "required_reviewers"]
-    if len(reviewers) != 1:
-        fail("environment has no exactly one required-reviewer protection rule")
-    rule = reviewers[0]
-    if rule.get("prevent_self_review") is not True:
-        fail("Prevent self-review is not active")
-    allowed = [x for x in rule.get("reviewers", [])
-               if x.get("type") == "User"]
-    if len(allowed) != 1 or allowed[0].get("reviewer", {}).get("id") != review_id:
-        fail("independent required reviewer is not configured")
+    if info.get("can_admins_bypass") is not False:
+        fail("administrator bypass must remain disabled")
+    # Single-maintainer PEOS policy: no human required-reviewers gate.
+    if any(rule.get("type") == "required_reviewers"
+           for rule in info.get("protection_rules", [])):
+        fail("mandatory independent reviewer still configured")
     policies = gh_json("api", f"{ENV_API}/deployment-branch-policies?per_page=100")
     actual = [(x.get("name"), x.get("type")) for x in policies.get("branch_policies", [])]
     if actual != [("main", "branch")]:
         fail("deployment branch policies must contain exactly one branch: main")
 
-def ensure_protected_environment(review_id: int) -> None:
+
+def ensure_protected_environment() -> None:
     payload = json.dumps({
         "wait_timer": 0,
-        "prevent_self_review": True,
-        "reviewers": [{"type": "User", "id": review_id}],
+        "prevent_self_review": False,
+        "can_admins_bypass": False,
+        "reviewers": [],
         "deployment_branch_policy": {
             "protected_branches": False,
             "custom_branch_policies": True
@@ -107,7 +101,10 @@ def ensure_protected_environment(review_id: int) -> None:
                 f"{ENV_API}/deployment-branch-policies",
                 "--input", "-",
                 input_value=json.dumps({"name": "main", "type": "branch"}))
-    verify_environment(review_id)
+    elif existing != [("main", "branch")]:
+        fail("unexpected branch policy; refusing to override")
+    verify_environment()
+
 
 def set_environment_secret(name: str, value: str) -> None:
     if name not in SECRET_NAMES or not value:
@@ -137,9 +134,9 @@ def guard_module():
 
 def main() -> int:
     try:
-        review_id = verify_account_and_repo()
-        ensure_protected_environment(review_id)
-        print("PASS_ENVIRONMENT_POLICY: independent reviewer, self-review denied, main only")
+        verify_account_and_repo()
+        ensure_protected_environment()
+        print("PASS_ENVIRONMENT_POLICY: single maintainer, no required reviewers, main only")
         guard = guard_module()
         if not sys.stdin.isatty():
             fail("must run interactively in a private terminal; no automation/pipes for plaintext URLs")
@@ -151,14 +148,15 @@ def main() -> int:
             raise RuntimeError(f"credential URL allowlist rejected: {exc}") from exc
         set_environment_secret("IAM_CANONICAL_SOURCE_URL", source)
         set_environment_secret("IAM_CANONICAL_TARGET_URL", target)
-        # This publicly known sentinel is NOT the approval mechanism.
-        # Required environment reviewers and branch restrictions are the actual gate.
+        # This public sentinel is NOT proof of operator authorization.
+        # The single maintainer retains exact-SHA, manual confirmation,
+        # branch scope, TLS and restore/rollback technical gates.
         set_environment_secret("IAM_CANONICAL_OPERATOR_APPROVAL", APPROVAL_LATCH)
         verify_secret_metadata()
-        verify_environment(review_id)
+        verify_environment()
         print("PASS_SECRET_METADATA: all three names exist in protected environment")
         print("No credentials printed; no Neon DDL, export or restore executed")
-        print("Verify actual reviewer approval for each run in GitHub Environments")
+        print("Verify exact-SHA maintainer attestation and live Environment readback per run")
         return 0
     except RuntimeError as exc:
         print(f"BLOCKED_ENVIRONMENT_CONFIGURATION: {exc}", file=sys.stderr)
