@@ -81,4 +81,52 @@ describe("dependency readiness", () => {
     expect(query.mock.calls[0][0]).toContain("current_setting('neon.branch_id',true)");
   });
 
+
+  it("fails closed in Production before SQL when branch binding is absent", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("IAM_PRODUCTION_EXPECTED_NEON_BRANCH_ID", "");
+    expect(await checkReadiness()).toEqual({ ready: false, reason: "production_branch_unconfigured" });
+    expect(getSql).not.toHaveBeenCalled();
+  });
+
+  it("rejects a wrong Production database branch even with healthy connectivity and role", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("IAM_PRODUCTION_EXPECTED_NEON_BRANCH_ID", "br-muddy-snow-b63cepcv");
+    query.mockResolvedValue([{ role: "iam_app_runtime_login", rolsuper: false, rolbypassrls: false, branch_id: "br-unexpected-b6testme" }]);
+    expect(await checkReadiness()).toEqual({ ready: false, reason: "production_branch_mismatch" });
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it("attests the exact allowlisted Production branch without exposing its ID", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("IAM_PRODUCTION_EXPECTED_NEON_BRANCH_ID", "br-muddy-snow-b63cepcv");
+    query.mockResolvedValue([{ role: "iam_app_runtime_login", rolsuper: false, rolbypassrls: false, branch_id: "br-muddy-snow-b63cepcv" }]);
+    expect(await checkReadiness()).toEqual({ ready: true, reason: "dependencies_available" });
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+
+  it("returns only a fingerprint on an authenticated Production branch mismatch when operator flag is set", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("IAM_PRODUCTION_EXPECTED_NEON_BRANCH_ID", "br-muddy-snow-b63cepcv");
+    vi.stubEnv("IAM_PRODUCTION_BRANCH_FINGERPRINT_ENABLED", "true");
+    query.mockResolvedValue([{ role: "iam_app_runtime_login", rolsuper: false, rolbypassrls: false, branch_id: "br-little-fire-b6adup9f" }]);
+    const result = await checkReadiness();
+    expect(result).toEqual({ready: false, reason: "production_branch_mismatch",
+      branchFingerprint: expect.stringMatching(/^[0-9a-f]{24}$/)});
+    expect(JSON.stringify(result)).not.toContain("br-little-fire-b6adup9f");
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it("never emits a fingerprint on missing/invalid Neon branch identity", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("IAM_PRODUCTION_EXPECTED_NEON_BRANCH_ID", "br-muddy-snow-b63cepcv");
+    vi.stubEnv("IAM_PRODUCTION_BRANCH_FINGERPRINT_ENABLED", "true");
+    for (const branch_id of [null, "", "secret:password", "ep-other"]) {
+      query.mockResolvedValue([{ role: "iam_app_runtime_login", rolsuper: false,
+        rolbypassrls: false, branch_id }]);
+      expect(await checkReadiness()).toEqual({ ready: false, reason: "production_branch_mismatch" });
+    }
+  });
+
 });

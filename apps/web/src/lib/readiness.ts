@@ -1,5 +1,6 @@
 import { getSql } from "./db";
 import { g3PreviewBranchValid, g3PreviewLeaseValid } from "./g3-preview-lease";
+import { expectedProductionBranch, productionBranchValid, productionBranchFingerprint } from "./production-branch";
 
 /** Dependency readiness only; not evidence of tenant authorization or RLS isolation. */
 export async function checkReadiness() {
@@ -10,6 +11,10 @@ export async function checkReadiness() {
   // Readiness and authorization share the same short-lived G3 guard.
   if (!g3PreviewLeaseValid()) {
     return { ready: false, reason: "g3_fixture_lease_rejected" } as const;
+  }
+  // An unbound Production database is never reported healthy as a tenant runtime.
+  if (expectedProductionBranch() === "") {
+    return { ready: false, reason: "production_branch_unconfigured" } as const;
   }
   const expectedRole = process.env.DATABASE_RUNTIME_ROLE?.trim();
   if (!expectedRole) return { ready: false, reason: "runtime_role_unconfigured" } as const;
@@ -25,6 +30,12 @@ export async function checkReadiness() {
     }
     if (!g3PreviewBranchValid(role.branch_id)) {
       return { ready: false, reason: "g3_database_branch_rejected" } as const;
+    }
+    if (!productionBranchValid(role.branch_id)) {
+      const branchFingerprint = productionBranchFingerprint(role.branch_id);
+      return branchFingerprint
+        ? { ready: false, reason: "production_branch_mismatch", branchFingerprint } as const
+        : { ready: false, reason: "production_branch_mismatch" } as const;
     }
     return { ready: true, reason: "dependencies_available" } as const;
   } catch {
