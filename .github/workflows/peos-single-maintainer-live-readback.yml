@@ -12,6 +12,8 @@ on:
       - ".github/tests/test-iam-g3-environment-protection-readonly.py"
       - ".github/scripts/iam-g3-environment-bootstrap.py"
       - ".github/tests/test-iam-g3-environment-bootstrap.py"
+      - ".github/scripts/iam-g3-owner-secret-metadata-readonly.py"
+      - ".github/tests/test-iam-g3-owner-secret-metadata-readonly.py"
   workflow_dispatch:
 
 permissions:
@@ -52,6 +54,10 @@ jobs:
         run: python3 .github/tests/test-iam-g3-environment-protection-readonly.py
       - name: Verify G3 local administrator bootstrap contract offline
         run: python3 .github/tests/test-iam-g3-environment-bootstrap.py
+      # Offline contract only. GitHub Actions never reads environment secret metadata
+      # or mounts the PR128 owner secret; admin inventory is local-only.
+      - name: Validate owner secret metadata preflight without credentials
+        run: python3 .github/tests/test-iam-g3-owner-secret-metadata-readonly.py
       - name: Attest effective G3 owner Environment policies (read only)
         env:
           GITHUB_TOKEN: ${{ github.token }}

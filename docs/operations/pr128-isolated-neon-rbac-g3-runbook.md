@@ -30,3 +30,19 @@ Status: **SOURCE_STAGED, LIVE_RLS_DENY_PASS, AUTH0_HTTP_200_403_NOT_RUN, OWNER_S
 6. Perform independent recovery and Production-boundary readback. Merging to `main` may trigger a Production-target build. Do not merge while release controls are unverified, even if every unit test is green.
 
 **No SQL writes, secret retrieval, Auth0 callback mutation, Vercel domain promotion, or Production merge are performed by this staging PR.**
+
+## Operational checkpoint — 21 November 2026, read-only verification
+
+- The existing protected GitHub Environment `IAM-G3-PR128-Disposable-RBAC` passed the live administrative policy readback: `can_admins_bypass=false`, `custom_branch_policies=true`, one allowed branch `refs/pull/128/merge` ([GitHub Actions #44835270898](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44835270898), job `136669618805`).
+- The exact PR128 SHA `26ab7ef917141531b7b9d496d07066ddfa3bb625` had 11/11 successful workflows, including ordinary real Auth0 login and `security-gate`; **this is not a positive G3 RBAC test**.
+- The maintainer provided a masked `iam_app_runtime_login` URL; its host is the approved disposable Neon endpoint, but the runtime URL cannot be used as `NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL` and `sslmode=require` does not satisfy the owner-connection `verify-full` contract.
+- **Next admin-only preflight**, in a locally authenticated checkout, without outputting secret values:
+
+  ```bash
+  python3 .github/scripts/iam-g3-owner-secret-metadata-readonly.py --mode plan
+  python3 .github/scripts/iam-g3-owner-secret-metadata-readonly.py --mode verify
+  ```
+
+- The preflight checks the **existing** G3 environment's protection, exact PR branch/ref and head SHA, and only the **name** of the environment secret `NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL` plus the non-secret environment variable `IAM_RBAC_PR128_APPROVED_SHA`. Missing fields fail closed; this code does not read secret values, alter GitHub settings, connect to Neon or start Playwright.
+- Passing that metadata check **does not authenticate the owner connection or establish trusted workflow provenance**. A protected, independently reviewed execution source and runtime branch/role/TLS proof remain required. The test suite intentionally stays excluded from `quality.yml` and `playwright.config.cjs`; DO NOT add an owner secret to shared `Preview`.
+- All privileged writes, G3 positive HTTP 200/403, cleanup/rollback and any Production/main integration remain HOLD until separately proven.
