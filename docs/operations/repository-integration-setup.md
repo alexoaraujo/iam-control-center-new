@@ -10,8 +10,11 @@ Require a PR, resolved conversations, no force pushes or deletions, and successf
 `postgres-18-source-schema-restore-manifest` checks on main (verify actual check names
 in the new repository before configuring). The available GitHub connector has
 no administration write tool; these settings must be applied by an administrator.
-Also configure reviewers for the Preview and Neon privileged environments before
-activating credential-bearing jobs. A committed policy is not branch protection.
+Under the [PEOS single-maintainer policy](peos-single-maintainer-governance.md),
+**do not require a second human reviewer** for Preview or Neon environments.
+Keep branch restrictions, secrets, exact-SHA latches and verifiable technical
+checks before activating credential-bearing jobs. A committed policy is not
+evidence that live GitHub administrative settings have been changed.
 
 ## External configuration
 
@@ -46,14 +49,16 @@ or closing a PR does not automatically run privileged Neon operations.
 
 An administrator must create the GitHub Actions environment
 `Neon-PR-Lifecycle`, restrict deployments to the protected `main` branch,
-require trusted reviewers (and prevent self-review where supported), and place
+do **not** configure mandatory Required reviewers, and place
 `NEON_API_KEY` in that environment's secrets, not a PR-accessible context.
+The authenticated `alexoaraujo` maintainer remains accountable for
+recording the exact operation SHA and UTC scope.
 Set repository variable `IAM_INTEGRATION_REPOSITORY` to exactly
 `alexoaraujo/iam-control-center-new` only after validating Neon project and
 branch identities. Environment creation and policy enforcement cannot be
 accomplished merely by committing this YAML.
 
-After the updated workflow has been merged to `main`, a reviewer may run it
+After the updated workflow has been merged to `main`, the maintainer may run it
 from **Actions → Neon PR branch lifecycle → Run workflow**, choosing branch
 `main`, `pr_number` (numeric), and `operation=reconcile`. The job fetches
 the PR from GitHub's API, requires a same-repository open PR targeting main,
@@ -64,14 +69,17 @@ delete branches without verifiable provenance. Expiration handles cleanup.
 
 The workflow is fail-closed when the environment, secret, repository allowlist,
 PR state, canonical Neon project or branch identity is missing or mismatched.
-Do not use `workflow_dispatch` from an unreviewed branch, disable required
-reviewers, or substitute `pull_request_target` to bypass a failed check.
+Do not use `workflow_dispatch` from an unvalidated branch or substitute
+`pull_request_target` to bypass a failed check. Removing a required human
+reviewer is permitted by PEOS single-maintainer policy, **not** removing
+SHA checks, branch restrictions, secrets isolation or technical release gates.
 A successful dispatch is evidence of branch lifecycle management, **not**
 proof of Auth0 E2E or tenant authorization.
 
 ## Verification and release
 
-1. Configure main protections and privileged environment reviewers.
+1. Verify main `quality`/`security-gate` protection and restrict privileged
+   GitHub Environments to approved branches without Required reviewers.
 2. Verify the Git integration actually points Vercel at the new repository.
 3. Configure Preview and Auth0 exact callback origin and OIDC trust.
 4. Run a PR through quality, PostgreSQL contracts, Preview and enabled Auth0 E2E.
