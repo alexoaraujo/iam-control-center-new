@@ -108,6 +108,20 @@ class FullReadbackTest(unittest.TestCase):
             with self.subTest(wrong=wrong), self.assertRaises(gate.Blocked):
                 gate.verify_scope(wrong)
 
+    def test_workflow_checks_main_ancestry_and_writer_run_before_b2(self):
+        workflow = (Path(__file__).resolve().parents[2] /
+                    ".github/workflows/iam-g1-b2-full-readback.yml").read_text()
+        for marker in [
+            "workflow_dispatch:", "refs/heads/main", "fetch-depth: 0",
+            "git merge-base --is-ancestor",
+            "actions/runs/44655204795",
+            "PASS_G1_B2_HISTORIC_WRITER_AND_TRUSTED_MAIN_PROVENANCE",
+            "IAM-G1-B2-Full-Readback-Custody",
+        ]:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, workflow)
+        self.assertNotIn("pull_request_target:", workflow)
+
     def test_non_sha_scoped_key_path_and_path_traversal_are_rejected(self):
         for key in [
             f"iam-g1/full-backups/{'b'*40}/20261119T132500Z-123456.pgdump.aesgcm",
