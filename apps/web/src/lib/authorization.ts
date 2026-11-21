@@ -2,6 +2,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { getSql } from "./db";
 import { canonicalIssuer } from "./identity-sync";
 import { g3PreviewBranchValid, g3PreviewLeaseValid } from "./g3-preview-lease";
+import { expectedProductionBranch, productionBranchValid } from "./production-branch";
 
 /**
  * Server-side only: a verified Auth0 session drives all permission checks.
@@ -48,7 +49,7 @@ export async function checkPermission(
   const authDomain = process.env.AUTH0_DOMAIN?.trim();
   // A live Auth0 session cannot authorize on an expired or misbound G3 clone.
   // Fail before creating a SQL session or minting a tenant-context signature.
-  if (!g3PreviewLeaseValid()) return false;
+  if (!g3PreviewLeaseValid() || expectedProductionBranch() === "") return false;
   if (!subject || subject.length > 512 || !validSelector(tenantId) || !validSelector(identityId)
     || !validPermission(permission) || process.env.DATABASE_RUNTIME_ROLE !== expectedRuntime
     || !authDomain || !/^[a-z0-9][a-z0-9.-]+$/i.test(authDomain)) return false;
@@ -74,7 +75,8 @@ export async function checkPermission(
     const role = roles[0];
     if (!role || role.role !== expectedRuntime || role.login !== expectedRuntime
       || role.rolsuper !== false || role.rolbypassrls !== false
-      || !g3PreviewBranchValid(role.branch_id)) return false;
+      || !g3PreviewBranchValid(role.branch_id)
+      || !productionBranchValid(role.branch_id)) return false;
 
     const proof = signTenantContext(canonicalTenantId, canonicalIdentityId);
     if (!proof) return false;
