@@ -12,7 +12,7 @@ Status: **TRUSTED_EXECUTOR_PR_OPEN / G3_WRITE_HOLD**. This change adds a trusted
 - Disposable Neon project/branch: `tiny-rice-70320263 / br-super-sound-b63gtz88`
 - Neon database/role: `iam_database / neondb_owner`
 - Exact Preview alias: `iam-control-center-new-pr128-ci.vercel.app`
-- Fixture lease expiry: `2026-11-21T22:00:00Z`
+- Fixture lease expiry (Neon API updated 2026-11-21): `2026-11-23T22:00:00Z`
 
 ## Trusted execution boundary
 
@@ -79,3 +79,9 @@ No Production or Development credential is used. A successful suite still requir
 - Vercel Trusted Source for the exact G3 subject is NOT yet read back/confirmed. G3 Auth0 credential availability is NOT proven. The owner secret name and approved-SHA variable are present, but secret values were not read and authentication has not been attempted.
 - Neon disposable branch `br-super-sound-b63gtz88` remains READY; endpoint `ep-red-sunset-b6ozp5b2` remains IDLE; lease expiry is `2026-11-21T22:00:00Z`. No SQL/DML, compute activation, RBAC grant/revoke, cleanup or rollback suite has been executed.
 - Do not bypass GitHub/Vercel gates, expose credentials, use an older deployment as proof for a new SHA, or activate G3 until the GitHub Environment, Vercel Trusted Source and G3 Auth0 credentials are confirmed.
+
+## Operational metadata update — 2026-11-21 UTC (after initial hold)
+
+The Neon API updated ONLY the disposable branch expiry for `tiny-rice-70320263 / br-super-sound-b63gtz88` from `2026-11-21T22:00:00Z` to **`2026-11-23T22:00:00Z`**. Project, parent, branch identity, endpoint, database, role, and test fixtures remain unchanged. The Neon update response reported `current_state=ready` and `written_data_bytes=0`; no SQL or DML was executed by this metadata-only operation. This new expiry supersedes only the historical lease-expiry snapshots in this runbook. The trusted G3 fixture's fail-closed `expiresAt` constant was updated in the same Git commit to match the authoritative Neon expiry.
+
+**This is not operational approval to activate G3.** Maintain the `main`-only GitHub Environment policy prerequisite, exact Vercel Trusted Source, Auth0 credential scope, exact-SHA Preview and security-gate, and a fresh Neon identity/readiness/zero-residue readback before any privileged G3 suite. PR #128 and PR #145 remain MERGE HOLD until their required gates pass.
