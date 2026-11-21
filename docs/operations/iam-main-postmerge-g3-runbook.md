@@ -16,6 +16,8 @@ Use the **latest main SHA after this workflow itself has been merged**. The GitH
 
 ## Separation of privileges
 
+Because the Vercel `deployment-config` workflow only runs for runtime/dependency changes, this controller-only PR verifies that check on the existing **PR128 Production application baseline**, while requiring new-SHA `quality` and PostgreSQL 18 checks, exact six-file change scope and full tree equality with the reviewed PR147 merge. Missing or failing baseline deployment checks block execution.
+
 The first job has only read access and **no Environment, OIDC write permission, or secrets**. Its script compares `main` with the approved PR128 merge, allowing only four new trusted workflow/test/documentation files and two changes in CI callback binding scripts (dedicated Preview callback for the PR installing this gate). Application source, authorization logic, migrations, schema and the existing G3 suite must be unchanged.
 
 The second job can use the existing main-only protected GitHub Environment `IAM-G3-PR128-Disposable-RBAC` after revalidating the exact main SHA, PR128 baseline and approved SHA variable. It checks GitHub OIDC subject/audience/ref/workflow SHA and the Vercel Trusted Source, then reruns the existing source-controlled G3 suite on **disposable** Neon branch `br-super-sound-b63gtz88` using its branch-scoped owner secret. It does **not** reuse or copy that privileged secret into Preview or Production, and does not perform Production database writes.

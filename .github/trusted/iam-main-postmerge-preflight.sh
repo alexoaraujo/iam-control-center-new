@@ -105,8 +105,24 @@ for check in quality security-gate auth0-e2e "Execute trusted G3 Auth0/RBAC proo
     exit 1
   }
 done
+# The Vercel deployment-config producer uses paths filters. The approved
+# PR128 main merge exercised that check; this control-only PR147 merge does not
+# modify app/manifest/guard source and will not schedule a new guard check.
+# Require the original known-good deployment-config check on the exact app
+# baseline, then require fresh main-SHA quality and PG18. Whole-tree equality
+# to merged PR147 and the six-file allowlist prohibit runtime/config drift.
+baseline_checks="$(gh api "repos/$REPO/commits/$BASE_MAIN_MERGE/check-runs?per_page=100")"
+jq -e '
+  [.check_runs[] | select(
+    .name == "deployment-config" and
+    .status == "completed" and .conclusion == "success"
+  )] | length == 1
+' <<< "$baseline_checks" >/dev/null || {
+  echo "::error::Approved PR128 deployment-config baseline is not successful."
+  exit 1
+}
 main_checks="$(gh api "repos/$REPO/commits/$main_sha/check-runs?per_page=100")"
-for check in quality pg18-security-contracts deployment-config; do
+for check in quality pg18-security-contracts; do
   jq -e --arg name "$check" '
     [.check_runs[] | select(.name == $name and .status == "completed" and .conclusion == "success")]
     | length == 1
