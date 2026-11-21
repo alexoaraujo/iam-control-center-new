@@ -111,6 +111,10 @@ test("the documentation Preview workflow includes every docs-only security scope
   for (const path of ['"README.md"', '"SECURITY.md"', '"docs/**"']) {
     assert.ok(workflow.includes(path), path);
   }
-  assert.ok(workflow.includes("README.md|SECURITY.md|SCAFFOLD-MANIFEST.json|docs/*"));
-  assert.ok(workflow.includes("for sample in README.md SECURITY.md docs/operations/roadmap.md"));
+  assert.ok(workflow.includes("README.md|SECURITY.md|docs/*) return 0"));
+  assert.ok(workflow.includes("for sample in README.md SECURITY.md docs/operations/roadmap.md; do"));
+  const denyLine = workflow.split("\n").find((line) => line.includes("for sample in apps/web"));
+  for (const path of [".github/workflows/docs-preview-gate.yml", "SCAFFOLD-MANIFEST.json", ".github/PULL_REQUEST_TEMPLATE.md"]) {
+    assert.ok(denyLine?.includes(path), `Sensitive path must fail docs-only classification: ${path}`);
+  }
 });
