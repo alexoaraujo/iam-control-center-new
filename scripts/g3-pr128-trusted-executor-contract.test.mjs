@@ -86,6 +86,8 @@ test("the trusted suite proves grant, tenant isolation, revoke, rollback and zer
   assert.ok(!suite.includes("tls_enabled"));
   assert.match(workflow, /postgres@4\.1\.1/);
   assert.ok(!workflow.includes("@neondatabase/serverless"));
+  assert.ok(workflow.includes("node --check .github/trusted/g3-pr128.spec.cjs"));
+  assert.ok(workflow.includes("PASS_G3_DIRECT_TCP_POSTGRES_CLIENT_LOAD"));
   assert.match(suite, /SET LOCAL ROLE iam_owner/);
   assert.match(suite, /PASS_G3_GRANT_HTTP_200/);
   assert.match(suite, /cross-tenant-B/);
