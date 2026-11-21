@@ -57,3 +57,5 @@ test("only protected main job can run trusted live Auth0 grant revoke rollback s
   ]) assert.ok(workflow.includes(s), s);
   assert.ok(!workflow.includes("environment:\n      name: Production"));
 });
+
+// Follow-on postmerge G3 attestation revision: keep existing guards enforced until reviewed exact-main baseline update.
