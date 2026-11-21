@@ -84,7 +84,7 @@ test("PR143 has its own SHA-scoped callback mapping, never the shared PR132 alia
 });
 
 
-test("PEOS exact-SHA callbacks: all eight active PR branches reject shared or stale bindings", () => {
+test("PEOS exact-SHA callbacks: all nine active PR branches reject shared or stale bindings", () => {
   const mappings = [
     [
         "test/canonical-manifest-diff-gate-20261112",
@@ -117,6 +117,10 @@ test("PEOS exact-SHA callbacks: all eight active PR branches reject shared or st
     [
         "fix/g1-security-gate-on-bun-baseline-20261118",
         "iam-control-center-new-pr130-ci.vercel.app"
+    ],
+    [
+        "security/g3-pr128-trusted-executor-20261121",
+        "iam-control-center-new-pr145-ci.vercel.app"
     ]
 ];
   for (const [prBranch, isolatedHost] of mappings) {
