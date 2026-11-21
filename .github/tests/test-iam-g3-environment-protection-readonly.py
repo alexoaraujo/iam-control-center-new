@@ -25,7 +25,7 @@ def good_env():
 
 def policies(*names):
     return {"total_count": len(names), "branch_policies": [
-        {"name": name, "type": "branch"} for name in names,
+        {"name": name, "type": "branch"} for name in names
     ]}
 
 
