@@ -33,16 +33,16 @@ The workflow `.github/workflows/iam-g3-pr128-trusted-executor.yml` is intentiona
 
 Live administrative UI readback confirmed the secret **name** `NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL` and variable `IAM_RBAC_PR128_APPROVED_SHA`; the variable was shown equal to the current PR128 head SHA. No secret value was read.
 
-The GitHub Actions readback in run [44852826735](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44852826735) at 01:54 UTC reported one allowed ref (`refs/pull/128/merge`). A later live GitHub UI readback at approximately 03:53–04:03 UTC supersedes that snapshot: the Environment currently uses selected branch/tag rules with FOUR PR-only refs — `refs/pull/128/merge`, `refs/pull/129/merge`, `refs/pull/130/merge`, and `refs/pull/145/merge`. `refs/heads/main` is absent. The page also returned “You can’t perform that action at this time”; no policy write was made. These four refs are not appropriate for the trusted main-only workflow.
+The GitHub Actions readback in run [44852826735](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/44852826735) at 01:54 UTC reported one allowed ref (`refs/pull/128/merge`). A later live GitHub UI readback at approximately 03:53–04:03 UTC supersedes that snapshot: the Environment currently uses selected branch/tag rules with FOUR PR-only refs — `refs/pull/128/merge`, `refs/pull/129/merge`, `refs/pull/130/merge`, and `refs/pull/145/merge`. the branch-name rule `main` is absent. The page also returned “You can’t perform that action at this time”; no policy write was made. These four refs are not appropriate for the trusted main-only workflow.
 
-Change the existing Environment `IAM-G3-PR128-Disposable-RBAC` deployment branch allowlist to **only** `refs/heads/main`. Preserve:
+Change the existing Environment `IAM-G3-PR128-Disposable-RBAC` deployment branch allowlist to exactly one rule: **Ref type `Branch`, name pattern `main`**. GitHub environment policies use branch-name patterns; the workflow's runtime OIDC `ref` claim remains `refs/heads/main`. See [GitHub deployment branch policies](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments#deployment-branches-and-tags). Preserve:
 - admin bypass disabled;
 - custom branch policies enabled;
 - no required reviewer and no wait timer (the repository uses the single-maintainer policy);
 - existing owner secret name and value unchanged;
 - `IAM_RBAC_PR128_APPROVED_SHA` equal to the exact current PR128 head.
 
-Do not allow both `refs/heads/main` and `refs/pull/128/merge`. Do not copy the owner URL into `Preview`.
+Remove all PR-ref rules (`refs/pull/*/merge`). Do not configure the branch-name pattern as the literal `refs/heads/main`; the single allowed branch rule must be `main` with type `branch`. Do not copy the owner URL into `Preview`.
 
 The G3 workflow also requires `AUTH0_E2E_USERNAME` and `AUTH0_E2E_PASSWORD` to be available to the G3 job. If these are repository-level secrets they resolve without duplication; if they exist only in the shared `Preview` Environment, add the same Auth0 test credentials as secrets to G3 through the GitHub UI. Never put credential values in code or comments.
 
