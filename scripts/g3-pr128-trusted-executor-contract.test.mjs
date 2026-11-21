@@ -37,6 +37,10 @@ test("G3 job checks out the trusted workflow commit, never the PR head", () => {
   assert.match(workflow, /npm audit --audit-level=high/);
   assert.match(workflow, /G3_APPROVED_SHA/);
   assert.match(workflow, /G3_PR_HEAD_SHA/);
+  assert.match(workflow, /actions: read/);
+  assert.match(workflow, /actions\/runs\?head_sha=/);
+  assert.match(workflow, /actions\/runs\/\$\{ci_run_id\}\/jobs/);
+  assert.match(workflow, /for required in quality security-gate auth0-e2e preview-deployment sync-auth0-preview/);
   assert.match(workflow, /PASS_G3_PR128_HEAD_AND_PREVIEW_REVALIDATED_BEFORE_SECRET_USE/);
   assert.match(workflow, /EXPECTED_SHA.*needs\.preflight\.outputs\.head_sha/);
 });
