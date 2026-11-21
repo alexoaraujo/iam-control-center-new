@@ -1,7 +1,8 @@
 "use strict";
 const { test, expect } = require("@playwright/test");
 const { createHash } = require("node:crypto");
-const { neon } = require("@neondatabase/serverless");
+const postgresModule = require("postgres");
+const postgres = postgresModule.default ?? postgresModule;
 
 const ID = {
   project: "tiny-rice-70320263",
@@ -39,15 +40,22 @@ const countKeys = [
   "membership_roles", "role_permissions", "rollback_tenants",
 ];
 const counts = async (sql) =>
-  (await sql.query(countsQuery, [
+  (await sql.unsafe(countsQuery, [
     ID.tenant, ID.identity, ID.membership, ID.role, ID.tenantB, ID.rollbackTenant,
   ]))[0];
 const zero = (result) => countKeys.every((key) => result[key] === 0);
-function q(sql, statement, args = []) {
-  return sql.query(statement, args);
+function q(statement, args = []) {
+  return { statement, args };
 }
 async function owner(sql, queries) {
-  return sql.transaction([q(sql, "SET LOCAL ROLE iam_owner"), ...queries]);
+  return sql.begin(async (tx) => {
+    await tx.unsafe("SET LOCAL ROLE iam_owner");
+    const results = [];
+    for (const query of queries) {
+      results.push(await tx.unsafe(query.statement, query.args));
+    }
+    return results;
+  });
 }
 
 async function connect() {
@@ -98,83 +106,96 @@ async function connect() {
     "G3 owner URL failed the direct endpoint/database/role/TLS allowlist",
   );
 
-  const sql = neon(connection);
-  const session = await sql.query(
-    "SELECT current_database() AS database_name, " +
-    "current_setting('neon.branch_id', true) AS branch_id, current_user AS principal, " +
-    "(SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()) AS tls_enabled",
-  );
-  check(
-    session.length === 1 &&
-      session[0].database_name === "iam_database" &&
-      session[0].branch_id === ID.branch &&
-      session[0].principal === "neondb_owner" &&
-      session[0].tls_enabled === true,
-    "G3 SQL session is not the approved disposable Neon branch",
-  );
+  // Postgres.js uses the PostgreSQL wire protocol over direct TCP. Its
+  // sslmode=verify-full + sslrootcert=system URL options enforce certificate
+  // chain and hostname verification at the client transport, not server-side
+  // connection telemetry.
+  const sql = postgres(connection, {
+    max: 1,
+    connect_timeout: 10,
+    idle_timeout: 5,
+    prepare: false,
+  });
+  try {
+    const session = await sql.unsafe(
+      "SELECT current_database() AS database_name, " +
+      "current_setting('neon.branch_id', true) AS branch_id, current_user AS principal",
+    );
+    check(
+      session.length === 1 &&
+        session[0].database_name === "iam_database" &&
+        session[0].branch_id === ID.branch &&
+        session[0].principal === "neondb_owner",
+      "G3 direct TCP SQL session is not the approved disposable Neon branch",
+    );
+    console.log("PASS_G3_CLIENT_TLS_VERIFY_FULL_SYSTEM_CA");
 
-  const topology = await sql.query(
-    "SELECT pg_has_role(current_user,'iam_owner','SET') AS may_set_iam_owner, " +
-    "(SELECT NOT rolbypassrls AND NOT rolsuper AND NOT rolcanlogin FROM pg_roles WHERE rolname='iam_owner') AS iam_owner_safe, " +
-    "(SELECT NOT rolbypassrls AND NOT rolsuper FROM pg_roles WHERE rolname='iam_app_runtime_login') AS runtime_safe",
-  );
-  check(
-    topology.length === 1 &&
-      topology[0].may_set_iam_owner === true &&
-      topology[0].iam_owner_safe === true &&
-      topology[0].runtime_safe === true,
-    "G3 owner/runtime role topology is not safe",
-  );
+    const topology = await sql.unsafe(
+      "SELECT pg_has_role(current_user,'iam_owner','SET') AS may_set_iam_owner, " +
+      "(SELECT NOT rolbypassrls AND NOT rolsuper AND NOT rolcanlogin FROM pg_roles WHERE rolname='iam_owner') AS iam_owner_safe, " +
+      "(SELECT NOT rolbypassrls AND NOT rolsuper FROM pg_roles WHERE rolname='iam_app_runtime_login') AS runtime_safe",
+    );
+    check(
+      topology.length === 1 &&
+        topology[0].may_set_iam_owner === true &&
+        topology[0].iam_owner_safe === true &&
+        topology[0].runtime_safe === true,
+      "G3 owner/runtime role topology is not safe",
+    );
 
-  const setRole = await owner(sql, [
-    q(sql, "SELECT current_user AS effective_role"),
-  ]);
-  check(
-    setRole[1]?.[0]?.effective_role === "iam_owner",
-    "SET LOCAL ROLE iam_owner did not take effect",
-  );
+    const setRole = await owner(sql, [
+      q("SELECT current_user AS effective_role"),
+    ]);
+    check(
+      setRole[0]?.[0]?.effective_role === "iam_owner",
+      "SET LOCAL ROLE iam_owner did not take effect",
+    );
 
-  const activeKey = await sql.query(
-    "SELECT key_id FROM app_private.context_keys WHERE active",
-  );
-  check(
-    activeKey.length === 1 && activeKey[0].key_id === "synthetic-release-validation",
-    "G3 active context-key identity mismatch",
-  );
-  const baseline = await counts(sql);
-  check(
-    zero(baseline) && baseline.active_keys === 1 && baseline.ledger_rows === 0,
-    "G3 fixture IDs are not clean or protected key/ledger baseline changed",
-  );
-  const permission = await sql.query(
-    "SELECT count(*)::int AS n FROM iam.permissions WHERE permission_key='iam.tenant.read'",
-  );
-  check(permission[0]?.n === 1, "Canonical iam.tenant.read permission is not unique");
-  console.log("PASS_G3_NEON_DIRECT_TLS_DATABASE_BRANCH_OWNER_SET_LOCAL_ROLE_AND_BASELINE");
-  return sql;
+    const activeKey = await sql.unsafe(
+      "SELECT key_id FROM app_private.context_keys WHERE active",
+    );
+    check(
+      activeKey.length === 1 && activeKey[0].key_id === "synthetic-release-validation",
+      "G3 active context-key identity mismatch",
+    );
+    const baseline = await counts(sql);
+    check(
+      zero(baseline) && baseline.active_keys === 1 && baseline.ledger_rows === 0,
+      "G3 fixture IDs are not clean or protected key/ledger baseline changed",
+    );
+    const permission = await sql.unsafe(
+      "SELECT count(*)::int AS n FROM iam.permissions WHERE permission_key='iam.tenant.read'",
+    );
+    check(permission[0]?.n === 1, "Canonical iam.tenant.read permission is not unique");
+    console.log("PASS_G3_NEON_DIRECT_TCP_BRANCH_OWNER_SET_LOCAL_ROLE_AND_BASELINE");
+    return sql;
+  } catch (error) {
+    await sql.end({ timeout: 5 }).catch(() => {});
+    throw error;
+  }
 }
 
 async function create(sql, subject) {
   await owner(sql, [
-    q(sql,
+    q(
       "INSERT INTO iam.tenants(id,slug,display_name) VALUES($1::uuid,'peos-auth0-http-128','PEOS disposable RBAC HTTP gate')",
       [ID.tenant]),
-    q(sql,
+    q(
       "INSERT INTO iam.tenants(id,slug,display_name) VALUES($1::uuid,'peos-auth0-http-128-b','PEOS disposable RBAC tenant B')",
       [ID.tenantB]),
-    q(sql,
+    q(
       "INSERT INTO iam.identities(id,issuer,subject,status) VALUES($1::uuid,$2,$3,'active')",
       [ID.identity, ID.issuer, subject]),
-    q(sql,
+    q(
       "INSERT INTO iam.memberships(id,tenant_id,identity_id,status,joined_at) VALUES($1::uuid,$2::uuid,$3::uuid,'active',clock_timestamp())",
       [ID.membership, ID.tenant, ID.identity]),
-    q(sql,
+    q(
       "INSERT INTO iam.roles(id,tenant_id,role_key,display_name) VALUES($1::uuid,$2::uuid,'peos_auth0_128','PEOS temporary RBAC reader')",
       [ID.role, ID.tenant]),
-    q(sql,
+    q(
       "INSERT INTO iam.role_permissions(tenant_id,role_id,permission_key) VALUES($1::uuid,$2::uuid,'iam.tenant.read')",
       [ID.tenant, ID.role]),
-    q(sql,
+    q(
       "INSERT INTO iam.membership_roles(tenant_id,membership_id,role_id) VALUES($1::uuid,$2::uuid,$3::uuid)",
       [ID.tenant, ID.membership, ID.role]),
   ]);
@@ -191,7 +212,7 @@ async function create(sql, subject) {
 
 async function revoke(sql) {
   await owner(sql, [
-    q(sql,
+    q(
       "DELETE FROM iam.membership_roles WHERE tenant_id=$1::uuid AND membership_id=$2::uuid AND role_id=$3::uuid",
       [ID.tenant, ID.membership, ID.role]),
   ]);
@@ -204,16 +225,16 @@ async function revoke(sql) {
 
 async function proveRollback(sql) {
   await owner(sql, [
-    q(sql,
+    q(
       "INSERT INTO iam.tenants(id,slug,display_name) VALUES($1::uuid,'peos-auth0-http-128-rollback','rollback-before')",
       [ID.rollbackTenant]),
   ]);
   await owner(sql, [
-    q(sql,
+    q(
       "UPDATE iam.tenants SET display_name='rollback-committed' WHERE id=$1::uuid",
       [ID.rollbackTenant]),
   ]);
-  const before = await sql.query(
+  const before = await sql.unsafe(
     "SELECT display_name FROM iam.tenants WHERE id=$1::uuid",
     [ID.rollbackTenant],
   );
@@ -223,16 +244,16 @@ async function proveRollback(sql) {
   let forcedFailure = false;
   try {
     await owner(sql, [
-      q(sql,
+      q(
         "UPDATE iam.tenants SET display_name='rollback-must-not-commit' WHERE id=$1::uuid",
         [ID.rollbackTenant]),
-      q(sql, "SELECT 1 / 0"),
+      q( "SELECT 1 / 0"),
     ]);
   } catch {
     forcedFailure = true;
   }
   check(forcedFailure, "G3 rollback control did not raise the expected transaction failure");
-  const after = await sql.query(
+  const after = await sql.unsafe(
     "SELECT display_name FROM iam.tenants WHERE id=$1::uuid",
     [ID.rollbackTenant],
   );
@@ -243,24 +264,24 @@ async function proveRollback(sql) {
 
 async function cleanup(sql) {
   await owner(sql, [
-    q(sql,
+    q(
       "DELETE FROM iam.membership_roles WHERE tenant_id=$1::uuid AND membership_id=$2::uuid AND role_id=$3::uuid",
       [ID.tenant, ID.membership, ID.role]),
-    q(sql,
+    q(
       "DELETE FROM iam.role_permissions WHERE tenant_id=$1::uuid AND role_id=$2::uuid AND permission_key='iam.tenant.read'",
       [ID.tenant, ID.role]),
-    q(sql,
+    q(
       "DELETE FROM iam.roles WHERE id=$1::uuid AND tenant_id=$2::uuid",
       [ID.role, ID.tenant]),
-    q(sql,
+    q(
       "DELETE FROM iam.memberships WHERE id=$1::uuid AND tenant_id=$2::uuid AND identity_id=$3::uuid",
       [ID.membership, ID.tenant, ID.identity]),
-    q(sql,
+    q(
       "DELETE FROM iam.identities WHERE id=$1::uuid AND issuer=$2",
       [ID.identity, ID.issuer]),
-    q(sql, "DELETE FROM iam.tenants WHERE id=$1::uuid", [ID.tenant]),
-    q(sql, "DELETE FROM iam.tenants WHERE id=$1::uuid", [ID.tenantB]),
-    q(sql, "DELETE FROM iam.tenants WHERE id=$1::uuid", [ID.rollbackTenant]),
+    q( "DELETE FROM iam.tenants WHERE id=$1::uuid", [ID.tenant]),
+    q( "DELETE FROM iam.tenants WHERE id=$1::uuid", [ID.tenantB]),
+    q( "DELETE FROM iam.tenants WHERE id=$1::uuid", [ID.rollbackTenant]),
   ]);
   const result = await counts(sql);
   check(
@@ -415,6 +436,7 @@ test("PR128 G3: real Auth0 grant 200, cross-tenant deny, revoke 403, rollback an
     }
     await cdp.send("Fetch.disable").catch(() => {});
     await cdp.detach().catch(() => {});
+    await sql.end({ timeout: 5 }).catch(() => {});
   }
 
   if (cleanupFailure) {
