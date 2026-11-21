@@ -261,41 +261,6 @@ jobs:
           }
           echo "PASS_G3_PR128_HEAD_AND_PREVIEW_REVALIDATED_BEFORE_SECRET_USE"
 
-      - name: Verify exact approved SHA and protected credential availability
-        shell: bash
-        env:
-          OWNER_DATABASE_URL: ${{ secrets.NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL }}
-          AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
-          AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
-        run: |
-          set -euo pipefail
-          [[ "${G3_APPROVED_SHA}" =~ ^[0-9a-f]{40}$ && "${G3_APPROVED_SHA}" == "${G3_PR_HEAD_SHA}" ]] || {
-            echo "::error::G3 approved SHA does not equal the current PR128 head."
-            exit 1
-          }
-          [[ -n "${OWNER_DATABASE_URL:-}" ]] || {
-            echo "::error::G3 owner secret is unavailable in the dedicated Environment."
-            exit 1
-          }
-          [[ -n "${AUTH0_E2E_USERNAME:-}" && -n "${AUTH0_E2E_PASSWORD:-}" ]] || {
-            echo "::error::Auth0 E2E credentials are not available to the dedicated G3 job. Provision them in G3 or as repository secrets; do not copy the owner secret to Preview."
-            exit 1
-          }
-          node <<'NODE'
-          const raw = process.env.OWNER_DATABASE_URL;
-          let uri;
-          try { uri = new URL(raw); } catch { throw new Error("G3 owner URL is not a valid PostgreSQL URI."); }
-          const valid = uri.protocol === "postgresql:" &&
-            uri.hostname === "ep-red-sunset-b6ozp5b2.c-2.sa-east-1.aws.neon.tech" &&
-            uri.pathname === "/iam_database" &&
-            decodeURIComponent(uri.username) === "neondb_owner" &&
-            Boolean(uri.password) &&
-            uri.searchParams.get("sslmode") === "verify-full" &&
-            uri.searchParams.get("sslrootcert") === "system";
-          if (!valid) throw new Error("G3 owner URL failed the direct-host/database/role/TLS allowlist.");
-          console.log("PASS_G3_OWNER_SECRET_PRESENT_AND_DIRECT_TLS_POLICY_MATCHES");
-          NODE
-
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -402,6 +367,41 @@ jobs:
           }
           await reachAuth0(new URL("/protected", origin), "G3 Preview");
           console.log("PASS_G3_VERCEL_TRUSTED_SOURCE_POSITIVE_CONTROL");
+          NODE
+
+      - name: Verify exact approved SHA and protected credential availability
+        shell: bash
+        env:
+          OWNER_DATABASE_URL: ${{ secrets.NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL }}
+          AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
+          AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ "${G3_APPROVED_SHA}" =~ ^[0-9a-f]{40}$ && "${G3_APPROVED_SHA}" == "${G3_PR_HEAD_SHA}" ]] || {
+            echo "::error::G3 approved SHA does not equal the current PR128 head."
+            exit 1
+          }
+          [[ -n "${OWNER_DATABASE_URL:-}" ]] || {
+            echo "::error::G3 owner secret is unavailable in the dedicated Environment."
+            exit 1
+          }
+          [[ -n "${AUTH0_E2E_USERNAME:-}" && -n "${AUTH0_E2E_PASSWORD:-}" ]] || {
+            echo "::error::Auth0 E2E credentials are not available to the dedicated G3 job. Provision them in G3 or as repository secrets; do not copy the owner secret to Preview."
+            exit 1
+          }
+          node <<'NODE'
+          const raw = process.env.OWNER_DATABASE_URL;
+          let uri;
+          try { uri = new URL(raw); } catch { throw new Error("G3 owner URL is not a valid PostgreSQL URI."); }
+          const valid = uri.protocol === "postgresql:" &&
+            uri.hostname === "ep-red-sunset-b6ozp5b2.c-2.sa-east-1.aws.neon.tech" &&
+            uri.pathname === "/iam_database" &&
+            decodeURIComponent(uri.username) === "neondb_owner" &&
+            Boolean(uri.password) &&
+            uri.searchParams.get("sslmode") === "verify-full" &&
+            uri.searchParams.get("sslrootcert") === "system";
+          if (!valid) throw new Error("G3 owner URL failed the direct-host/database/role/TLS allowlist.");
+          console.log("PASS_G3_OWNER_SECRET_PRESENT_AND_DIRECT_TLS_POLICY_MATCHES");
           NODE
 
       - name: Execute trusted PR128 Auth0/RBAC grant, deny, revoke, cleanup and rollback suite
