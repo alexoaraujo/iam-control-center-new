@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 const workflow = readFileSync(".github/workflows/iam-main-postmerge-auth0-rbac.yml", "utf8");
@@ -32,7 +33,7 @@ test("exact main source and baseline app parity fail closed before privileged Au
     'BASE_MAIN_MERGE="2270fac70bb588cea2ebc2e12cad5b7da96e2a38"',
     "compare/", "main_sha", "gh api", "security-gate", "auth0-e2e",
     "Execute trusted G3 Auth0/RBAC proof", "pg18-security-contracts",
-    "deployment-config", '.files | length) == 6', 'status == "added"',
+    "deployment-config", '.files | length) == 13', 'status == "added"',
     'status == "modified"', "PASS_POSTMERGE_MAIN_SHA_PR128_APP_PARITY_AND_CHECKS",
   ]) assert.ok(preflight.includes(s), s);
   assert.ok(!preflight.includes("GH_TOKEN="));
@@ -58,7 +59,7 @@ test("only protected main job can run trusted live Auth0 grant revoke rollback s
   assert.ok(!workflow.includes("environment:\n      name: Production"));
 });
 
-// Follow-on postmerge G3 attestation revision: keep existing guards enforced until reviewed exact-main baseline update.
+// Postmerge G3 safety contract for the reviewed PR150/PR151 exact-main lineage.
 
 test("PR150 review is pinned to exact SHA and no later app/SQL changes", () => {
   for (const s of [
@@ -77,4 +78,10 @@ test("PR150 review is pinned to exact SHA and no later app/SQL changes", () => {
     'preview-deployment', 'sync-auth0-preview', 'Vercel Preview Comments',
     'NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL',
   ]) assert.ok((preflight + workflow).includes(s), s);
+});
+
+test("postmerge preflight remains syntactically valid bash", () => {
+  if (process.platform === "win32") return;
+  const result = spawnSync("bash", ["-n", ".github/trusted/iam-main-postmerge-preflight.sh"], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
 });
