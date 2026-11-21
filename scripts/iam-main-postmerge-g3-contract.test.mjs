@@ -66,9 +66,9 @@ test("PR150 review is pinned to exact SHA and no later app/SQL changes", () => {
     'REVIEWED_APP_HEAD="3e053b6c774ee77075dbd038b9a295cc07eefda4"',
     'REVIEWED_APP_MERGE="633ed462566c63cb0307b7266ec147a25e3f84ee"',
     'reviewed_main_tree', 'reviewed_head_tree',
-    '(.files | length) == 13', '(.files | length) == 2',
+    '(.files | length) == 13', '(.files | length) == 4',
     'reviewed_scope', 'reviewed_checks',
-    'Post-PR150 main changes exceed the reviewed G3 control-only scope.',
+    'Post-PR150 main changes exceed reviewed G3/PR151 callback-only scope.',
     'Reviewed PR128-to-PR150 source/SQL/G3 scope differs',
     'The main Git tree differs from reviewed PR151 head source.',
     'Main advanced beyond the reviewed PR151',
@@ -84,4 +84,15 @@ test("postmerge preflight remains syntactically valid bash", () => {
   if (process.platform === "win32") return;
   const result = spawnSync("bash", ["-n", ".github/trusted/iam-main-postmerge-preflight.sh"], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr || result.error?.message);
+});
+
+test("postmerge PR151 allows only approved branch-bound callback map and tests", () => {
+  for (const f of [
+    "scripts/bind-e2e-preview.mjs", "scripts/bind-e2e-preview.test.mjs",
+    "scripts/iam-main-postmerge-g3-contract.test.mjs",
+    ".github/trusted/iam-main-postmerge-preflight.sh",
+  ]) assert.ok(preflight.includes(f), f);
+  assert.ok(!preflight.includes('(.files | length) == 6'));
+  assert.ok(preflight.includes('(.files | length) == 4'));
+  assert.ok(!preflight.includes('refs/pull/*/merge'));
 });
