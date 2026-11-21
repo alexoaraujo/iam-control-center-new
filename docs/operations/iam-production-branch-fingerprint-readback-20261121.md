@@ -27,3 +27,7 @@ Vercel Production `DATABASE_URL` is `sensitive`; administrative Vercel API per-I
 ## Gating and key custody
 
 The deployment remains **NOT READY** until its expected branch matches the real branch, and **Production tenant RBAC** remains DENY without a valid, distinct approved Production HMAC key in the approved canonical database and in the Production-only Vercel Environment. Do not reuse `synthetic-release-validation` or execute migrations, tenant grants, or Production database cutovers as part of this diagnostic. Any schema/ownership reconciliation requires a verified backup and rollback first.
+
+## Unique Preview branch after failed PR149 reuse
+
+The initial diagnostic draft PR #149 accidentally reused a previously merged branch name. The CI correctly rejected the stale Preview PR identity with `Missing or wrong PR number on Preview origin`; do not weaken this check. This new PR uses unique branch `security/peos-prod-branch-fingerprint-20261121` and branch-only, verified Vercel alias `iam-control-center-new-branch-fingerprint-ci.vercel.app`. Its Auth0 application must explicitly allow callback `https://iam-control-center-new-branch-fingerprint-ci.vercel.app/auth/callback` and logout origin `https://iam-control-center-new-branch-fingerprint-ci.vercel.app` without wildcards. The old PR149 remains a separate, unmerged audit record. No Production key or schema changes are authorized by this operational adjustment.
