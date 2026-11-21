@@ -22,6 +22,7 @@ const branchCallbacks = new Map([
   ["integration/peos-single-maintainer-bun-20261117", "iam-control-center-new-pr128-ci.vercel.app"],
   ["fix/g3-main-only-environment-contracts-20261121", "iam-control-center-new-pr146-ci.vercel.app"],
   ["security/main-postmerge-g3-exact-sha-20261121", "iam-control-center-new-pr147-ci.vercel.app"],
+  ["security/peos-prod-rbac-branch-attestation-20261121", "iam-control-center-new-prod-rbac-ci.vercel.app"],
   ["security/g3-pr128-trusted-executor-20261121", "iam-control-center-new-pr145-ci.vercel.app"],
   ["fix/g3-pr128-rbac-isolated-lease-20261120", "iam-control-center-new-pr144-ci.vercel.app"],
   ["fix/g1-security-gate-on-bun-baseline-20261118", "iam-control-center-new-pr130-ci.vercel.app"],

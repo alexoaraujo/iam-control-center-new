@@ -169,3 +169,19 @@ test("PR147 postmerge security gate has an exact branch-scoped Preview callback"
   assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "integration/peos-single-maintainer-bun-20261117" }, a, dep), /not bound/);
   assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
 });
+
+test("Production RBAC attestation PR callback is bound only to its exact branch and SHA", () => {
+  const b = "security/peos-prod-rbac-branch-attestation-20261121";
+  const h = "iam-control-center-new-prod-rbac-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.deepEqual(verifyPreviewBinding(e, d, a, dep), {
+    callbackHost: h, callbackBranch: b, callbackUrl: `https://${h}`,
+  });
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "integration/peos-single-maintainer-bun-20261117" }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, a,
+    { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+});

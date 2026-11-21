@@ -81,4 +81,28 @@ describe("dependency readiness", () => {
     expect(query.mock.calls[0][0]).toContain("current_setting('neon.branch_id',true)");
   });
 
+
+  it("fails closed in Production before SQL when branch binding is absent", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("IAM_PRODUCTION_EXPECTED_NEON_BRANCH_ID", "");
+    expect(await checkReadiness()).toEqual({ ready: false, reason: "production_branch_unconfigured" });
+    expect(getSql).not.toHaveBeenCalled();
+  });
+
+  it("rejects a wrong Production database branch even with healthy connectivity and role", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("IAM_PRODUCTION_EXPECTED_NEON_BRANCH_ID", "br-muddy-snow-b63cepcv");
+    query.mockResolvedValue([{ role: "iam_app_runtime_login", rolsuper: false, rolbypassrls: false, branch_id: "br-unexpected-b6testme" }]);
+    expect(await checkReadiness()).toEqual({ ready: false, reason: "production_branch_mismatch" });
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it("attests the exact allowlisted Production branch without exposing its ID", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("IAM_PRODUCTION_EXPECTED_NEON_BRANCH_ID", "br-muddy-snow-b63cepcv");
+    query.mockResolvedValue([{ role: "iam_app_runtime_login", rolsuper: false, rolbypassrls: false, branch_id: "br-muddy-snow-b63cepcv" }]);
+    expect(await checkReadiness()).toEqual({ ready: true, reason: "dependencies_available" });
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
 });
