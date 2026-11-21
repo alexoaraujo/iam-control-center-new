@@ -30,3 +30,7 @@
 ## Recovery
 
 If readiness becomes `production_branch_mismatch`, do not update the expected value blindly. Inspect the actual target via authorized protected metadata and reconcile the discrepancy; revert the code via a reviewed PR if necessary. Preserve original Vercel deployments and Neon snapshot. Never lower RLS, skip `security-gate`, or make the Runtime role a database owner.
+
+## Preview re-deployment binding check
+
+Vercel project domain `iam-control-center-new-prod-rbac-ci.vercel.app` was created, verified, and bound **only** to `security/peos-prod-rbac-branch-attestation-20261121`. Branch-scoped Preview values `APP_BASE_URL`, `E2E_CALLBACK_HOST`, `E2E_CALLBACK_BRANCH` were created after the first Preview deployment. This new documented SHA deliberately retriggers deployment and Auth0 synchronization so the variables are effective at build time, without changing Production.
