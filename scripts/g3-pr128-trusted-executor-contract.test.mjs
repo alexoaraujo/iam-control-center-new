@@ -81,9 +81,11 @@ test("the trusted suite proves grant, tenant isolation, revoke, rollback and zer
   assert.match(suite, /sql\.unsafe/);
   assert.match(suite, /sql\.begin/);
   assert.match(suite, /PASS_G3_CLIENT_TLS_VERIFY_FULL_SYSTEM_CA/);
-  assert.doesNotMatch(suite, /@neondatabase\\/serverless|pg_stat_ssl|tls_enabled/);
+  assert.ok(!suite.includes("@neondatabase/serverless"));
+  assert.ok(!suite.includes("pg_stat_ssl"));
+  assert.ok(!suite.includes("tls_enabled"));
   assert.match(workflow, /postgres@4\.1\.1/);
-  assert.doesNotMatch(workflow, /@neondatabase\\/serverless/);
+  assert.ok(!workflow.includes("@neondatabase/serverless"));
   assert.match(suite, /SET LOCAL ROLE iam_owner/);
   assert.match(suite, /PASS_G3_GRANT_HTTP_200/);
   assert.match(suite, /cross-tenant-B/);
