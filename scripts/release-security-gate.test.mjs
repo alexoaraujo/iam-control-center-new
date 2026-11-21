@@ -114,3 +114,69 @@ test("the documentation Preview workflow includes every docs-only security scope
   assert.ok(workflow.includes("README.md|SECURITY.md|SCAFFOLD-MANIFEST.json|docs/*"));
   assert.ok(workflow.includes("for sample in README.md SECURITY.md docs/operations/roadmap.md"));
 });
+
+test("offline-only PRs require trusted exact-SHA evidence, never a generic Auth0 skip", () => {
+  const canonical = {
+    ...positive, auth0E2E: "skipped", auth0Scope: "not-authorized",
+    offlineEvidenceResult: "success", offlineEvidenceVerified: "true",
+    offlineEvidenceScope: "canonical-manifests",
+    changedFiles: ["database/offline/compare-schema-manifests.mjs"],
+  };
+  assert.deepEqual(decideSecurityGate(canonical), {
+    pass: true, reason: "OFFLINE_EVIDENCE_VERIFIED:canonical-manifests",
+  });
+  const b2 = {
+    ...canonical, offlineEvidenceScope: "b2-environment-policy",
+    changedFiles: ["scripts/iam-g1-b2-environment.sh"],
+  };
+  assert.equal(decideSecurityGate(b2).pass, true);
+  const readback = {
+    ...canonical, offlineEvidenceScope: "b2-readback-policy",
+    changedFiles: ["scripts/iam-g1-b2-readback.py"],
+  };
+  assert.equal(decideSecurityGate(readback).pass, true);
+  for (const [key, value] of [
+    ["auth0E2E", "failure"], ["auth0Scope", "authorized"],
+    ["auth0Scope", ""], ["offlineEvidenceResult", "failure"],
+    ["offlineEvidenceResult", "skipped"], ["offlineEvidenceVerified", "false"],
+    ["offlineEvidenceVerified", ""], ["offlineEvidenceScope", "b2-readback-policy"],
+    ["previewRequired", "false"], ["preview", "failure"],
+    ["syncAuth0", "skipped"], ["auth0Enabled", "false"],
+  ]) {
+    assert.equal(decideSecurityGate({ ...canonical, [key]: value }).pass,
+      false, key + "=" + value);
+  }
+  for (const path of [
+    "apps/web/src/app/api/authorization/check/route.ts",
+    "database/migrations/0001_context_key.sql",
+    ".github/workflows/quality.yml",
+    ".github/workflows/database-tests.yml",
+    "scripts/iam-offline-ci-evidence.mjs",
+    "scripts/release-security-gate.mjs",
+    ".github/e2e/playwright.config.cjs",
+  ]) {
+    assert.equal(decideSecurityGate({
+      ...canonical, changedFiles: [...canonical.changedFiles, path],
+    }).pass, false, "sensitive path " + path);
+  }
+});
+
+test("offline evidence is checked from the base revision with no Preview secrets", () => {
+  const yml = readFileSync(".github/workflows/quality.yml", "utf8");
+  const offline = yml.split("\n  offline-evidence:\n")[1]?.split("\n  security-gate:\n")[0];
+  const gate = yml.split("\n  security-gate:\n")[1];
+  assert.ok(offline);
+  assert.ok(offline.includes("name: offline-evidence"));
+  assert.ok(offline.includes("github.event.pull_request.base.sha"));
+  assert.ok(offline.includes("persist-credentials: false"));
+  assert.ok(offline.includes("actions: read"));
+  assert.ok(offline.includes("checks: read"));
+  assert.ok(offline.includes("pull-requests: read"));
+  assert.ok(!offline.includes("secrets."));
+  assert.ok(offline.includes("node scripts/iam-offline-ci-evidence.mjs"));
+  assert.ok(gate.includes("- offline-evidence"));
+  for (const key of ["AUTH0_SCOPE", "OFFLINE_EVIDENCE_RESULT",
+    "OFFLINE_EVIDENCE_VERIFIED", "OFFLINE_EVIDENCE_SCOPE"]) {
+    assert.ok(gate.includes(key), key);
+  }
+});
