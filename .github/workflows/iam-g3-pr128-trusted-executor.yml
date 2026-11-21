@@ -277,6 +277,21 @@ jobs:
             @playwright/test@1.64.1 postgres@4.1.1
           npm audit --audit-level=high
 
+      - name: Validate trusted G3 suite syntax and direct PostgreSQL client module
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check .github/trusted/g3-pr128.spec.cjs
+          node --check .github/trusted/g3-pr128.playwright.config.cjs
+          NODE_PATH="${RUNNER_TEMP}/g3/node_modules" node <<'NODE'
+          const loaded = require("postgres");
+          const postgres = loaded.default ?? loaded;
+          if (typeof postgres !== "function") {
+            throw new Error("Pinned Postgres.js client did not load as a direct PostgreSQL driver.");
+          }
+          console.log("PASS_G3_DIRECT_TCP_POSTGRES_CLIENT_LOAD");
+          NODE
+
       - name: Install Chromium
         run: "${RUNNER_TEMP}/g3/node_modules/.bin/playwright install --with-deps chromium"
 
