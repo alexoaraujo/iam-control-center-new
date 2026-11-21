@@ -354,6 +354,18 @@ jobs:
           printf 'VERCEL_TRUSTED_OIDC_TOKEN=%s\n' "${token}" >> "${GITHUB_ENV}"
           unset token response
 
+      - name: Verify live Preview and callback deployment identity against the approved PR128 SHA
+        shell: bash
+        env:
+          E2E_DEPLOYMENT_HOST: iam-control-center-new-pr128-ci.vercel.app
+          E2E_CALLBACK_HOST: iam-control-center-new-pr128-ci.vercel.app
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ env.VERCEL_TRUSTED_OIDC_TOKEN }}
+          PR_HEAD_BRANCH: integration/peos-single-maintainer-bun-20261117
+          PR_HEAD_REPOSITORY: alexoaraujo/iam-control-center-new
+          PR_NUMBER: '128'
+          PR_HEAD_SHA: ${{ needs.preflight.outputs.head_sha }}
+        run: node scripts/verify-preview-alias.mjs
+
       - name: Verify Vercel Deployment Protection negative and positive controls
         shell: bash
         env:
