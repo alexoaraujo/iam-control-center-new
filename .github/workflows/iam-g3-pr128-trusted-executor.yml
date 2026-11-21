@@ -94,12 +94,29 @@ jobs:
           }
 
           checks="$(gh api "repos/${REPOSITORY}/commits/${head_sha}/check-runs?per_page=100")"
+          for required in quality security-gate auth0-e2e preview-deployment sync-auth0-preview; do
+            jq -e --arg sha "${head_sha}" --arg name "${required}" '
+              [.check_runs[]
+                | select(
+                    .head_sha == $sha
+                    and .app.slug == "github-actions"
+                    and .name == $name
+                    and .status == "completed"
+                    and .conclusion == "success"
+                  )
+              ] | length == 1
+            ' <<< "${checks}" >/dev/null || {
+              echo "::error::Required exact-SHA check did not pass: ${required}."
+              exit 1
+            }
+          done
           jq -e --arg sha "${head_sha}" --arg alias "iam-control-center-new-pr128-ci.vercel.app" '
             [.check_runs[]
               | select(
                   .head_sha == $sha
                   and .app.slug == "vercel"
                   and .name == "Vercel Preview Comments"
+                  and .status == "completed"
                   and .conclusion == "success"
                   and ((.output.summary // "") | contains($alias))
                 )
@@ -258,7 +275,7 @@ jobs:
           PREVIEW_URL: ${{ needs.preflight.outputs.preview_url }}
         run: |
           set -euo pipefail
-          node <<'NODE'
+          node --input-type=module <<'NODE'
           const origin = new URL(process.env.PREVIEW_URL);
           const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
           const header = "x-vercel-trusted-oidc-idp-token";
@@ -296,7 +313,6 @@ jobs:
           NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL: ${{ secrets.NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL }}
           AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
           AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
-          VERCEL_TRUSTED_OIDC_TOKEN: ${{ env.VERCEL_TRUSTED_OIDC_TOKEN }}
         run: |
           set -euo pipefail
           NODE_PATH="${RUNNER_TEMP}/g3/node_modules" \
