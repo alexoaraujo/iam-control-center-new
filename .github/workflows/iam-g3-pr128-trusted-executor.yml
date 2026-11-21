@@ -296,6 +296,7 @@ jobs:
         run: "${RUNNER_TEMP}/g3/node_modules/.bin/playwright install --with-deps chromium"
 
       - name: Request and validate the G3-specific GitHub OIDC identity
+        id: preview_oidc
         shell: bash
         run: |
           set -euo pipefail
@@ -331,7 +332,7 @@ jobs:
           }
           console.log("PASS_G3_OIDC_SUBJECT_AUDIENCE_MAIN_AND_WORKFLOW_CLAIMS");
           NODE
-          printf 'VERCEL_TRUSTED_OIDC_TOKEN=%s\n' "${token}" >> "${GITHUB_ENV}"
+          printf 'token=%s\n' "${token}" >> "${GITHUB_OUTPUT}"
           unset token response
 
       - name: Verify live Preview and callback deployment identity against the approved PR128 SHA
@@ -339,7 +340,7 @@ jobs:
         env:
           E2E_DEPLOYMENT_HOST: iam-control-center-new-pr128-ci.vercel.app
           E2E_CALLBACK_HOST: iam-control-center-new-pr128-ci.vercel.app
-          VERCEL_TRUSTED_OIDC_TOKEN: ${{ env.VERCEL_TRUSTED_OIDC_TOKEN }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.preview_oidc.outputs.token }}
           PR_HEAD_BRANCH: integration/peos-single-maintainer-bun-20261117
           PR_HEAD_REPOSITORY: alexoaraujo/iam-control-center-new
           PR_NUMBER: '128'
@@ -350,6 +351,7 @@ jobs:
         shell: bash
         env:
           PREVIEW_URL: ${{ needs.preflight.outputs.preview_url }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.preview_oidc.outputs.token }}
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
@@ -384,18 +386,13 @@ jobs:
           console.log("PASS_G3_VERCEL_TRUSTED_SOURCE_POSITIVE_CONTROL");
           NODE
 
-      - name: Clear short-lived Vercel OIDC token before binding G3 credentials
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf '%s\n' 'VERCEL_TRUSTED_OIDC_TOKEN=' >> "${GITHUB_ENV}"
-
       - name: Verify exact approved SHA and protected credential availability
         shell: bash
         env:
           OWNER_DATABASE_URL: ${{ secrets.NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL }}
           AUTH0_E2E_USERNAME: ${{ secrets.AUTH0_E2E_USERNAME }}
           AUTH0_E2E_PASSWORD: ${{ secrets.AUTH0_E2E_PASSWORD }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.suite_oidc.outputs.token }}
         run: |
           set -euo pipefail
           [[ "${G3_APPROVED_SHA}" =~ ^[0-9a-f]{40}$ && "${G3_APPROVED_SHA}" == "${G3_PR_HEAD_SHA}" ]] || {
@@ -424,6 +421,46 @@ jobs:
           if (!valid) throw new Error("G3 owner URL failed the direct-host/database/role/TLS allowlist.");
           console.log("PASS_G3_OWNER_SECRET_PRESENT_AND_DIRECT_TLS_POLICY_MATCHES");
           NODE
+
+      - name: Request fresh G3 OIDC identity for privileged browser suite
+        id: suite_oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error \
+            --get \
+            --data-urlencode "audience=https://github.com/alexoaraujo" \
+            --header "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}")"
+          token="$(jq -er '.value | select(type == "string" and length > 0)' <<< "${response}")"
+          printf '::add-mask::%s\n' "${token}"
+          VERCEL_TRUSTED_OIDC_TOKEN="${token}" node <<'NODE'
+          const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
+          const parts = token?.split(".");
+          if (!parts || parts.length !== 3) throw new Error("G3 suite OIDC token is not a JWT.");
+          const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+          const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+          const expectedSubject = "repo:alexoaraujo@325264809/iam-control-center-new@1451861889:environment:IAM-G3-PR128-Disposable-RBAC";
+          const expectedWorkflow = "alexoaraujo/iam-control-center-new/.github/workflows/iam-g3-pr128-trusted-executor.yml@refs/heads/main";
+          const now = Math.floor(Date.now() / 1000);
+          if (claims.iss !== "https://token.actions.githubusercontent.com" ||
+              !audience.includes("https://github.com/alexoaraujo") ||
+              claims.sub !== expectedSubject ||
+              claims.ref !== "refs/heads/main" ||
+              claims.environment !== "IAM-G3-PR128-Disposable-RBAC" ||
+              claims.workflow_ref !== expectedWorkflow ||
+              claims.workflow_sha !== process.env.GITHUB_SHA ||
+              String(claims.repository_id) !== "1451861889" ||
+              String(claims.repository_owner_id) !== "325264809" ||
+              !["pull_request_target", "issue_comment"].includes(claims.event_name) ||
+              !Number.isFinite(claims.iat) || !Number.isFinite(claims.exp) ||
+              claims.iat > now + 60 || claims.exp <= now) {
+            throw new Error("G3 suite OIDC claims do not match the dedicated Environment/main trusted workflow.");
+          }
+          console.log("PASS_G3_SUITE_OIDC_SUBJECT_AUDIENCE_MAIN_AND_WORKFLOW_CLAIMS");
+          NODE
+          printf 'token=%s\n' "${token}" >> "${GITHUB_OUTPUT}"
+          unset token response
 
       - name: Execute trusted PR128 Auth0/RBAC grant, deny, revoke, cleanup and rollback suite
         shell: bash

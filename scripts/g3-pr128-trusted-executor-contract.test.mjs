@@ -46,14 +46,20 @@ test("G3 job checks out the trusted workflow commit, never the PR head", () => {
 });
 
 test("only the exact dedicated G3 Environment can release owner credentials, after live deployment identity passes", () => {
+  const previewOidc = workflow.indexOf("Request and validate the G3-specific GitHub OIDC identity");
   const liveIdentity = workflow.indexOf("Verify live Preview and callback deployment identity against the approved PR128 SHA");
   const protection = workflow.indexOf("Verify Vercel Deployment Protection negative and positive controls");
-  const tokenClear = workflow.indexOf("Clear short-lived Vercel OIDC token before binding G3 credentials");
   const credentialPreflight = workflow.indexOf("Verify exact approved SHA and protected credential availability");
+  const suiteOidc = workflow.indexOf("Request fresh G3 OIDC identity for privileged browser suite");
   const privilegedSuite = workflow.indexOf("Execute trusted PR128 Auth0/RBAC grant, deny, revoke, cleanup and rollback suite");
-  assert.ok(liveIdentity >= 0 && protection > liveIdentity && tokenClear > protection &&
-    credentialPreflight > tokenClear && privilegedSuite > credentialPreflight);
-  assert.ok(workflow.includes("VERCEL_TRUSTED_OIDC_TOKEN="));
+  assert.ok(previewOidc >= 0 && liveIdentity > previewOidc && protection > liveIdentity &&
+    credentialPreflight > protection && suiteOidc > credentialPreflight && privilegedSuite > suiteOidc);
+  assert.ok(workflow.includes("id: preview_oidc"));
+  assert.ok(workflow.includes("VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.preview_oidc.outputs.token }}"));
+  assert.ok(workflow.includes("VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.suite_oidc.outputs.token }}"));
+  assert.ok(!workflow.includes("VERCEL_TRUSTED_OIDC_TOKEN=%s"));
+  const credentialBlock = workflow.slice(credentialPreflight, suiteOidc);
+  assert.ok(!credentialBlock.includes("VERCEL_TRUSTED_OIDC_TOKEN"));
   assert.ok(workflow.indexOf("secrets.NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL") > liveIdentity);
   assert.match(workflow, /environment:\s*\n\s+name:\s*IAM-G3-PR128-Disposable-RBAC/);
   assert.match(workflow, /secrets\.NEON_RBAC_PR128_TEST_OWNER_DATABASE_URL/);
