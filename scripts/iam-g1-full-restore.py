@@ -257,13 +257,17 @@ def table_counts(pg_env: dict[str, str]) -> dict[str, int]:
 
 
 def verify_archive_toc(archive: bytes, pg_env: dict[str, str]) -> None:
+    # PostgreSQL 18: omitting filename reads stdin. A positional "-" is a
+    # literal path and fails closed ("could not open input file \"-\"").
+    # Keep decrypted bytes in memory; never write plaintext to disk.
     toc = pg18_phase("ARCHIVE_TOC", lambda: pg18(
-        ["pg_restore", "--list", "-"], pg_env, data=archive, timeout=90))
+        ["pg_restore", "--list"], pg_env, data=archive, timeout=90))
     if len(toc) > 1048576:
         raise Blocked("BLOCKED_G1_RESTORE_TOC_OVERSIZE")
     lines = toc.decode("utf-8").splitlines()
     # Entry markers from pg_dump -Fc: " TABLE ", " TABLE DATA ", " POLICY ", " EXTENSION ".
-    table_definitions = sum(bool(re.search(r"; [0-9]+ [0-9]+ TABLE ", line)) for line in lines)
+    # A TABLE DATA entry is not a TABLE definition; count separately.
+    table_definitions = sum(bool(re.search(r"; [0-9]+ [0-9]+ TABLE (?!DATA\b)", line)) for line in lines)
     table_data = sum(bool(re.search(r"; [0-9]+ [0-9]+ TABLE DATA ", line)) for line in lines)
     policies = sum(bool(re.search(r"; [0-9]+ [0-9]+ POLICY ", line)) for line in lines)
     if (table_definitions != 23 or table_data < 1 or policies != 41 or
@@ -394,9 +398,11 @@ def restore(env: dict[str, str]) -> None:
     print("PASS_G1_RESTORE_AUTHENTICATED_PG18_TOC_AND_TABLE_DATA")
     # Only from this point can DDL occur, after tag, SHA, TTL, exact DB & TOC.
     try:
+        # pg_restore reads the authenticated archive from stdin when no
+        # positional filename is provided; do not append a literal "-".
         pg18_phase("RESTORE_APPLY", lambda: pg18(
             ["pg_restore", "--single-transaction", "--exit-on-error",
-             "--dbname=" + TARGET_DATABASE, "-"], pg_env, data=plaintext, timeout=900))
+             "--dbname=" + TARGET_DATABASE], pg_env, data=plaintext, timeout=900))
         restored = pg18_phase("RESTORED_CATALOG", lambda: catalog(pg_env))
         if restored != before or len(restored) != 9:
             raise Blocked("BLOCKED_G1_RESTORE_OWNER_ACL_RLS_LEDGER_CATALOG_PARITY")

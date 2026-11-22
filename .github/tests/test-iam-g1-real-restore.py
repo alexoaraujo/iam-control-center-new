@@ -126,6 +126,30 @@ class Scope(unittest.TestCase):
                     self.assertEqual(runner.call_args.kwargs["stderr"],
                                      g1.subprocess.DEVNULL)
 
+    def test_pg18_custom_archive_toc_reads_stdin_without_dash_filename(self):
+        # Offline synthetic TOC; never decrypts B2 ciphertext or contacts Neon.
+        toc_lines = [
+            f"{i}; 0 0 TABLE iam t{i} neondb_owner" for i in range(1, 24)
+        ]
+        toc_lines += ["24; 0 0 TABLE DATA iam t1 neondb_owner"]
+        toc_lines += [
+            f"{25+i}; 0 0 POLICY iam t1 p{i} neondb_owner"
+            for i in range(41)
+        ]
+        toc_lines += ["66; 0 0 EXTENSION - pgcrypto neondb_owner"]
+        archive = b"PGDMP" + (b"\x00" * 260)
+        with mock.patch.object(g1, "pg18", return_value=(
+                "\n".join(toc_lines) + "\n").encode("utf-8")) as reader:
+            g1.verify_archive_toc(archive, {"PGDATABASE": g1.TARGET_DATABASE})
+            reader.assert_called_once()
+            self.assertEqual(reader.call_args.args[0], ["pg_restore", "--list"])
+            self.assertEqual(reader.call_args.kwargs["data"], archive)
+            # Removing one TABLE definition must fail, even if TABLE DATA
+            # remains. Never let data entries satisfy table-definition count.
+            reader.return_value = ("\n".join(toc_lines[1:]) + "\n").encode("utf-8")
+            with self.assertRaisesRegex(g1.Blocked, "ARCHIVE_TOC_PARITY"):
+                g1.verify_archive_toc(archive, {"PGDATABASE": g1.TARGET_DATABASE})
+
     def test_pg18_phase_cannot_be_controlled_or_mask_non_pg_block(self):
         with self.assertRaisesRegex(g1.Blocked, "UNTRUSTED_DIAGNOSTIC_PHASE"):
             g1.pg18_phase("SECRETS_IN_LOG", lambda: None)
@@ -142,6 +166,13 @@ class Scope(unittest.TestCase):
                 APPROVED_OBJECT="approved", APPROVED_SHA256="0"*64
             )
             events = []
+            pg_restore_calls = []
+
+            def capture_pg_restore(args, _pg_env, **kwargs):
+                events.append("DDL_RESTORE")
+                pg_restore_calls.append((args, kwargs))
+                return b""
+
             def auth(*a, **kw):
                 events.append("AEAD_AUTH")
                 return b"PGDMP" + b"\x00" * 600
@@ -159,7 +190,7 @@ class Scope(unittest.TestCase):
                 mock.patch.object(g1, "assert_empty", side_effect=lambda *_: events.append("EMPTY_CHECK")),
                 mock.patch.object(g1, "catalog", return_value=("23", "41", "20", "1", "0") + ("x",)*4),
                 mock.patch.object(g1, "verify_archive_toc", side_effect=lambda *_: events.append("TOC_VERIFIED")),
-                mock.patch.object(g1, "pg18", side_effect=lambda *_a, **_kw: events.append("DDL_RESTORE")),
+                mock.patch.object(g1, "pg18", side_effect=capture_pg_restore),
                 mock.patch.object(g1, "table_counts", return_value={"iam.tenants": 0}),
                 mock.patch.object(g1, "sql", return_value="0"),
                 mock.patch.object(g1, "rollback_drill", side_effect=lambda *_: events.append("ROLLBACK")),
@@ -178,6 +209,13 @@ class Scope(unittest.TestCase):
             self.assertLess(events.index("EMPTY_CHECK"), events.index("DDL_RESTORE"))
             self.assertLess(events.index("TOC_VERIFIED"), events.index("DDL_RESTORE"))
             self.assertEqual(events[-1], "CLEANUP")
+            self.assertEqual(len(pg_restore_calls), 1)
+            self.assertEqual(pg_restore_calls[0][0], [
+                "pg_restore", "--single-transaction", "--exit-on-error",
+                "--dbname=" + g1.TARGET_DATABASE,
+            ])
+            self.assertEqual(pg_restore_calls[0][1]["data"],
+                             b"PGDMP" + b"\x00" * 600)
             self.assertFalse(f.exists())
 
     def test_failed_cryptographic_auth_does_no_ddl(self):
@@ -210,8 +248,8 @@ class Scope(unittest.TestCase):
             "IAM-G1-B2-Full-Readback-Custody", "IAM-G1-Full-Restore-Custody",
             "IAM_G1_RESTORE_AES256_GCM_KEY_B64", "IAM_G1_RESTORE_TARGET_DATABASE_URL",
             "IAM_G1_RESTORE_APPROVED_SHA", "retention-days: 1",
-            "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
-            "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+            "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+            "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131",
             "RESTORE_G1_FULL_B2_TO_EXACT_DISPOSABLE_ONLY",
             "iam-g1-verify-main-checks.py", "gh api --paginate --slurp",
         ]:

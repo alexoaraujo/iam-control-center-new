@@ -29,6 +29,7 @@ const branchCallbacks = new Map([
   ["fix/g1-restore-synthetic-marker-isolation-20261122", "iam-control-center-new-pr155-ci.vercel.app"],
   ["fix/g1-main-checks-paginated-gate-20261122", "iam-control-center-new-pr156-ci.vercel.app"],
   ["fix/g1-pg18-failed-phase-diagnostics-20261122", "iam-control-center-new-pr157-ci.vercel.app"],
+  ["fix/g1-pg18-archive-stdin-node24-20261122", "iam-control-center-new-pr158-ci.vercel.app"],
   ["security/peos-prod-rbac-branch-attestation-20261121", "iam-control-center-new-prod-rbac-ci.vercel.app"],
   ["security/peos-prod-branch-fingerprint-20261121", "iam-control-center-new-branch-fingerprint-ci.vercel.app"],
   ["security/g3-pr128-trusted-executor-20261121", "iam-control-center-new-pr145-ci.vercel.app"],

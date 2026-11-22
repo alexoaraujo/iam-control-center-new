@@ -145,7 +145,7 @@ jobs:
             --quiet --disable-pip-version-check 'boto3>=1.35,<2' 'cryptography>=44,<47'
           "$RUNNER_TEMP/g1-b2-reader/bin/python" scripts/iam-g1-full-restore.py --stage-b2
       - name: Upload AES-GCM ciphertext ONLY, protected one-day transfer
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0, node24
         with:
           name: iam-g1-ciphertext-${{ github.run_id }}
           path: ${{ runner.temp }}/iam-g1-stage/approved-ciphertext.aesgcm
@@ -185,7 +185,7 @@ jobs:
           python3 scripts/iam-g1-full-restore.py --check
           python3 scripts/iam-g1-full-restore.py --attest-env
       - name: Download same-run encrypted artifact (never plaintext)
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0, node24
         with:
           name: iam-g1-ciphertext-${{ github.run_id }}
           path: ${{ runner.temp }}/iam-g1-stage
