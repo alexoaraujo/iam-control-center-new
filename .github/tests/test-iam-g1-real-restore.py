@@ -163,6 +163,16 @@ class Scope(unittest.TestCase):
         self.assertEqual(g1.classify_restore_apply_error(b"PRIVATE_ROW" * 20000),
                          "UNCLASSIFIED")
         self.assertEqual(g1.classify_restore_apply_error(None), "UNCLASSIFIED")
+        # Do not infer role/privilege errors from raw SQL echoed after
+        # pg_restore's "Command was:" diagnostic.
+        echoed = (
+            b"pg_restore: error: could not execute query: ERROR: unexpected failure"
+            + bytes([10]) + b'Command was: SELECT ''role "PRIVATE_ROLE" does not exist'';'
+        )
+        self.assertEqual(g1.classify_restore_apply_error(echoed), "UNCLASSIFIED")
+        self.assertEqual(g1.classify_restore_apply_error(
+            b'Command was: SELECT ''role "PRIVATE_ROLE" does not exist'';'
+        ), "UNCLASSIFIED")
         # Do not collect database errors in unrelated PG commands.
         with mock.patch.object(g1.subprocess, "run") as runner:
             runner.return_value = mock.Mock(returncode=1, stdout=b"", stderr=None)
