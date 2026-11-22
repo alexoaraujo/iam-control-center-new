@@ -68,7 +68,7 @@ class Scope(unittest.TestCase):
             TARGET.replace(g1.TARGET_HOST, "ep-production.c-2.sa-east-1.aws.neon.tech"),
             TARGET.replace(g1.TARGET_HOST, g1.TARGET_HOST.replace(".c-2", "-pooler.c-2")),
             TARGET.replace("neondb_owner:", "iam_app_runtime:"),
-            TARGET.replace("5432", "5433"),
+            TARGET.replace(HOST, HOST + ":5433"),
             TARGET.replace("sslmode=verify-full", "sslmode=require"),
             TARGET.replace("sslrootcert=system", "sslrootcert=unsafe"),
             TARGET + "&options=-c+role%3Dneondb_owner",
@@ -95,7 +95,7 @@ class Scope(unittest.TestCase):
             runner.return_value = mock.Mock(returncode=0, stdout=b"PASS")
             self.assertEqual(g1.pg18(["psql", "-X", "-c", "SELECT 1"], pg_env), b"PASS")
             arguments = runner.call_args.args[0]
-            self.assertEqual(arguments[-5:], ["psql", "-X", "-c", "SELECT 1"][-5:])
+            self.assertEqual(arguments[-4:], ["psql", "-X", "-c", "SELECT 1"])
             self.assertNotIn("not-a-real-secret", str(arguments))
             self.assertIn("--read-only", arguments)
             self.assertIn("--cap-drop=ALL", arguments)
