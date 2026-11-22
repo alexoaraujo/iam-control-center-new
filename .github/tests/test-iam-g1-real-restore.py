@@ -176,6 +176,7 @@ class Scope(unittest.TestCase):
         w = WORKFLOW.read_text()
         for s in [
             "workflow_dispatch:", "refs/heads/main", "preflight-no-secrets:",
+            "--attest-env", "Attest restore Environment policy before B2 or secret access",
             "IAM-G1-B2-Full-Readback-Custody", "IAM-G1-Full-Restore-Custody",
             "IAM_G1_RESTORE_AES256_GCM_KEY_B64", "IAM_G1_RESTORE_TARGET_DATABASE_URL",
             "IAM_G1_RESTORE_APPROVED_SHA", "retention-days: 1",
@@ -186,6 +187,10 @@ class Scope(unittest.TestCase):
         ]:
             with self.subTest(required=s):
                 self.assertIn(s, w)
+        self.assertLess(
+            w.index("Attest restore Environment policy before B2 or secret access"),
+            w.index("stage-encrypted-ciphertext:"),
+        )
         # GitHub expressions must be fully closed, e.g. ${{ github.sha }}.
         self.assertNotRegex(w, r"\$\{\{[^}]*\}(?!\})")
         self.assertGreaterEqual(len(re.findall(r"\$\{\{[^}]*\}\}", w)), 15)
