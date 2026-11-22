@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -133,7 +135,14 @@ class Scope(unittest.TestCase):
                 mock.patch.object(g1, "rollback_drill", side_effect=lambda *_: events.append("ROLLBACK")),
                 mock.patch.object(g1, "cleanup_target", side_effect=lambda *_: events.append("CLEANUP")),
             ):
-                g1.restore(env(IAM_G1_RESTORE_AES256_GCM_KEY_B64="AA=="))
+                # Real-restore PASS markers emitted by the mocked executor are
+                # INTERNAL test data, never operational audit evidence.
+                with contextlib.redirect_stdout(io.StringIO()) as synthetic_log:
+                    g1.restore(env(IAM_G1_RESTORE_AES256_GCM_KEY_B64="AA=="))
+            self.assertIn("PASS_G1_RESTORE_ACTUAL_AES256_GCM_TAG_VERIFIED_BEFORE_DDL",
+                          synthetic_log.getvalue())
+            self.assertIn("PASS_G1_FULL_B2_ARCHIVE_RESTORED_AUDITED_AND_REMOVED_ISOLATED",
+                          synthetic_log.getvalue())
             self.assertLess(events.index("AEAD_AUTH"), events.index("DDL_RESTORE"))
             self.assertLess(events.index("IDENTITY"), events.index("DDL_RESTORE"))
             self.assertLess(events.index("EMPTY_CHECK"), events.index("DDL_RESTORE"))
@@ -167,6 +176,7 @@ class Scope(unittest.TestCase):
         w = WORKFLOW.read_text()
         for s in [
             "workflow_dispatch:", "refs/heads/main", "preflight-no-secrets:",
+            "--attest-env", "Attest restore Environment policy before B2 or secret access",
             "IAM-G1-B2-Full-Readback-Custody", "IAM-G1-Full-Restore-Custody",
             "IAM_G1_RESTORE_AES256_GCM_KEY_B64", "IAM_G1_RESTORE_TARGET_DATABASE_URL",
             "IAM_G1_RESTORE_APPROVED_SHA", "retention-days: 1",
@@ -177,6 +187,10 @@ class Scope(unittest.TestCase):
         ]:
             with self.subTest(required=s):
                 self.assertIn(s, w)
+        self.assertLess(
+            w.index("Attest restore Environment policy before B2 or secret access"),
+            w.index("stage-encrypted-ciphertext:"),
+        )
         # GitHub expressions must be fully closed, e.g. ${{ github.sha }}.
         self.assertNotRegex(w, r"\$\{\{[^}]*\}(?!\})")
         self.assertGreaterEqual(len(re.findall(r"\$\{\{[^}]*\}\}", w)), 15)
@@ -195,4 +209,5 @@ class Scope(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    # Suppress all test stdout from successful cases as an additional safety net.
+    unittest.main(buffer=True)
