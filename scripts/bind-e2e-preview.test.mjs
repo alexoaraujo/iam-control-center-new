@@ -314,3 +314,20 @@ test("PR164 callback is exclusive to its original branch and exact-SHA Preview d
   assert.throws(() => verifyPreviewBinding({ ...scopedEnv, E2E_CALLBACK_HOST: aliasHost },
     scopedDomain, scopedAlias, scopedDeployment), /invalid/);
 });
+
+test("PR166 ledger branch has its own callback and refuses stale branch, alias or SHA", () => {
+  const prBranch = "fix/peos-g1-empty-ledger-fail-closed-20261122";
+  const host = "iam-control-center-new-pr166-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  const e = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const d = { ...domain, name: host, gitBranch: prBranch };
+  const a = { ...alias, alias: host };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(e, d, a, dep).callbackBranch, prBranch);
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: branch }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, { ...a, deploymentId: "dpl_old" }, dep), /not attached/);
+  assert.throws(() => verifyPreviewBinding(e, d, a,
+    { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+  assert.throws(() => verifyPreviewBinding({ ...e, E2E_CALLBACK_HOST: aliasHost },
+    d, a, dep), /invalid/);
+});

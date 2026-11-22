@@ -86,3 +86,21 @@ test("PR164 Auth0 scope requires exact branch-bound verified domain and matching
   assert.throws(() => checkAppVariables(scopedVars.filter(entry => entry.key !== "E2E_CALLBACK_BRANCH"),
     prBranch), /Preview variable mismatch/);
 });
+
+test("PR166 ledger fix is Auth0-critical and cannot silently skip branch-scoped E2E", () => {
+  const prBranch = "fix/peos-g1-empty-ledger-fail-closed-20261122";
+  const callback = "iam-control-center-new-pr166-ci.vercel.app";
+  const e = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: callback };
+  const d = { ...domain, name: callback, gitBranch: prBranch };
+  assert.deepEqual(decideScope(e, d, ["scripts/bind-e2e-preview.mjs"]),
+    { ready: true, callbackHost: callback, callbackBranch: prBranch });
+  assert.throws(() => decideScope(e, { ...d, gitBranch: branch },
+    ["scripts/bind-e2e-preview.mjs"]), /separately authorized callback/);
+  const scopedVars = vars.map(item => item.key === "APP_BASE_URL" ? { ...item, gitBranch: prBranch, value: "https://" + callback } :
+    item.key === "E2E_CALLBACK_HOST" ? { ...item, gitBranch: prBranch, value: callback } :
+    item.key === "E2E_CALLBACK_BRANCH" ? { ...item, gitBranch: prBranch, value: prBranch } : item);
+  assert.deepEqual(checkAppVariables(scopedVars, prBranch),
+    { appBaseUrl: "https://" + callback, auth0Domain: "iam-control-center.us.auth0.com" });
+  assert.throws(() => checkAppVariables(scopedVars.filter(item => item.key !== "APP_BASE_URL"),
+    prBranch), /Preview variable mismatch/);
+});
