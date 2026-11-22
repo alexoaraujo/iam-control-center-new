@@ -172,7 +172,12 @@ def pg18(args: list[str], pg_env: dict[str, str], *, data: bytes | None = None,
                 "--use-list=/tmp/iam-g1-filtered-toc.list" not in args or
                 toc_file.is_symlink() or not toc_file.is_file()):
             raise Blocked("BLOCKED_G1_RESTORE_TOC_MOUNT_NOT_EXACT")
+        # Docker keeps the runner's file ownership on a bind mount. Read
+        # the 0600 list as its non-root creator, without broadening its mode.
+        if os.geteuid() == 0 or toc_file.stat().st_uid != os.geteuid():
+            raise Blocked("BLOCKED_G1_RESTORE_TOC_OWNER")
         mount_args = [
+            "--user", f"{os.geteuid()}:{os.getegid()}",
             "--mount", "type=bind,source=" + str(toc_file) +
             ",target=/tmp/iam-g1-filtered-toc.list,readonly",
         ]
