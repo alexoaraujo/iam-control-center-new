@@ -144,6 +144,11 @@ class Scope(unittest.TestCase):
             reader.assert_called_once()
             self.assertEqual(reader.call_args.args[0], ["pg_restore", "--list"])
             self.assertEqual(reader.call_args.kwargs["data"], archive)
+            # Removing one TABLE definition must fail, even if TABLE DATA
+            # remains. Never let data entries satisfy table-definition count.
+            reader.return_value = ("\n".join(toc_lines[1:]) + "\n").encode("utf-8")
+            with self.assertRaisesRegex(g1.Blocked, "ARCHIVE_TOC_PARITY"):
+                g1.verify_archive_toc(archive, {"PGDATABASE": g1.TARGET_DATABASE})
 
     def test_pg18_phase_cannot_be_controlled_or_mask_non_pg_block(self):
         with self.assertRaisesRegex(g1.Blocked, "UNTRUSTED_DIAGNOSTIC_PHASE"):
