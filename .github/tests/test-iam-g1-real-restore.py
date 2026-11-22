@@ -137,9 +137,9 @@ class Scope(unittest.TestCase):
             for i in range(41)
         ]
         toc_lines += ["66; 0 0 EXTENSION - pgcrypto neondb_owner"]
-        archive = b"PGDMP" + (b"\\x00" * 260)
+        archive = b"PGDMP" + (b"\x00" * 260)
         with mock.patch.object(g1, "pg18", return_value=(
-                "\\n".join(toc_lines) + "\\n").encode("utf-8")) as reader:
+                "\n".join(toc_lines) + "\n").encode("utf-8")) as reader:
             g1.verify_archive_toc(archive, {"PGDATABASE": g1.TARGET_DATABASE})
             reader.assert_called_once()
             self.assertEqual(reader.call_args.args[0], ["pg_restore", "--list"])
@@ -210,7 +210,7 @@ class Scope(unittest.TestCase):
                 "--dbname=" + g1.TARGET_DATABASE,
             ])
             self.assertEqual(pg_restore_calls[0][1]["data"],
-                             b"PGDMP" + b"\\x00" * 600)
+                             b"PGDMP" + b"\x00" * 600)
             self.assertFalse(f.exists())
 
     def test_failed_cryptographic_auth_does_no_ddl(self):
