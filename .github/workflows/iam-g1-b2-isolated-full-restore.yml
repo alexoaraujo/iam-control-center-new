@@ -92,6 +92,13 @@ jobs:
               echo "::error::BLOCKED_G1_RESTORE_DISPATCH_PAIR"; exit 2
               ;;
           esac
+      - name: Attest restore Environment policy before B2 or secret access
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/iam-g1-full-restore.py --attest-env
       - name: Run offline negative tests before accessing custodial credentials
         shell: bash
         run: |
