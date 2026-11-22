@@ -22,6 +22,7 @@ test("Auth0 Preview callback is resolved from live Vercel binding for every PR",
   assert.equal(approvedCallback("fix/g1-artifact-same-run-gh-cli-20261122"), "iam-control-center-new-pr159-ci.vercel.app");
   assert.equal(approvedCallback("fix/g1-pg18-restore-apply-redacted-classifier-20261122"), "iam-control-center-new-pr160-ci.vercel.app");
   assert.equal(approvedCallback("fix/g1-restore-custody-id-readonly-attestation-20261122"), "iam-control-center-new-pr161-ci.vercel.app");
+  assert.equal(approvedCallback("fix/peos-g1-neon-managed-default-acl-20261122"), "iam-control-center-new-pr162-ci.vercel.app");
   assert.equal(approvedCallback("fix/g3-pr128-rbac-isolated-lease-20261120"), "iam-control-center-new-pr144-ci.vercel.app");
   assert.ok(workflow.includes("VERCEL_API_TOKEN"));
   assert.ok(workflow.includes("node scripts/bind-e2e-preview.mjs"));
