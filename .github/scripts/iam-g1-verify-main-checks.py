@@ -40,12 +40,13 @@ def verify_paginated_main_checks(pages: object, sha: str) -> int:
 
     runs = []
     total = None
-    for page in pages:
+    for index, page in enumerate(pages):
         if not isinstance(page, dict) or type(page.get("total_count")) is not int:
             raise GateBlocked("invalid response page metadata")
         listed = page.get("check_runs")
-        if not isinstance(listed, list) or len(listed) > 100:
-            raise GateBlocked("invalid check-runs page")
+        if (not isinstance(listed, list) or not 1 <= len(listed) <= 100
+                or (index < len(pages) - 1 and len(listed) != 100)):
+            raise GateBlocked("invalid, incomplete or duplicate check-runs page")
         if total is None:
             total = page["total_count"]
         if page["total_count"] != total:
