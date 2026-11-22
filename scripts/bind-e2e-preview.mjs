@@ -34,6 +34,7 @@ const branchCallbacks = new Map([
   ["fix/g1-pg18-restore-apply-redacted-classifier-20261122", "iam-control-center-new-pr160-ci.vercel.app"],
   ["fix/g1-restore-custody-id-readonly-attestation-20261122", "iam-control-center-new-pr161-ci.vercel.app"],
   ["fix/peos-g1-neon-managed-default-acl-20261122", "iam-control-center-new-pr162-ci.vercel.app"],
+  ["fix/peos-g1-rollback-marker-transactional-20261122", "iam-control-center-new-pr164-ci.vercel.app"],
   ["fix/peos-g1-empty-ledger-fail-closed-20261122", "iam-control-center-new-pr166-ci.vercel.app"],
   ["security/peos-prod-rbac-branch-attestation-20261121", "iam-control-center-new-prod-rbac-ci.vercel.app"],
   ["security/peos-prod-branch-fingerprint-20261121", "iam-control-center-new-branch-fingerprint-ci.vercel.app"],
