@@ -150,6 +150,25 @@ def pg18(args: list[str], pg_env: dict[str, str], *, data: bytes | None = None,
     return result.stdout
 
 
+def pg18_phase(phase: str, action):
+    """Tag fixed PG18 phase failures, never including SQL, data or credentials."""
+    allowed = {
+        "TARGET_IDENTITY", "TARGET_EMPTY", "REFERENCE_IDENTITY",
+        "REFERENCE_CATALOG", "ARCHIVE_TOC", "RESTORE_APPLY",
+        "RESTORED_CATALOG", "REFERENCE_COUNTS", "RESTORED_COUNTS",
+        "RLS_BYPASS_ROLES", "ROLLBACK", "CLEANUP",
+    }
+    if phase not in allowed:
+        raise Blocked("BLOCKED_G1_RESTORE_UNTRUSTED_DIAGNOSTIC_PHASE")
+    try:
+        return action()
+    except Blocked as exc:
+        if str(exc) in ("BLOCKED_G1_RESTORE_PG18_STEP_FAILED",
+                        "BLOCKED_G1_RESTORE_PG18_RUNTIME"):
+            raise Blocked("BLOCKED_G1_RESTORE_PG18_" + phase + "_FAILED") from None
+        raise
+
+
 def sql(pg_env: dict[str, str], query: str) -> str:
     result = pg18(["psql", "-X", "-w", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1",
                    "-c", query], pg_env)
@@ -238,7 +257,8 @@ def table_counts(pg_env: dict[str, str]) -> dict[str, int]:
 
 
 def verify_archive_toc(archive: bytes, pg_env: dict[str, str]) -> None:
-    toc = pg18(["pg_restore", "--list", "-"], pg_env, data=archive, timeout=90)
+    toc = pg18_phase("ARCHIVE_TOC", lambda: pg18(
+        ["pg_restore", "--list", "-"], pg_env, data=archive, timeout=90))
     if len(toc) > 1048576:
         raise Blocked("BLOCKED_G1_RESTORE_TOC_OVERSIZE")
     lines = toc.decode("utf-8").splitlines()
@@ -361,37 +381,40 @@ def restore(env: dict[str, str]) -> None:
     )
     print("PASS_G1_RESTORE_ACTUAL_AES256_GCM_TAG_VERIFIED_BEFORE_DDL")
     pg_env = pg_environment(password)
-    identity(pg_env, TARGET_DATABASE)
-    assert_empty(pg_env)
+    pg18_phase("TARGET_IDENTITY", lambda: identity(pg_env, TARGET_DATABASE))
+    pg18_phase("TARGET_EMPTY", lambda: assert_empty(pg_env))
     print("PASS_G1_RESTORE_EXACT_EMPTY_DISPOSABLE_DB_AND_PG18_TLS")
     # The inherited database is read-only reference, NEVER a restore target.
     reference_env = pg_environment(password, database=INHERITED_DATABASE)
-    identity(reference_env, INHERITED_DATABASE)
-    before = catalog(reference_env)
+    pg18_phase("REFERENCE_IDENTITY", lambda: identity(reference_env, INHERITED_DATABASE))
+    before = pg18_phase("REFERENCE_CATALOG", lambda: catalog(reference_env))
     if len(before) != 9 or before[:5] != ("23", "41", "20", "1", "0"):
         raise Blocked("BLOCKED_G1_RESTORE_INHERITED_CANONICAL_BASELINE")
     verify_archive_toc(plaintext, pg_env)
     print("PASS_G1_RESTORE_AUTHENTICATED_PG18_TOC_AND_TABLE_DATA")
     # Only from this point can DDL occur, after tag, SHA, TTL, exact DB & TOC.
     try:
-        pg18(["pg_restore", "--single-transaction", "--exit-on-error",
-              "--dbname=" + TARGET_DATABASE, "-"], pg_env, data=plaintext, timeout=900)
-        restored = catalog(pg_env)
+        pg18_phase("RESTORE_APPLY", lambda: pg18(
+            ["pg_restore", "--single-transaction", "--exit-on-error",
+             "--dbname=" + TARGET_DATABASE, "-"], pg_env, data=plaintext, timeout=900))
+        restored = pg18_phase("RESTORED_CATALOG", lambda: catalog(pg_env))
         if restored != before or len(restored) != 9:
             raise Blocked("BLOCKED_G1_RESTORE_OWNER_ACL_RLS_LEDGER_CATALOG_PARITY")
-        if table_counts(reference_env) != table_counts(pg_env):
+        if (pg18_phase("REFERENCE_COUNTS", lambda: table_counts(reference_env)) !=
+                pg18_phase("RESTORED_COUNTS", lambda: table_counts(pg_env))):
             raise Blocked("BLOCKED_G1_RESTORE_TABLE_ROW_COUNTS_PARITY")
-        bad_roles = sql(pg_env, "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'iam_%' "
-                           "AND rolbypassrls")
+        bad_roles = pg18_phase("RLS_BYPASS_ROLES", lambda: sql(
+            pg_env, "SELECT count(*) FROM pg_roles WHERE rolname LIKE 'iam_%' "
+                    "AND rolbypassrls"))
         if bad_roles != "0":
             raise Blocked("BLOCKED_G1_RESTORE_IAM_RUNTIME_BYPASSRLS")
         print("PASS_G1_RESTORE_23_TABLES_41_POLICIES_20_FORCED_RLS_LEDGER_OWNER_ACL_ROWS")
-        rollback_drill(pg_env)
+        pg18_phase("ROLLBACK", lambda: rollback_drill(pg_env))
         print("PASS_G1_RESTORE_COMMITTED_DDL_ROLLBACK_DRILL")
     finally:
         # If the exact target was attested empty, remove it even on failed restore,
         # so no sensitive test rows remain. A cleanup failure is a hard FAIL.
-        cleanup_target(password)
+        pg18_phase("CLEANUP", lambda: cleanup_target(password))
         path.unlink(missing_ok=True)
     print("PASS_G1_FULL_B2_ARCHIVE_RESTORED_AUDITED_AND_REMOVED_ISOLATED")
 
