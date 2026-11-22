@@ -183,10 +183,17 @@ class Scope(unittest.TestCase):
             "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
             "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
             "RESTORE_G1_FULL_B2_TO_EXACT_DISPOSABLE_ONLY",
-            "pg18-security-contracts", "g1-real-restore-offline-contract",
+            "iam-g1-verify-main-checks.py", "gh api --paginate --slurp",
         ]:
             with self.subTest(required=s):
                 self.assertIn(s, w)
+        # Required check names intentionally moved to the trusted, tested
+        # all-pages verifier. Verify they are still mandatory there.
+        verifier = (ROOT / ".github/scripts/iam-g1-verify-main-checks.py").read_text()
+        for name in ("quality", "pg18-security-contracts",
+                     "g1-real-restore-offline-contract"):
+            with self.subTest(main_check=name):
+                self.assertIn('"' + name + '"', verifier)
         self.assertLess(
             w.index("Attest restore Environment policy before B2 or secret access"),
             w.index("stage-encrypted-ciphertext:"),
