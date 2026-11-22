@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -133,7 +135,14 @@ class Scope(unittest.TestCase):
                 mock.patch.object(g1, "rollback_drill", side_effect=lambda *_: events.append("ROLLBACK")),
                 mock.patch.object(g1, "cleanup_target", side_effect=lambda *_: events.append("CLEANUP")),
             ):
-                g1.restore(env(IAM_G1_RESTORE_AES256_GCM_KEY_B64="AA=="))
+                # Real-restore PASS markers emitted by the mocked executor are
+                # INTERNAL test data, never operational audit evidence.
+                with contextlib.redirect_stdout(io.StringIO()) as synthetic_log:
+                    g1.restore(env(IAM_G1_RESTORE_AES256_GCM_KEY_B64="AA=="))
+            self.assertIn("PASS_G1_RESTORE_ACTUAL_AES256_GCM_TAG_VERIFIED_BEFORE_DDL",
+                          synthetic_log.getvalue())
+            self.assertIn("PASS_G1_FULL_B2_ARCHIVE_RESTORED_AUDITED_AND_REMOVED_ISOLATED",
+                          synthetic_log.getvalue())
             self.assertLess(events.index("AEAD_AUTH"), events.index("DDL_RESTORE"))
             self.assertLess(events.index("IDENTITY"), events.index("DDL_RESTORE"))
             self.assertLess(events.index("EMPTY_CHECK"), events.index("DDL_RESTORE"))
@@ -195,4 +204,5 @@ class Scope(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    # Suppress all test stdout from successful cases as an additional safety net.
+    unittest.main(buffer=True)
