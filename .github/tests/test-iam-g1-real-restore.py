@@ -103,6 +103,36 @@ class Scope(unittest.TestCase):
             self.assertIn("--read-only", arguments)
             self.assertIn("--cap-drop=ALL", arguments)
 
+    def test_failed_pg18_step_has_only_fixed_redacted_phase_code(self):
+        # Synthetic failures only: no network, B2, real SQL or custody secrets.
+        pg_env = g1.pg_environment("SYNTHETIC_PRIVATE_PASSWORD")
+        for phase in ("REFERENCE_IDENTITY", "REFERENCE_CATALOG",
+                      "ARCHIVE_TOC", "RESTORE_APPLY", "CLEANUP"):
+            with self.subTest(phase=phase):
+                with mock.patch.object(g1.subprocess, "run") as runner:
+                    runner.return_value = mock.Mock(
+                        returncode=1, stdout=b"",
+                        stderr=b"SYNTHETIC_PRIVATE_PASSWORD SQL SAMPLE"
+                    )
+                    with self.assertRaises(g1.Blocked) as caught:
+                        g1.pg18_phase(phase, lambda: g1.pg18(
+                            ["psql", "-X", "-c", "SELECT 1"], pg_env))
+                    self.assertEqual(
+                        str(caught.exception),
+                        "BLOCKED_G1_RESTORE_PG18_" + phase + "_FAILED",
+                    )
+                    self.assertNotIn("SYNTHETIC_PRIVATE_PASSWORD",
+                                     str(caught.exception))
+                    self.assertEqual(runner.call_args.kwargs["stderr"],
+                                     g1.subprocess.DEVNULL)
+
+    def test_pg18_phase_cannot_be_controlled_or_mask_non_pg_block(self):
+        with self.assertRaisesRegex(g1.Blocked, "UNTRUSTED_DIAGNOSTIC_PHASE"):
+            g1.pg18_phase("SECRETS_IN_LOG", lambda: None)
+        with self.assertRaisesRegex(g1.Blocked, "TARGET_NOT_EMPTY"):
+            g1.pg18_phase("TARGET_EMPTY", lambda: (_ for _ in ()).throw(
+                g1.Blocked("BLOCKED_G1_RESTORE_TARGET_NOT_EMPTY")))
+
     def test_ddl_never_runs_before_real_authenticated_tag_and_empty_db(self):
         with tempfile.TemporaryDirectory() as tmp:
             f = Path(tmp) / "ciphertext.aesgcm"
