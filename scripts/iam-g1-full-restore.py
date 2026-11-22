@@ -127,6 +127,31 @@ def pg_environment(password: str, *, database: str = TARGET_DATABASE) -> dict[st
     return e
 
 
+def classify_restore_apply_error(stderr: bytes | None) -> str:
+    """Fixed code only; never print raw SQL, identifiers, passwords or rows."""
+    if not isinstance(stderr, bytes) or len(stderr) > 131072:
+        return "UNCLASSIFIED"
+    raw = stderr.lower()
+    signatures = (
+        ("ROLE_MISSING", (b"role ", b"does not exist")),
+        ("ROLE_MEMBERSHIP", (b"must be member of role",)),
+        ("OWNER_PRIVILEGES", (b"must be owner",)),
+        ("PERMISSION_DENIED", (b"permission denied",)),
+        ("EXTENSION_UNAVAILABLE", (b"extension ", b"is not available")),
+        ("OBJECT_ALREADY_EXISTS", (b"already exists",)),
+        ("TRANSACTION_RESTRICTION", (b"inside a transaction block",)),
+        ("INVALID_PARAMETER", (b"unrecognized configuration parameter",)),
+        ("ROW_CONSTRAINT", (b"violates foreign key constraint",)),
+        ("DUPLICATE_KEY", (b"duplicate key value violates unique constraint",)),
+        ("RLS_DENIED", (b"row-level security policy",)),
+        ("CONNECTIVITY", (b"connection to server", b"server closed the connection")),
+    )
+    for category, markers in signatures:
+        if all(marker in raw for marker in markers):
+            return category
+    return "UNCLASSIFIED"
+
+
 def pg18(args: list[str], pg_env: dict[str, str], *, data: bytes | None = None,
          timeout: int = 180) -> bytes:
     allowed = {"psql", "pg_restore"}
@@ -140,12 +165,24 @@ def pg18(args: list[str], pg_env: dict[str, str], *, data: bytes | None = None,
         "--env", "PGSSLROOTCERT", "--env", "PGCHANNELBINDING",
         "--env", "PGCONNECT_TIMEOUT", "--env", "PGOPTIONS", IMAGE,
     ] + args
+    # PostgreSQL may include SQL statements and row values in stderr.
+    # Capture only the trusted transactional restore's stderr in memory;
+    # map failures to a closed set of codes and NEVER print source text.
+    is_archive_apply = (
+        args[0] == "pg_restore" and
+        "--single-transaction" in args and "--exit-on-error" in args and
+        "--dbname=" + TARGET_DATABASE in args
+    )
     try:
         result = subprocess.run(command, env=pg_env, input=data, stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL, timeout=timeout, check=False)
+                                stderr=subprocess.PIPE if is_archive_apply else subprocess.DEVNULL,
+                                timeout=timeout, check=False)
     except (OSError, subprocess.TimeoutExpired):
         raise Blocked("BLOCKED_G1_RESTORE_PG18_RUNTIME") from None
     if result.returncode != 0:
+        if is_archive_apply:
+            category = classify_restore_apply_error(result.stderr)
+            raise Blocked("BLOCKED_G1_RESTORE_PG18_RESTORE_APPLY_" + category) from None
         raise Blocked("BLOCKED_G1_RESTORE_PG18_STEP_FAILED") from None
     return result.stdout
 
