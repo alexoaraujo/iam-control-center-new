@@ -184,11 +184,43 @@ jobs:
           set -euo pipefail
           python3 scripts/iam-g1-full-restore.py --check
           python3 scripts/iam-g1-full-restore.py --attest-env
-      - name: Download same-run encrypted artifact (never plaintext)
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0, node24
-        with:
-          name: iam-g1-ciphertext-${{ github.run_id }}
-          path: ${{ runner.temp }}/iam-g1-stage
+      - name: Download same-run encrypted artifact using trusted GitHub CLI
+        # Avoid an action outside the repository's SHA-pinned Allowed actions.
+        # GH CLI uses the existing read-only actions permission; never use
+        # "latest run" or an artifact selected by a mutable name alone.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$GITHUB_REPOSITORY" == 'alexoaraujo/iam-control-center-new' &&
+             "$GITHUB_REF" == 'refs/heads/main' &&
+             "$GITHUB_EVENT_NAME" == 'workflow_dispatch' &&
+             "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]] || {
+            echo '::error::BLOCKED_G1_RESTORE_UNTRUSTED_ARTIFACT_ORIGIN'; exit 2;
+          }
+          stage="$RUNNER_TEMP/iam-g1-stage"
+          [[ ! -L "$stage" ]] || {
+            echo '::error::BLOCKED_G1_RESTORE_ARTIFACT_DIRECTORY_LINK'; exit 2;
+          }
+          install -d -m 700 -- "$stage"
+          [[ -d "$stage" && ! -e "$stage/approved-ciphertext.aesgcm" ]] || {
+            echo '::error::BLOCKED_G1_RESTORE_ARTIFACT_STAGE_RESIDUE'; exit 2;
+          }
+          # This exact run ID plus immutable artifact name identifies only
+          # the ciphertext produced by stage-encrypted-ciphertext above.
+          gh run download "$GITHUB_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "iam-g1-ciphertext-${GITHUB_RUN_ID}" \
+            --dir "$stage" >/dev/null || {
+              echo '::error::BLOCKED_G1_RESTORE_SAME_RUN_ARTIFACT_DOWNLOAD'; exit 2;
+            }
+          [[ -f "$stage/approved-ciphertext.aesgcm" &&
+             ! -L "$stage/approved-ciphertext.aesgcm" ]] || {
+            echo '::error::BLOCKED_G1_RESTORE_SAME_RUN_ARTIFACT_NOT_REGULAR'; exit 2;
+          }
+          echo 'PASS_G1_RESTORE_SAME_RUN_CIPHERTEXT_STAGED'
       - name: Build PostgreSQL 18 libpq client with system CA, no secrets
         shell: bash
         run: |
