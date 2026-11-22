@@ -215,6 +215,43 @@ class Scope(unittest.TestCase):
             with self.assertRaisesRegex(g1.Blocked, "ARCHIVE_TOC_PARITY"):
                 g1.verify_archive_toc(archive, {"PGDATABASE": g1.TARGET_DATABASE})
 
+    def test_neon_managed_default_acl_filter_is_exact_and_fail_closed(self):
+        toc = ("1; 826 16607 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES cloud_admin\n"
+               "2; 826 16608 DEFAULT ACL public DEFAULT PRIVILEGES FOR SEQUENCES cloud_admin\n"
+               "3; 826 16609 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES neondb_owner\n"
+               "4; 826 16610 DEFAULT ACL iam DEFAULT PRIVILEGES FOR TABLES iam_owner\n")
+        filtered = g1.filtered_cloud_admin_toc(toc.encode()).decode()
+        self.assertIn(";1; 826 16607 DEFAULT ACL public", filtered)
+        self.assertIn(";2; 826 16608 DEFAULT ACL public", filtered)
+        self.assertIn("\n3; 826 16609 DEFAULT ACL public", filtered)
+        self.assertIn("\n4; 826 16610 DEFAULT ACL iam", filtered)
+        variations = [
+            toc.replace("FOR TABLES cloud_admin", "FOR FUNCTIONS cloud_admin", 1),
+            toc.replace("FOR SEQUENCES cloud_admin", "FOR TABLES cloud_admin", 1),
+            toc.replace("public DEFAULT PRIVILEGES FOR TABLES cloud_admin",
+                        "iam DEFAULT PRIVILEGES FOR TABLES cloud_admin", 1),
+            toc + "5; 826 16611 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES cloud_admin\n",
+        ]
+        for bad in variations:
+            with self.subTest(invalid="redacted"), self.assertRaises(g1.Blocked):
+                g1.filtered_cloud_admin_toc(bad.encode())
+
+    def test_filtered_toc_file_never_contains_plaintext_and_is_erased(self):
+        with tempfile.TemporaryDirectory() as temp:
+            content = b";1; 0 0 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES cloud_admin\n"
+            archive = b"PGDMP" + b"PRIVATE_PLAINTEXT"
+            def check_mount(args, pg_env, **kw):
+                p = kw["toc_file"]
+                self.assertEqual(p.read_bytes(), content)
+                self.assertNotIn(archive, p.read_bytes())
+                self.assertIn("--use-list=/tmp/iam-g1-filtered-toc.list", args)
+                self.assertEqual(kw["data"], archive)
+                return b""
+            with mock.patch.dict(g1.os.environ, {"RUNNER_TEMP":temp}), \
+                 mock.patch.object(g1, "pg18", side_effect=check_mount):
+                g1.apply_filtered_restore(archive, {}, content)
+            self.assertFalse((Path(temp) / "iam-g1-filtered-toc.list").exists())
+
     def test_pg18_phase_cannot_be_controlled_or_mask_non_pg_block(self):
         with self.assertRaisesRegex(g1.Blocked, "UNTRUSTED_DIAGNOSTIC_PHASE"):
             g1.pg18_phase("SECRETS_IN_LOG", lambda: None)
@@ -255,7 +292,14 @@ class Scope(unittest.TestCase):
                 mock.patch.object(g1, "assert_empty", side_effect=lambda *_: events.append("EMPTY_CHECK")),
                 mock.patch.object(g1, "catalog", return_value=("23", "41", "20", "1", "0") + ("x",)*4),
                 mock.patch.object(g1, "verify_archive_toc", side_effect=lambda *_: events.append("TOC_VERIFIED")),
-                mock.patch.object(g1, "pg18", side_effect=capture_pg_restore),
+                mock.patch.object(g1, "cloud_admin_defaults", return_value="2|synthetic"),
+                mock.patch.object(g1, "filtered_cloud_admin_toc", return_value=b"filtered-toc"),
+                mock.patch.object(g1, "apply_filtered_restore", side_effect=lambda archive, pe, toc:
+                                  capture_pg_restore(["pg_restore", "--single-transaction",
+                                                      "--exit-on-error",
+                                                      "--dbname=" + g1.TARGET_DATABASE],
+                                                     pe, data=archive)),
+
                 mock.patch.object(g1, "table_counts", return_value={"iam.tenants": 0}),
                 mock.patch.object(g1, "sql", return_value="0"),
                 mock.patch.object(g1, "rollback_drill", side_effect=lambda *_: events.append("ROLLBACK")),
