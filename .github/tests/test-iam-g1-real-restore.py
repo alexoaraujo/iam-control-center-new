@@ -153,7 +153,7 @@ class Scope(unittest.TestCase):
                         g1.pg18_phase("RESTORE_APPLY", lambda: g1.pg18(
                             ["pg_restore", "--single-transaction", "--exit-on-error",
                              "--dbname=" + g1.TARGET_DATABASE],
-                            pg_env, data=b"PGDMP" + b"\\x00" * 100))
+                            pg_env, data=b"PGDMP" + b"\x00" * 100))
                     self.assertEqual(
                         str(caught.exception),
                         "BLOCKED_G1_RESTORE_PG18_RESTORE_APPLY_" + expected)
