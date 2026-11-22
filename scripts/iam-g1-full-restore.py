@@ -131,7 +131,15 @@ def classify_restore_apply_error(stderr: bytes | None) -> str:
     """Fixed code only; never print raw SQL, identifiers, passwords or rows."""
     if not isinstance(stderr, bytes) or len(stderr) > 131072:
         return "UNCLASSIFIED"
-    raw = stderr.lower()
+    # pg_restore can echo whole statements after "Command was:". Never
+    # classify based on those echoed statements, only its actual error line.
+    error_lines = [
+        line.lower() for line in stderr.splitlines()[:256]
+        if line.lstrip().lower().startswith((b"pg_restore: error:", b"error:"))
+    ]
+    if not error_lines:
+        return "UNCLASSIFIED"
+    raw = error_lines[0]
     signatures = (
         ("ROLE_MISSING", (b"role ", b"does not exist")),
         ("ROLE_MEMBERSHIP", (b"must be member of role",)),
