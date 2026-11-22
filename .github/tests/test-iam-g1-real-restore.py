@@ -126,6 +126,51 @@ class Scope(unittest.TestCase):
                     self.assertEqual(runner.call_args.kwargs["stderr"],
                                      g1.subprocess.DEVNULL)
 
+    def test_pg18_apply_failure_reports_fixed_category_never_raw_stderr(self):
+        # A simulated server error may echo SQL, row data or role identifiers.
+        # Only a closed category may ever escape to GitHub Actions logs.
+        examples = {
+            "ROLE_MISSING": b'pg_restore: error: ERROR: role "PRIVATE_ROLE" does not exist; SELECT PRIVATE_ROW',
+            "ROLE_MEMBERSHIP": b'ERROR: must be member of role PRIVATE_ROLE; SQL PRIVATE_ROW',
+            "OWNER_PRIVILEGES": b'ERROR: must be owner of table PRIVATE_TABLE; PRIVATE_ROW',
+            "PERMISSION_DENIED": b'ERROR: permission denied for schema PRIVATE_SCHEMA; PRIVATE_ROW',
+            "EXTENSION_UNAVAILABLE": b'ERROR: extension "PRIVATE_EXT" is not available',
+            "OBJECT_ALREADY_EXISTS": b'ERROR: relation "PRIVATE_TABLE" already exists',
+            "TRANSACTION_RESTRICTION": b'ERROR: cannot run inside a transaction block',
+            "INVALID_PARAMETER": b'ERROR: unrecognized configuration parameter "PRIVATE_KEY"',
+            "ROW_CONSTRAINT": b'ERROR: violates foreign key constraint PRIVATE_ROW',
+            "DUPLICATE_KEY": b'ERROR: duplicate key value violates unique constraint PRIVATE_ROW',
+            "RLS_DENIED": b'ERROR: new row violates row-level security policy PRIVATE_ROW',
+            "CONNECTIVITY": b'ERROR: connection to server was lost and server closed the connection',
+            "UNCLASSIFIED": b'ERROR: unexpected PRIVATE_ROW and PRIVATE_PASSWORD',
+        }
+        for expected, raw in examples.items():
+            with self.subTest(expected=expected):
+                pg_env = g1.pg_environment("PRIVATE_PASSWORD")
+                with mock.patch.object(g1.subprocess, "run") as runner:
+                    runner.return_value = mock.Mock(returncode=1, stdout=b"", stderr=raw)
+                    with self.assertRaises(g1.Blocked) as caught:
+                        g1.pg18_phase("RESTORE_APPLY", lambda: g1.pg18(
+                            ["pg_restore", "--single-transaction", "--exit-on-error",
+                             "--dbname=" + g1.TARGET_DATABASE],
+                            pg_env, data=b"PGDMP" + b"\\x00" * 100))
+                    self.assertEqual(
+                        str(caught.exception),
+                        "BLOCKED_G1_RESTORE_PG18_RESTORE_APPLY_" + expected)
+                    self.assertNotIn("PRIVATE_", str(caught.exception))
+                    self.assertEqual(runner.call_args.kwargs["stderr"],
+                                     g1.subprocess.PIPE)
+        self.assertEqual(g1.classify_restore_apply_error(b"PRIVATE_ROW" * 20000),
+                         "UNCLASSIFIED")
+        self.assertEqual(g1.classify_restore_apply_error(None), "UNCLASSIFIED")
+        # Do not collect database errors in unrelated PG commands.
+        with mock.patch.object(g1.subprocess, "run") as runner:
+            runner.return_value = mock.Mock(returncode=1, stdout=b"", stderr=None)
+            with self.assertRaisesRegex(g1.Blocked, "PG18_STEP_FAILED"):
+                g1.pg18(["psql", "-X", "-c", "SELECT 1"],
+                        g1.pg_environment("PRIVATE_PASSWORD"))
+            self.assertEqual(runner.call_args.kwargs["stderr"], g1.subprocess.DEVNULL)
+
     def test_pg18_custom_archive_toc_reads_stdin_without_dash_filename(self):
         # Offline synthetic TOC; never decrypts B2 ciphertext or contacts Neon.
         toc_lines = [
