@@ -50,10 +50,10 @@ jobs:
           fetch-depth: 0
       - name: Validate operation, lease, main identity and required exact-SHA checks
         env:
-          GH_TOKEN: ${{ github.token }
-          G1_OPERATION: ${{ inputs.operation }
-          G1_CONFIRMATION: ${{ inputs.confirmation }
-          APPROVED_MAIN_SHA: ${{ inputs.approved_main_sha }
+          GH_TOKEN: ${{ github.token }}
+          G1_OPERATION: ${{ inputs.operation }}
+          G1_CONFIRMATION: ${{ inputs.confirmation }}
+          APPROVED_MAIN_SHA: ${{ inputs.approved_main_sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -125,13 +125,13 @@ jobs:
       - name: Verify independent B2 scope and stage EXACT ciphertext only
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ github.token }
-          IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA }
-          IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY }
-          IAM_G1_B2_FULL_READBACK_APPROVED_SHA256: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_SHA256 }
-          IAM_G1_B2_FULL_READBACK_APPROVED_SIZE_BYTES: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_SIZE_BYTES }
-          AWS_ACCESS_KEY_ID: ${{ secrets.IAM_G1_B2_FULL_READ_ACCESS_KEY_ID }
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.IAM_G1_B2_FULL_READ_SECRET_ACCESS_KEY }
+          GITHUB_TOKEN: ${{ github.token }}
+          IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA }}
+          IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY }}
+          IAM_G1_B2_FULL_READBACK_APPROVED_SHA256: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_SHA256 }}
+          IAM_G1_B2_FULL_READBACK_APPROVED_SIZE_BYTES: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_SIZE_BYTES }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.IAM_G1_B2_FULL_READ_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.IAM_G1_B2_FULL_READ_SECRET_ACCESS_KEY }}
           AWS_EC2_METADATA_DISABLED: 'true'
         run: |
           set -euo pipefail
@@ -143,8 +143,8 @@ jobs:
       - name: Upload AES-GCM ciphertext ONLY, protected one-day transfer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: iam-g1-ciphertext-${{ github.run_id }
-          path: ${{ runner.temp }/iam-g1-stage/approved-ciphertext.aesgcm
+          name: iam-g1-ciphertext-${{ github.run_id }}
+          path: ${{ runner.temp }}/iam-g1-stage/approved-ciphertext.aesgcm
           retention-days: 1
           if-no-files-found: error
           compression-level: 0
@@ -174,7 +174,7 @@ jobs:
           persist-credentials: false
       - name: Verify protected restore Environment policy without secrets
         env:
-          GITHUB_TOKEN: ${{ github.token }
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -183,8 +183,8 @@ jobs:
       - name: Download same-run encrypted artifact (never plaintext)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: iam-g1-ciphertext-${{ github.run_id }
-          path: ${{ runner.temp }/iam-g1-stage
+          name: iam-g1-ciphertext-${{ github.run_id }}
+          path: ${{ runner.temp }}/iam-g1-stage
       - name: Build PostgreSQL 18 libpq client with system CA, no secrets
         shell: bash
         run: |
@@ -203,13 +203,13 @@ jobs:
             --quiet --disable-pip-version-check 'cryptography>=44,<47'
       - name: Verify real B2 AES-GCM tag, restore, RLS/ACL/ledger, rollback and cleanup
         env:
-          GITHUB_TOKEN: ${{ github.token }
-          IAM_G1_RESTORE_APPROVED_SHA: ${{ vars.IAM_G1_RESTORE_APPROVED_SHA }
-          IAM_G1_RESTORE_OPERATOR_APPROVAL: ${{ vars.IAM_G1_RESTORE_OPERATOR_APPROVAL }
-          IAM_G1_RESTORE_PRIVATE_ESCROW: ${{ vars.IAM_G1_RESTORE_PRIVATE_ESCROW }
-          IAM_G1_RESTORE_CONFIRMATION: ${{ inputs.confirmation }
-          IAM_G1_RESTORE_TARGET_DATABASE_URL: ${{ secrets.IAM_G1_RESTORE_TARGET_DATABASE_URL }
-          IAM_G1_RESTORE_AES256_GCM_KEY_B64: ${{ secrets.IAM_G1_RESTORE_AES256_GCM_KEY_B64 }
+          GITHUB_TOKEN: ${{ github.token }}
+          IAM_G1_RESTORE_APPROVED_SHA: ${{ vars.IAM_G1_RESTORE_APPROVED_SHA }}
+          IAM_G1_RESTORE_OPERATOR_APPROVAL: ${{ vars.IAM_G1_RESTORE_OPERATOR_APPROVAL }}
+          IAM_G1_RESTORE_PRIVATE_ESCROW: ${{ vars.IAM_G1_RESTORE_PRIVATE_ESCROW }}
+          IAM_G1_RESTORE_CONFIRMATION: ${{ inputs.confirmation }}
+          IAM_G1_RESTORE_TARGET_DATABASE_URL: ${{ secrets.IAM_G1_RESTORE_TARGET_DATABASE_URL }}
+          IAM_G1_RESTORE_AES256_GCM_KEY_B64: ${{ secrets.IAM_G1_RESTORE_AES256_GCM_KEY_B64 }}
         shell: bash
         run: |
           set -euo pipefail
