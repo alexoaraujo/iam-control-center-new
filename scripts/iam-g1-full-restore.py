@@ -548,7 +548,7 @@ def restore(env: dict[str, str]) -> None:
             raise Blocked("BLOCKED_G1_RESTORE_IAM_RUNTIME_BYPASSRLS")
         print("PASS_G1_RESTORE_23_TABLES_41_POLICIES_20_FORCED_RLS_LEDGER_OWNER_ACL_ROWS")
         pg18_phase("ROLLBACK", lambda: rollback_drill(pg_env))
-        print("PASS_G1_RESTORE_COMMITTED_DDL_ROLLBACK_DRILL")
+        print("PASS_G1_RESTORE_TRANSACTIONAL_DDL_ROLLBACK_DRILL")
     finally:
         # If the exact target was attested empty, remove it even on failed restore,
         # so no sensitive test rows remain. A cleanup failure is a hard FAIL.
