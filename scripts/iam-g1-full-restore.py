@@ -330,9 +330,18 @@ def stage_b2(env: dict[str, str]) -> None:
     print("PASS_G1_RESTORE_B2_READ_ONLY_ENCRYPTED_ARTIFACT_STAGED")
 
 
+def attest_restore_environment(env: dict[str, str]) -> None:
+    assert_trusted_main(env)
+    r = reader()
+    r.ENVIRONMENT = RESTORE_ENVIRONMENT
+    r.attest_environment(env)
+    print("PASS_G1_RESTORE_PROTECTED_ENVIRONMENT_MAIN_ONLY")
+
+
 def restore(env: dict[str, str]) -> None:
     assert_trusted_main(env, confirm=True)
     ensure_lease()
+    attest_restore_environment(env)
     password = parse_target(env.get("IAM_G1_RESTORE_TARGET_DATABASE_URL", ""))
     try:
         key = base64.b64decode(env.get("IAM_G1_RESTORE_AES256_GCM_KEY_B64", ""), validate=True)
@@ -395,10 +404,12 @@ def main() -> int:
             print("PASS_G1_RESTORE_TRUSTED_MAIN_LEASE_ONLY_NO_SECRETS_OR_SQL")
         elif sys.argv[1:] == ["--stage-b2"]:
             stage_b2(dict(os.environ))
+        elif sys.argv[1:] == ["--attest-env"]:
+            attest_restore_environment(dict(os.environ))
         elif sys.argv[1:] == ["--restore"]:
             restore(dict(os.environ))
         else:
-            print("usage: iam-g1-full-restore.py --check|--stage-b2|--restore", file=sys.stderr)
+            print("usage: iam-g1-full-restore.py --check|--stage-b2|--attest-env|--restore", file=sys.stderr)
             return 2
     except Blocked as exc:
         print(str(exc), file=sys.stderr)
