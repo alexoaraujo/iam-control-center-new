@@ -48,6 +48,39 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
         with:
           persist-credentials: false
+          fetch-depth: 0
+      - name: Verify source provenance against trusted current main before B2 access
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVED_SOURCE_SHA: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REPOSITORY}" == "alexoaraujo/iam-control-center-new" &&
+             "${GITHUB_REF}" == "refs/heads/main" &&
+             "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]] || {
+            echo "::error::BLOCKED_G1_B2_FULL_READBACK_NOT_TRUSTED_MAIN"; exit 2;
+          }
+          [[ "${APPROVED_SOURCE_SHA}" == "0ee3e512bb761ce4d81202eb77a48a1ef9c77109" ]] || {
+            echo "::error::BLOCKED_G1_B2_UNAPPROVED_HISTORIC_SOURCE_SHA"; exit 2;
+          }
+          current_main="$(gh api repos/alexoaraujo/iam-control-center-new/branches/main --jq '.commit.sha')"
+          [[ "${GITHUB_SHA}" == "${current_main}" && "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]] || {
+            echo "::error::BLOCKED_G1_B2_MAIN_MOVED_OR_CHECKOUT_MISMATCH"; exit 2;
+          }
+          git merge-base --is-ancestor "${APPROVED_SOURCE_SHA}" "${GITHUB_SHA}" || {
+            echo "::error::BLOCKED_G1_B2_HISTORIC_WRITER_NOT_ANCESTOR"; exit 2;
+          }
+          writer="$(gh api repos/alexoaraujo/iam-control-center-new/actions/runs/44655204795)"
+          jq -e --arg source "${APPROVED_SOURCE_SHA}" '
+            .id == 44655204795 and .head_sha == $source and
+            .head_branch == "main" and .event == "workflow_dispatch" and
+            .status == "completed" and .conclusion == "success" and
+            .path == ".github/workflows/iam-g1-b2-full-backup-writer.yml"
+          ' <<< "${writer}" >/dev/null || {
+            echo "::error::BLOCKED_G1_B2_UNVERIFIED_WRITER_PROVENANCE"; exit 2;
+          }
+          echo "PASS_G1_B2_HISTORIC_WRITER_AND_TRUSTED_MAIN_PROVENANCE"
       - name: Verify approved object SHA, scope and independent B2 readback
         shell: bash
         env:

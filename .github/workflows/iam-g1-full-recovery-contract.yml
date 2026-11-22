@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'database/scripts/iam-g1-full-recovery-preflight.py'
+      - 'scripts/iam-g1-archive-authentication.py'
+      - '.github/tests/test-iam-g1-archive-authentication.py'
       - 'database/tests/test-iam-g1-full-recovery-preflight.py'
       - '.github/workflows/iam-g1-full-recovery-contract.yml'
       - 'docs/operations/iam-g1-full-recovery-staging-20261118.md'
@@ -11,6 +13,8 @@ on:
     branches: [main]
     paths:
       - 'database/scripts/iam-g1-full-recovery-preflight.py'
+      - 'scripts/iam-g1-archive-authentication.py'
+      - '.github/tests/test-iam-g1-archive-authentication.py'
       - 'database/tests/test-iam-g1-full-recovery-preflight.py'
       - '.github/workflows/iam-g1-full-recovery-contract.yml'
       - 'docs/operations/iam-g1-full-recovery-staging-20261118.md'
@@ -34,5 +38,14 @@ jobs:
           set -euo pipefail
           python3 -m py_compile database/scripts/iam-g1-full-recovery-preflight.py
           python3 database/tests/test-iam-g1-full-recovery-preflight.py -v
+          python3 -m py_compile scripts/iam-g1-archive-authentication.py \
+            .github/tests/test-iam-g1-archive-authentication.py
+          python3 -m venv "$RUNNER_TEMP/iam-g1-aead-offline"
+          "$RUNNER_TEMP/iam-g1-aead-offline/bin/python" -m pip install \
+            --disable-pip-version-check --quiet 'cryptography>=44,<47'
+          "$RUNNER_TEMP/iam-g1-aead-offline/bin/python" \
+            .github/tests/test-iam-g1-archive-authentication.py -v
+          echo "PASS_G1_AES_GCM_OFFLINE_SYNTHETIC_AUTHENTICATION"
+          echo "G1_ARCHIVE_AEAD_AUTHENTICATION=NOT_ATTESTED_ON_REAL_BACKUP"
           echo "PASS_G1_RECOVERY_SCOPE_OFFLINE_ONLY"
           echo "G1_FULL_BACKUP_RESTORE=NOT_EXECUTED"
