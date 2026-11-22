@@ -31,7 +31,7 @@ TARGET_DATABASE = "iam_g1_restore_validation"
 INHERITED_DATABASE = "iam_database"
 MAINTENANCE_DATABASE = "neondb"
 TARGET_OWNER = "neondb_owner"
-EXPIRY = datetime(2026, 11, 24, 12, 0, 0, tzinfo=timezone.utc)
+EXPIRY = datetime(2026, 11, 27, 12, 0, 0, tzinfo=timezone.utc)
 HEADROOM = timedelta(hours=24)
 CONFIRM = "RESTORE_G1_FULL_B2_TO_EXACT_DISPOSABLE_ONLY"
 MAX_CIPHERTEXT_BYTES = 64 * 1024 * 1024
