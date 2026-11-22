@@ -259,6 +259,20 @@ class Scope(unittest.TestCase):
             g1.pg18_phase("TARGET_EMPTY", lambda: (_ for _ in ()).throw(
                 g1.Blocked("BLOCKED_G1_RESTORE_TARGET_NOT_EMPTY")))
 
+    def test_rollback_drill_is_uncommitted_transaction_not_post_commit_recovery(self):
+        # This is deliberately a transactional rollback smoke test, not a
+        # post-COMMIT recovery drill. Both controls require separate evidence.
+        with (mock.patch.object(g1, "pg18", return_value=b"") as postgres,
+              mock.patch.object(g1, "sql", return_value="PASS") as inspect):
+            g1.rollback_drill({"PGDATABASE": g1.TARGET_DATABASE})
+        ddl = postgres.call_args.args[0][-1]
+        self.assertIn("BEGIN;", ddl)
+        self.assertIn("ROLLBACK;", ddl)
+        self.assertNotIn("COMMIT", ddl.upper())
+        inspect.assert_called_once()
+        self.assertIn("to_regclass('public.iam_g1_rollback_probe')",
+                      inspect.call_args.args[1])
+
     def test_ddl_never_runs_before_real_authenticated_tag_and_empty_db(self):
         with tempfile.TemporaryDirectory() as tmp:
             f = Path(tmp) / "ciphertext.aesgcm"
@@ -313,6 +327,10 @@ class Scope(unittest.TestCase):
                           synthetic_log.getvalue())
             self.assertIn("PASS_G1_FULL_B2_ARCHIVE_RESTORED_AUDITED_AND_REMOVED_ISOLATED",
                           synthetic_log.getvalue())
+            self.assertIn("PASS_G1_RESTORE_TRANSACTIONAL_DDL_ROLLBACK_DRILL",
+                          synthetic_log.getvalue())
+            self.assertNotIn("PASS_G1_RESTORE_COMMITTED_DDL_ROLLBACK_DRILL",
+                             synthetic_log.getvalue())
             self.assertLess(events.index("AEAD_AUTH"), events.index("DDL_RESTORE"))
             self.assertLess(events.index("IDENTITY"), events.index("DDL_RESTORE"))
             self.assertLess(events.index("EMPTY_CHECK"), events.index("DDL_RESTORE"))

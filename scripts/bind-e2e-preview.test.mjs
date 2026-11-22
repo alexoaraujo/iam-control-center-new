@@ -297,3 +297,20 @@ test("PR156 pagination fix callback matches exact branch and PR SHA", () => {
   assert.throws(() => verifyPreviewBinding(e, { ...d, name: "iam-control-center-new-ci-preview.vercel.app" }, a, dep), /not bound/);
   assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "c".repeat(40) } }), /exact PR SHA/);
 });
+
+test("PR164 callback is exclusive to its original branch and exact-SHA Preview deployment", () => {
+  const prBranch = "fix/peos-g1-rollback-marker-transactional-20261122";
+  const host = "iam-control-center-new-pr164-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  const scopedEnv = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scopedEnv, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scopedEnv, { ...scopedDomain, gitBranch: branch }, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scopedEnv, scopedDomain, { ...scopedAlias, deploymentId: "dpl_stale" }, scopedDeployment), /not attached/);
+  assert.throws(() => verifyPreviewBinding(scopedEnv, scopedDomain, scopedAlias,
+    { ...scopedDeployment, meta: { ...scopedDeployment.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+  assert.throws(() => verifyPreviewBinding({ ...scopedEnv, E2E_CALLBACK_HOST: aliasHost },
+    scopedDomain, scopedAlias, scopedDeployment), /invalid/);
+});
