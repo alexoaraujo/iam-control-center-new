@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
@@ -176,6 +177,9 @@ class Scope(unittest.TestCase):
         ]:
             with self.subTest(required=s):
                 self.assertIn(s, w)
+        # GitHub expressions must be fully closed, e.g. ${{ github.sha }}.
+        self.assertNotRegex(w, r"\$\{\{[^}]*\}(?!\})")
+        self.assertGreaterEqual(len(re.findall(r"\$\{\{[^}]*\}\}", w)), 15)
         for prohibited in ["pull_request_target:", "secrets.IAM_G1_B2_FULL_WRITER_ACCESS_KEY_ID"]:
             self.assertNotIn(prohibited, w)
 
