@@ -55,10 +55,20 @@ class Scope(unittest.TestCase):
                 g1.assert_trusted_main(env(**change), confirm=True)
 
     def test_ttl_must_preserve_24h(self):
-        g1.ensure_lease(datetime(2026, 11, 22, 1, 0, tzinfo=timezone.utc))
+        # Independent operator approval: Neon disposable branch expires
+        # 2026-11-27T12:00:00Z; the executor must fail closed below 24h.
+        self.assertEqual(g1.EXPIRY.isoformat(), "2026-11-27T12:00:00+00:00")
+        self.assertEqual(g1.HEADROOM.total_seconds(), 24 * 60 * 60)
         for instant in [
-            datetime(2026, 11, 23, 12, 0, 1, tzinfo=timezone.utc),
-            datetime(2026, 11, 24, 12, 0, tzinfo=timezone.utc),
+            datetime(2026, 11, 22, 1, 0, tzinfo=timezone.utc),
+            datetime(2026, 11, 24, 12, 0, 1, tzinfo=timezone.utc),
+            datetime(2026, 11, 26, 12, 0, 0, tzinfo=timezone.utc),
+        ]:
+            with self.subTest(at=instant):
+                g1.ensure_lease(instant)
+        for instant in [
+            datetime(2026, 11, 26, 12, 0, 1, tzinfo=timezone.utc),
+            datetime(2026, 11, 27, 12, 0, 0, tzinfo=timezone.utc),
         ]:
             with self.subTest(at=instant), self.assertRaisesRegex(g1.Blocked, "HEADROOM"):
                 g1.ensure_lease(instant)
