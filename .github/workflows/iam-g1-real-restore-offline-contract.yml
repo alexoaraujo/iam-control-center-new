@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/iam-g1-full-restore.py'
       - '.github/tests/test-iam-g1-real-restore.py'
+      - '.github/tests/test-iam-g1-main-checks-pagination.py'
+      - '.github/scripts/iam-g1-verify-main-checks.py'
       - '.github/workflows/iam-g1-b2-isolated-full-restore.yml'
       - '.github/workflows/iam-g1-real-restore-offline-contract.yml'
       - 'docs/operations/iam-g1-real-isolated-restore-20261122.md'
@@ -13,6 +15,8 @@ on:
     paths:
       - 'scripts/iam-g1-full-restore.py'
       - '.github/tests/test-iam-g1-real-restore.py'
+      - '.github/tests/test-iam-g1-main-checks-pagination.py'
+      - '.github/scripts/iam-g1-verify-main-checks.py'
       - '.github/workflows/iam-g1-b2-isolated-full-restore.yml'
       - '.github/workflows/iam-g1-real-restore-offline-contract.yml'
       - 'docs/operations/iam-g1-real-isolated-restore-20261122.md'
@@ -35,7 +39,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/iam-g1-full-restore.py \
-            .github/tests/test-iam-g1-real-restore.py
+            .github/tests/test-iam-g1-real-restore.py \
+            .github/scripts/iam-g1-verify-main-checks.py \
+            .github/tests/test-iam-g1-main-checks-pagination.py
       - name: Execute synthetic negative security contracts without B2 or Neon
         shell: bash
         run: |
@@ -45,6 +51,7 @@ jobs:
             --disable-pip-version-check --quiet 'cryptography>=44,<47'
           "$RUNNER_TEMP/g1-restore-tests/bin/python" \
             .github/tests/test-iam-g1-real-restore.py -v
+          python3 .github/tests/test-iam-g1-main-checks-pagination.py -v
           echo 'PASS_G1_REAL_RESTORE_OFFLINE_GUARDS'
           echo 'G1_REAL_AES_GCM_DECRYPTION=NOT_ATTESTED'
           echo 'G1_FULL_BACKUP_RESTORE=NOT_ATTESTED'

@@ -281,3 +281,19 @@ test("PR155 callback scoped exclusively to synthetic marker fix branch SHA", () 
   assert.throws(() => verifyPreviewBinding(e, { ...d, name: "iam-control-center-new-ci-preview.vercel.app" }, a, dep), /not bound/);
   assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "c".repeat(40) } }), /exact PR SHA/);
 });
+
+test("PR156 pagination fix callback matches exact branch and PR SHA", () => {
+  const b = "fix/g1-main-checks-paginated-gate-20261122";
+  const h = "iam-control-center-new-pr156-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.deepEqual(verifyPreviewBinding(e, d, a, dep), {
+    callbackHost: h, callbackBranch: b, callbackUrl: `https://${h}`,
+  });
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "fix/g1-restore-synthetic-marker-isolation-20261122" }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, { ...d, name: "iam-control-center-new-ci-preview.vercel.app" }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "c".repeat(40) } }), /exact PR SHA/);
+});
