@@ -1,0 +1,50 @@
+name: IAM G1 real isolated restore security contract (offline)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/iam-g1-full-restore.py'
+      - '.github/tests/test-iam-g1-real-restore.py'
+      - '.github/workflows/iam-g1-b2-isolated-full-restore.yml'
+      - '.github/workflows/iam-g1-real-restore-offline-contract.yml'
+      - 'docs/operations/iam-g1-real-isolated-restore-20261122.md'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/iam-g1-full-restore.py'
+      - '.github/tests/test-iam-g1-real-restore.py'
+      - '.github/workflows/iam-g1-b2-isolated-full-restore.yml'
+      - '.github/workflows/iam-g1-real-restore-offline-contract.yml'
+      - 'docs/operations/iam-g1-real-isolated-restore-20261122.md'
+
+permissions:
+  contents: read
+
+jobs:
+  g1-real-restore-offline-contract:
+    if: github.repository == 'alexoaraujo/iam-control-center-new'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Compile protected restore executor and regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/iam-g1-full-restore.py \
+            .github/tests/test-iam-g1-real-restore.py
+      - name: Execute synthetic negative security contracts without B2 or Neon
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/g1-restore-tests"
+          "$RUNNER_TEMP/g1-restore-tests/bin/python" -m pip install \
+            --disable-pip-version-check --quiet 'cryptography>=44,<47'
+          "$RUNNER_TEMP/g1-restore-tests/bin/python" \
+            .github/tests/test-iam-g1-real-restore.py -v
+          echo 'PASS_G1_REAL_RESTORE_OFFLINE_GUARDS'
+          echo 'G1_REAL_AES_GCM_DECRYPTION=NOT_ATTESTED'
+          echo 'G1_FULL_BACKUP_RESTORE=NOT_ATTESTED'
