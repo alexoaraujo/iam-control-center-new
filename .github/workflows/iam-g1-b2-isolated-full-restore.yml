@@ -1,0 +1,221 @@
+name: IAM G1 B2 authenticated isolated PG18 full restore (manual, guarded)
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Metadata-only preflight, or authenticated full restore to disposable DB"
+        type: choice
+        required: true
+        default: preflight_only
+        options:
+          - preflight_only
+          - restore_full
+      confirmation:
+        description: "NO_DDL for preflight; exact disposable restore approval for restore_full"
+        type: choice
+        required: true
+        default: NO_DDL
+        options:
+          - NO_DDL
+          - RESTORE_G1_FULL_B2_TO_EXACT_DISPOSABLE_ONLY
+      approved_main_sha:
+        description: "Exact 40-hex reviewed main SHA, mandatory only for restore_full"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-g1-full-recovery-disposable-exclusive
+  cancel-in-progress: false
+
+jobs:
+  preflight-no-secrets:
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout trusted main without persistent credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate operation, lease, main identity and required exact-SHA checks
+        env:
+          GH_TOKEN: ${{ github.token }
+          G1_OPERATION: ${{ inputs.operation }
+          G1_CONFIRMATION: ${{ inputs.confirmation }
+          APPROVED_MAIN_SHA: ${{ inputs.approved_main_sha }
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$GITHUB_REPOSITORY" == 'alexoaraujo/iam-control-center-new' &&
+             "$GITHUB_REF" == 'refs/heads/main' &&
+             "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || exit 2
+          current_sha="$(gh api 'repos/alexoaraujo/iam-control-center-new/branches/main' --jq '.commit.sha')"
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" && "$current_sha" == "$GITHUB_SHA" ]] || {
+            echo "::error::BLOCKED_G1_RESTORE_MAIN_SHA_DRIFT"; exit 2;
+          }
+          python3 scripts/iam-g1-full-restore.py --check
+          case "$G1_OPERATION:$G1_CONFIRMATION" in
+            preflight_only:NO_DDL)
+              echo 'PASS_G1_RESTORE_PREFLIGHT_ONLY_NO_SECRETS_NO_DDL'
+              ;;
+            restore_full:RESTORE_G1_FULL_B2_TO_EXACT_DISPOSABLE_ONLY)
+              [[ "$APPROVED_MAIN_SHA" =~ ^[0-9a-f]{40}$ &&
+                 "$APPROVED_MAIN_SHA" == "$GITHUB_SHA" ]] || {
+                echo "::error::BLOCKED_G1_RESTORE_DISPATCH_NOT_EXACT_APPROVED_SHA"; exit 2;
+              }
+              checks="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100")"
+              jq -e --arg sha "$GITHUB_SHA" '
+                ["quality","pg18-security-contracts","g1-real-restore-offline-contract"] as $required |
+                all($required[]; . as $name |
+                  ([.check_runs[] | select(.head_sha == $sha and
+                    .name == $name and .status == "completed" and
+                    .conclusion == "success")] | length) >= 1)
+              ' <<< "$checks" >/dev/null || {
+                echo "::error::BLOCKED_G1_RESTORE_MISSING_MAIN_GATES"; exit 2;
+              }
+              echo 'PASS_G1_RESTORE_MAIN_SHA_AND_PG18_QUALITY_OFFLINE_CHECKS'
+              ;;
+            *)
+              echo "::error::BLOCKED_G1_RESTORE_DISPATCH_PAIR"; exit 2
+              ;;
+          esac
+      - name: Run offline negative tests before accessing custodial credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/g1-restore-tests"
+          "$RUNNER_TEMP/g1-restore-tests/bin/python" -m pip install \
+            --quiet --disable-pip-version-check 'cryptography>=44,<47'
+          "$RUNNER_TEMP/g1-restore-tests/bin/python" \
+            .github/tests/test-iam-g1-real-restore.py -v
+          echo 'PASS_G1_REAL_RESTORE_OFFLINE_GUARDS'
+
+  stage-encrypted-ciphertext:
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.operation == 'restore_full' &&
+      inputs.confirmation == 'RESTORE_G1_FULL_B2_TO_EXACT_DISPOSABLE_ONLY'
+    needs: preflight-no-secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    environment:
+      name: IAM-G1-B2-Full-Readback-Custody
+    steps:
+      - name: Checkout trusted main without persistence
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Verify independent B2 scope and stage EXACT ciphertext only
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }
+          IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA }
+          IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY }
+          IAM_G1_B2_FULL_READBACK_APPROVED_SHA256: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_SHA256 }
+          IAM_G1_B2_FULL_READBACK_APPROVED_SIZE_BYTES: ${{ vars.IAM_G1_B2_FULL_READBACK_APPROVED_SIZE_BYTES }
+          AWS_ACCESS_KEY_ID: ${{ secrets.IAM_G1_B2_FULL_READ_ACCESS_KEY_ID }
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.IAM_G1_B2_FULL_READ_SECRET_ACCESS_KEY }
+          AWS_EC2_METADATA_DISABLED: 'true'
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -m venv "$RUNNER_TEMP/g1-b2-reader"
+          "$RUNNER_TEMP/g1-b2-reader/bin/python" -m pip install \
+            --quiet --disable-pip-version-check 'boto3>=1.35,<2' 'cryptography>=44,<47'
+          "$RUNNER_TEMP/g1-b2-reader/bin/python" scripts/iam-g1-full-restore.py --stage-b2
+      - name: Upload AES-GCM ciphertext ONLY, protected one-day transfer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: iam-g1-ciphertext-${{ github.run_id }
+          path: ${{ runner.temp }/iam-g1-stage/approved-ciphertext.aesgcm
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 0
+      - name: Remove local staging ciphertext
+        if: always()
+        shell: bash
+        run: rm -f -- "$RUNNER_TEMP/iam-g1-stage/approved-ciphertext.aesgcm"
+
+  restore-and-audit-isolated-only:
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.operation == 'restore_full' &&
+      inputs.confirmation == 'RESTORE_G1_FULL_B2_TO_EXACT_DISPOSABLE_ONLY'
+    needs: stage-encrypted-ciphertext
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    environment:
+      name: IAM-G1-Full-Restore-Custody
+    steps:
+      - name: Checkout trusted main without persistence
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Verify protected restore Environment policy without secrets
+        env:
+          GITHUB_TOKEN: ${{ github.token }
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/iam-g1-full-restore.py --check
+          python3 scripts/iam-g1-full-restore.py --attest-env
+      - name: Download same-run encrypted artifact (never plaintext)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: iam-g1-ciphertext-${{ github.run_id }
+          path: ${{ runner.temp }/iam-g1-stage
+      - name: Build PostgreSQL 18 libpq client with system CA, no secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull \
+            -f database/tests/fixtures/pg18-system-ca.Dockerfile \
+            -t iam-pg18-system-ca:local database/tests/fixtures
+          docker run --rm --entrypoint sh iam-pg18-system-ca:local \
+            -ec 'test -s /etc/ssl/certs/ca-certificates.crt; test "$SSL_CERT_FILE" = /etc/ssl/certs/ca-certificates.crt'
+      - name: Install AES-256-GCM verifier and PostgreSQL 18 restore harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/g1-restore-executor"
+          "$RUNNER_TEMP/g1-restore-executor/bin/python" -m pip install \
+            --quiet --disable-pip-version-check 'cryptography>=44,<47'
+      - name: Verify real B2 AES-GCM tag, restore, RLS/ACL/ledger, rollback and cleanup
+        env:
+          GITHUB_TOKEN: ${{ github.token }
+          IAM_G1_RESTORE_APPROVED_SHA: ${{ vars.IAM_G1_RESTORE_APPROVED_SHA }
+          IAM_G1_RESTORE_OPERATOR_APPROVAL: ${{ vars.IAM_G1_RESTORE_OPERATOR_APPROVAL }
+          IAM_G1_RESTORE_PRIVATE_ESCROW: ${{ vars.IAM_G1_RESTORE_PRIVATE_ESCROW }
+          IAM_G1_RESTORE_CONFIRMATION: ${{ inputs.confirmation }
+          IAM_G1_RESTORE_TARGET_DATABASE_URL: ${{ secrets.IAM_G1_RESTORE_TARGET_DATABASE_URL }
+          IAM_G1_RESTORE_AES256_GCM_KEY_B64: ${{ secrets.IAM_G1_RESTORE_AES256_GCM_KEY_B64 }
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          "$RUNNER_TEMP/g1-restore-executor/bin/python" scripts/iam-g1-full-restore.py --restore
+          echo 'PASS_G1_FULL_B2_DISPOSABLE_RESTORE_AND_ZERO_RESIDUE' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove any remaining encrypted staging copy
+        if: always()
+        shell: bash
+        run: rm -f -- "$RUNNER_TEMP/iam-g1-stage/approved-ciphertext.aesgcm"
