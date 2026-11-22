@@ -267,7 +267,7 @@ def verify_archive_toc(archive: bytes, pg_env: dict[str, str]) -> None:
     lines = toc.decode("utf-8").splitlines()
     # Entry markers from pg_dump -Fc: " TABLE ", " TABLE DATA ", " POLICY ", " EXTENSION ".
     # A TABLE DATA entry is not a TABLE definition; count separately.
-    table_definitions = sum(bool(re.search(r"; [0-9]+ [0-9]+ TABLE (?!DATA\\b)", line)) for line in lines)
+    table_definitions = sum(bool(re.search(r"; [0-9]+ [0-9]+ TABLE (?!DATA\b)", line)) for line in lines)
     table_data = sum(bool(re.search(r"; [0-9]+ [0-9]+ TABLE DATA ", line)) for line in lines)
     policies = sum(bool(re.search(r"; [0-9]+ [0-9]+ POLICY ", line)) for line in lines)
     if (table_definitions != 23 or table_data < 1 or policies != 41 or
