@@ -161,18 +161,29 @@ def classify_restore_apply_error(stderr: bytes | None) -> str:
 
 
 def pg18(args: list[str], pg_env: dict[str, str], *, data: bytes | None = None,
-         timeout: int = 180) -> bytes:
+         timeout: int = 180, toc_file: Path | None = None) -> bytes:
     allowed = {"psql", "pg_restore"}
     if not args or args[0] not in allowed:
         raise Blocked("BLOCKED_G1_RESTORE_PG18_COMMAND")
+    mount_args: list[str] = []
+    if toc_file is not None:
+        # Mount strictly TOC metadata; never store decrypted archive bytes.
+        if (args[0] != "pg_restore" or
+                "--use-list=/tmp/iam-g1-filtered-toc.list" not in args or
+                toc_file.is_symlink() or not toc_file.is_file()):
+            raise Blocked("BLOCKED_G1_RESTORE_TOC_MOUNT_NOT_EXACT")
+        mount_args = [
+            "--mount", "type=bind,source=" + str(toc_file) +
+            ",target=/tmp/iam-g1-filtered-toc.list,readonly",
+        ]
     command = [
         "docker", "run", "--rm", "-i", "--network", "host", "--read-only",
         "--cap-drop=ALL", "--security-opt=no-new-privileges",
         "--env", "PGHOST", "--env", "PGPORT", "--env", "PGDATABASE",
         "--env", "PGUSER", "--env", "PGPASSWORD", "--env", "PGSSLMODE",
         "--env", "PGSSLROOTCERT", "--env", "PGCHANNELBINDING",
-        "--env", "PGCONNECT_TIMEOUT", "--env", "PGOPTIONS", IMAGE,
-    ] + args
+        "--env", "PGCONNECT_TIMEOUT", "--env", "PGOPTIONS",
+    ] + mount_args + [IMAGE] + args
     # PostgreSQL may include SQL statements and row values in stderr.
     # Capture only the trusted transactional restore's stderr in memory;
     # map failures to a closed set of codes and NEVER print source text.
@@ -301,7 +312,7 @@ def table_counts(pg_env: dict[str, str]) -> dict[str, int]:
     return counts
 
 
-def verify_archive_toc(archive: bytes, pg_env: dict[str, str]) -> None:
+def verify_archive_toc(archive: bytes, pg_env: dict[str, str]) -> bytes:
     # PostgreSQL 18: omitting filename reads stdin. A positional "-" is a
     # literal path and fails closed ("could not open input file \"-\"").
     # Keep decrypted bytes in memory; never write plaintext to disk.
@@ -318,6 +329,69 @@ def verify_archive_toc(archive: bytes, pg_env: dict[str, str]) -> None:
     if (table_definitions != 23 or table_data < 1 or policies != 41 or
             not any(" EXTENSION - pgcrypto " in line for line in lines)):
         raise Blocked("BLOCKED_G1_RESTORE_ARCHIVE_TOC_PARITY")
+    return toc
+
+
+def cloud_admin_defaults(pg_env: dict[str, str]) -> str:
+    """Fingerprint provider-owned PUBLIC defaults; excludes IAM ACLs."""
+    query = """SELECT count(*)::text || '|' ||
+      md5(coalesce(string_agg(d.defaclobjtype::text || '|' ||
+                              d.defaclacl::text, E'\\n' ORDER BY d.defaclobjtype),''))
+      FROM pg_default_acl d JOIN pg_roles r ON r.oid=d.defaclrole
+      JOIN pg_namespace n ON n.oid=d.defaclnamespace
+      WHERE r.rolname='cloud_admin' AND n.nspname='public'"""
+    return sql(pg_env, query)
+
+
+def filtered_cloud_admin_toc(toc: bytes) -> bytes:
+    """Comment out only verified Neon-managed defaults, never IAM ACLs."""
+    try:
+        lines = toc.decode("utf-8", errors="strict").splitlines()
+    except UnicodeError:
+        raise Blocked("BLOCKED_G1_RESTORE_PROVIDER_DEFAULT_ACL_TOC_ENCODING") from None
+    pattern = re.compile(
+        r"^\d+;\s+\d+\s+\d+\s+DEFAULT ACL public "
+        r"DEFAULT PRIVILEGES FOR (TABLES|SEQUENCES) cloud_admin$"
+    )
+    seen: list[str] = []
+    output: list[str] = []
+    for line in lines:
+        match = pattern.fullmatch(line)
+        if match:
+            seen.append(match.group(1))
+            output.append(";" + line)
+        else:
+            if " DEFAULT ACL " in line and line.rstrip().endswith(" cloud_admin"):
+                raise Blocked("BLOCKED_G1_RESTORE_PROVIDER_DEFAULT_ACL_TOC_UNEXPECTED")
+            output.append(line)
+    if sorted(seen) != ["SEQUENCES", "TABLES"]:
+        raise Blocked("BLOCKED_G1_RESTORE_PROVIDER_DEFAULT_ACL_TOC_COUNT")
+    return ("\n".join(output) + "\n").encode("utf-8")
+
+
+def apply_filtered_restore(archive: bytes, pg_env: dict[str, str], toc: bytes) -> None:
+    """Write TOC metadata with mode 0600; PGDMP plaintext stays only in RAM."""
+    root = Path(os.environ.get("RUNNER_TEMP", ""))
+    if not root.is_absolute() or not root.is_dir() or root.is_symlink():
+        raise Blocked("BLOCKED_G1_RESTORE_TOC_RUNNER_TEMP")
+    path = root / "iam-g1-filtered-toc.list"
+    if path.exists() or path.is_symlink():
+        raise Blocked("BLOCKED_G1_RESTORE_TOC_FILE_EXISTS")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(toc)
+        pg18(
+            ["pg_restore", "--single-transaction", "--exit-on-error",
+             "--use-list=/tmp/iam-g1-filtered-toc.list",
+             "--dbname=" + TARGET_DATABASE],
+            pg_env, data=archive, timeout=900, toc_file=path,
+        )
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def rollback_drill(pg_env: dict[str, str]) -> None:
@@ -439,15 +513,23 @@ def restore(env: dict[str, str]) -> None:
     before = pg18_phase("REFERENCE_CATALOG", lambda: catalog(reference_env))
     if len(before) != 9 or before[:5] != ("23", "41", "20", "1", "0"):
         raise Blocked("BLOCKED_G1_RESTORE_INHERITED_CANONICAL_BASELINE")
-    verify_archive_toc(plaintext, pg_env)
+    archive_toc = verify_archive_toc(plaintext, pg_env)
+    provider_reference = cloud_admin_defaults(reference_env)
+    provider_target = cloud_admin_defaults(pg_env)
+    if (not provider_reference.startswith("2|") or
+            provider_reference != provider_target):
+        raise Blocked("BLOCKED_G1_RESTORE_PROVIDER_DEFAULT_ACL_PREEXISTING_PARITY")
+    filtered_toc = filtered_cloud_admin_toc(archive_toc)
     print("PASS_G1_RESTORE_AUTHENTICATED_PG18_TOC_AND_TABLE_DATA")
     # Only from this point can DDL occur, after tag, SHA, TTL, exact DB & TOC.
     try:
-        # pg_restore reads the authenticated archive from stdin when no
-        # positional filename is provided; do not append a literal "-".
-        pg18_phase("RESTORE_APPLY", lambda: pg18(
-            ["pg_restore", "--single-transaction", "--exit-on-error",
-             "--dbname=" + TARGET_DATABASE], pg_env, data=plaintext, timeout=900))
+        # Preserve all IAM owners/ACLs/RLS/rows; omit only 2 pre-existing
+        # provider-owned PUBLIC default ACL operations.
+        pg18_phase("RESTORE_APPLY", lambda: apply_filtered_restore(
+            plaintext, pg_env, filtered_toc))
+        if cloud_admin_defaults(pg_env) != provider_reference:
+            raise Blocked("BLOCKED_G1_RESTORE_PROVIDER_DEFAULT_ACL_POST_PARITY")
+        print("PASS_G1_RESTORE_NEON_PROVIDER_DEFAULT_ACL_UNCHANGED")
         restored = pg18_phase("RESTORED_CATALOG", lambda: catalog(pg_env))
         if restored != before or len(restored) != 9:
             raise Blocked("BLOCKED_G1_RESTORE_OWNER_ACL_RLS_LEDGER_CATALOG_PARITY")
