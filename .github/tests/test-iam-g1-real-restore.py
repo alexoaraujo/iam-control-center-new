@@ -264,7 +264,7 @@ class Scope(unittest.TestCase):
         self.assertNotIn("gh run download --name", w)
         self.assertIn('gh run download "$GITHUB_RUN_ID"', w)
         self.assertIn('GH_TOKEN: ${{ github.token }}', w)
-        self.assertIn("      needs: stage-encrypted-ciphertext", w)
+        self.assertIn("    needs: stage-encrypted-ciphertext", w)
         self.assertIn("      actions: read", w)
         self.assertLess(w.index("Download same-run encrypted artifact using trusted GitHub CLI"),
                         w.index("Build PostgreSQL 18 libpq client with system CA"))
