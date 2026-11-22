@@ -249,12 +249,25 @@ class Scope(unittest.TestCase):
             "IAM_G1_RESTORE_AES256_GCM_KEY_B64", "IAM_G1_RESTORE_TARGET_DATABASE_URL",
             "IAM_G1_RESTORE_APPROVED_SHA", "retention-days: 1",
             "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
-            "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131",
+            'gh run download "$GITHUB_RUN_ID"',
+            '--name "iam-g1-ciphertext-${GITHUB_RUN_ID}"',
+            'GH_TOKEN: ${{ github.token }}',
+            "PASS_G1_RESTORE_SAME_RUN_CIPHERTEXT_STAGED",
             "RESTORE_G1_FULL_B2_TO_EXACT_DISPOSABLE_ONLY",
             "iam-g1-verify-main-checks.py", "gh api --paginate --slurp",
         ]:
             with self.subTest(required=s):
                 self.assertIn(s, w)
+        # Do not expand the GitHub Allowed actions allowlist to a new SHA or
+        # allow selection of artifacts from a different workflow run.
+        self.assertNotIn("actions/download-artifact@", w)
+        self.assertNotIn("gh run download --name", w)
+        self.assertIn('gh run download "$GITHUB_RUN_ID"', w)
+        self.assertIn('GH_TOKEN: ${{ github.token }}', w)
+        self.assertIn("    needs: stage-encrypted-ciphertext", w)
+        self.assertIn("      actions: read", w)
+        self.assertLess(w.index("Download same-run encrypted artifact using trusted GitHub CLI"),
+                        w.index("Build PostgreSQL 18 libpq client with system CA"))
         # Required check names intentionally moved to the trusted, tested
         # all-pages verifier. Verify they are still mandatory there.
         verifier = (ROOT / ".github/scripts/iam-g1-verify-main-checks.py").read_text()
