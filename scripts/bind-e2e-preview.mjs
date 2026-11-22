@@ -27,6 +27,7 @@ const branchCallbacks = new Map([
   ["security/g1-b2-aead-restore-offline-contract-20261121", "iam-control-center-new-pr153-ci.vercel.app"],
   ["security/g1-b2-real-isolated-restore-20261122", "iam-control-center-new-pr154-ci.vercel.app"],
   ["fix/g1-restore-synthetic-marker-isolation-20261122", "iam-control-center-new-pr155-ci.vercel.app"],
+  ["fix/g1-main-checks-paginated-gate-20261122", "iam-control-center-new-pr156-ci.vercel.app"],
   ["security/peos-prod-rbac-branch-attestation-20261121", "iam-control-center-new-prod-rbac-ci.vercel.app"],
   ["security/peos-prod-branch-fingerprint-20261121", "iam-control-center-new-branch-fingerprint-ci.vercel.app"],
   ["security/g3-pr128-trusted-executor-20261121", "iam-control-center-new-pr145-ci.vercel.app"],
