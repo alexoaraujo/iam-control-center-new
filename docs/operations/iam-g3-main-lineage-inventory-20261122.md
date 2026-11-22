@@ -58,6 +58,15 @@
 4. Antes de liberar o workflow com segredos, renovar ou substituir por aprovação própria a lease de G3 `br-super-sound-b63gtz88` que expira em `2026-11-23T22:00:00Z`, e revalidar OIDC, owner URL do clone, callback e fixture A/B.
 5. Exigir nova aprovação operacional por SHA e executar o G3 real somente a partir de `main`: grant→HTTP 200; acesso indevido→HTTP 403; revoke→HTTP 403, rollback e limpeza verificável.
 
+
+### Segunda validação: modo e tipo do objeto Git
+
+- A comparação dos objetos `git/trees?recursive=1`, além dos blobs, verificou os modos e tipos de cada um dos 25 caminhos alterados. **25/25** correspondem à diferença real entre as árvores, incluindo exclusões, adições e modificações.
+- **0 alterações exclusivamente de modo**; nenhum arquivo alterado apresenta troca de tipo (regular/symlink/submodule).
+- Os **sete arquivos críticos** mantêm o mesmo `sha`, `mode=100644` e `type=blob` nas duas árvores.
+- O manifesto JSON agora registra `base_mode`, `main_mode`, `base_type` e `main_type` para cada caminho e inclui `tree_object_attestation` com os contadores validados.
+- A verificação de identificadores e modos de objetos não substitui revisão humana do conteúdo dos diffs nem aprovação do G3; os flags de autorização permanecem `false`.
+
 ## Evidências e ressalvas
 
 - PRs #163, #164 e #166 foram integradas com checks `quality`, `security-gate` e Auth0 E2E positivos nos HEADs que exigiam teste. No evento `push` da main, os jobs Auth0 E2E e security-gate são `SKIPPED` por escopo; PG18/CI são `SUCCESS`.
