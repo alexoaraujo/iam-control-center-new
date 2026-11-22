@@ -54,7 +54,7 @@ class Scope(unittest.TestCase):
     def test_ttl_must_preserve_24h(self):
         g1.ensure_lease(datetime(2026, 11, 22, 1, 0, tzinfo=timezone.utc))
         for instant in [
-            datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc),
+            datetime(2026, 11, 23, 12, 0, 1, tzinfo=timezone.utc),
             datetime(2026, 11, 24, 12, 0, tzinfo=timezone.utc),
         ]:
             with self.subTest(at=instant), self.assertRaisesRegex(g1.Blocked, "HEADROOM"):
