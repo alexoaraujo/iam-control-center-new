@@ -13,8 +13,9 @@ spec = importlib.util.spec_from_file_location("g1_b2_full", path)
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
-SHA = "a" * 40
-KEY = f"iam-g1/full-backups/{SHA}/20261119T132500Z-123456.pgdump.aesgcm"
+SHA = gate.APPROVED_WRITER_SOURCE_SHA
+RUNNER_SHA = "b" * 40
+KEY = f"iam-g1/full-backups/{SHA}/20261120T014019Z-{gate.APPROVED_WRITER_RUN_ID}.pgdump.aesgcm"
 DATA = b"iam-g1-encrypted-full-backup-fixture:" + b"x" * 500
 DIGEST = hashlib.sha256(DATA).hexdigest()
 
@@ -23,7 +24,7 @@ def good():
     return {
         "GITHUB_REPOSITORY": gate.REPO,
         "GITHUB_REF": "refs/heads/main",
-        "GITHUB_SHA": SHA,
+        "GITHUB_SHA": RUNNER_SHA,
         "IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA": SHA,
         "IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY": KEY,
         "IAM_G1_B2_FULL_READBACK_APPROVED_SHA256": DIGEST,
@@ -80,7 +81,7 @@ class FullReadbackTest(unittest.TestCase):
         replacements = {
             "GITHUB_REF": "refs/pull/138/merge",
             "GITHUB_REPOSITORY": "other/repo",
-            "GITHUB_SHA": "b" * 40,
+            "GITHUB_SHA": "not-a-valid-sha",
             "IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA": "b" * 40,
             "IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY": gate.NEGATIVE_PROBE,
             "IAM_G1_B2_FULL_READBACK_APPROVED_SHA256": "0" * 63,
@@ -91,6 +92,35 @@ class FullReadbackTest(unittest.TestCase):
         for field, wrong in replacements.items():
             with self.subTest(field=field), self.assertRaises(gate.Blocked):
                 gate.verify_scope({**good(), field: wrong})
+
+    def test_trusted_main_runner_is_independent_of_historical_writer_sha(self):
+        self.assertNotEqual(good()["GITHUB_SHA"], good()["IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA"])
+        self.assertEqual(gate.verify_scope(good()), (KEY, DIGEST, len(DATA)))
+        self.assertEqual(gate.APPROVED_WRITER_SOURCE_SHA, SHA)
+        self.assertEqual(gate.APPROVED_WRITER_RUN_ID, "44655204795")
+        for wrong in [
+            {**good(), "IAM_G1_B2_FULL_READBACK_APPROVED_GIT_SHA": RUNNER_SHA},
+            {**good(), "IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY":
+             f"iam-g1/full-backups/{SHA}/20261120T014019Z-9999.pgdump.aesgcm"},
+            {**good(), "IAM_G1_B2_FULL_READBACK_APPROVED_OBJECT_KEY":
+             f"iam-g1/full-backups/{RUNNER_SHA}/20261120T014019Z-{gate.APPROVED_WRITER_RUN_ID}.pgdump.aesgcm"},
+        ]:
+            with self.subTest(wrong=wrong), self.assertRaises(gate.Blocked):
+                gate.verify_scope(wrong)
+
+    def test_workflow_checks_main_ancestry_and_writer_run_before_b2(self):
+        workflow = (Path(__file__).resolve().parents[2] /
+                    ".github/workflows/iam-g1-b2-full-readback.yml").read_text()
+        for marker in [
+            "workflow_dispatch:", "refs/heads/main", "fetch-depth: 0",
+            "git merge-base --is-ancestor",
+            "actions/runs/44655204795",
+            "PASS_G1_B2_HISTORIC_WRITER_AND_TRUSTED_MAIN_PROVENANCE",
+            "IAM-G1-B2-Full-Readback-Custody",
+        ]:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, workflow)
+        self.assertNotIn("pull_request_target:", workflow)
 
     def test_non_sha_scoped_key_path_and_path_traversal_are_rejected(self):
         for key in [
