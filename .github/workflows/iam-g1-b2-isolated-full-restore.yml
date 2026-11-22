@@ -77,9 +77,10 @@ jobs:
               }
               checks="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100")"
               jq -e --arg sha "$GITHUB_SHA" '
-                ["quality","pg18-security-contracts","g1-real-restore-offline-contract"] as $required |
-                all($required[]; . as $name |
-                  ([.check_runs[] | select(.head_sha == $sha and
+                .check_runs as $runs |
+                ["quality","pg18-security-contracts","g1-real-restore-offline-contract"] |
+                all(.[]; . as $name |
+                  ([$runs[] | select(.head_sha == $sha and
                     .name == $name and .status == "completed" and
                     .conclusion == "success")] | length) >= 1)
               ' <<< "$checks" >/dev/null || {
