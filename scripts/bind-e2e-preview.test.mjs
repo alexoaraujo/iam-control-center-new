@@ -331,3 +331,18 @@ test("PR166 ledger branch has its own callback and refuses stale branch, alias o
   assert.throws(() => verifyPreviewBinding({ ...e, E2E_CALLBACK_HOST: aliasHost },
     d, a, dep), /invalid/);
 });
+
+test("PR169 callback host is unique and rejects a stale or shared Vercel branch", () => {
+  const newBranch = "test/peos-g3-tree-inventory-20261123";
+  const callbackHost = "iam-control-center-new-pr169-ci.vercel.app";
+  assert.equal(approvedCallback(newBranch), callbackHost);
+  assert.notEqual(approvedCallback(newBranch), approvedCallback("alexoaraujo-patch-1"));
+  const scoped = { ...env, PR_HEAD_BRANCH: newBranch, E2E_CALLBACK_HOST: callbackHost };
+  const newDomain = { ...domain, name: callbackHost, gitBranch: newBranch };
+  const newAlias = { ...alias, alias: callbackHost };
+  const newDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: newBranch } };
+  assert.equal(verifyPreviewBinding(scoped, newDomain, newAlias, newDeployment).callbackHost, callbackHost);
+  assert.throws(() => verifyPreviewBinding(scoped, {...newDomain, gitBranch: "alexoaraujo-patch-1"}, newAlias, newDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, newDomain, newAlias,
+    {...newDeployment, meta: {...newDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
