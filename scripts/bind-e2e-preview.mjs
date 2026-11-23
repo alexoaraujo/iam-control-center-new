@@ -2,6 +2,7 @@ import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const branchCallbacks = new Map([
+  ["test/peos-g3-tree-inventory-20261123", "iam-control-center-new-pr169-ci.vercel.app"],
   ["feat/iam-g1-b2-readback-independent-gate", "iam-control-center-new-pr101-ci.vercel.app"],
   ["ops/g1-full-recovery-preflight-20261118", "iam-control-center-new-pr134-ci.vercel.app"],
   ["ops/g1-disposable-ttl-contract-20261119", "iam-control-center-new-pr135-ci.vercel.app"],
@@ -32,6 +33,10 @@ const branchCallbacks = new Map([
   ["fix/g1-pg18-archive-stdin-node24-20261122", "iam-control-center-new-pr158-ci.vercel.app"],
   ["fix/g1-artifact-same-run-gh-cli-20261122", "iam-control-center-new-pr159-ci.vercel.app"],
   ["fix/g1-pg18-restore-apply-redacted-classifier-20261122", "iam-control-center-new-pr160-ci.vercel.app"],
+  ["fix/g1-restore-custody-id-readonly-attestation-20261122", "iam-control-center-new-pr161-ci.vercel.app"],
+  ["fix/peos-g1-neon-managed-default-acl-20261122", "iam-control-center-new-pr162-ci.vercel.app"],
+  ["fix/peos-g1-rollback-marker-transactional-20261122", "iam-control-center-new-pr164-ci.vercel.app"],
+  ["fix/peos-g1-empty-ledger-fail-closed-20261122", "iam-control-center-new-pr166-ci.vercel.app"],
   ["security/peos-prod-rbac-branch-attestation-20261121", "iam-control-center-new-prod-rbac-ci.vercel.app"],
   ["security/peos-prod-branch-fingerprint-20261121", "iam-control-center-new-branch-fingerprint-ci.vercel.app"],
   ["security/g3-pr128-trusted-executor-20261121", "iam-control-center-new-pr145-ci.vercel.app"],
