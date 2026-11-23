@@ -1,0 +1,64 @@
+name: IAM G3 Git-tree inventory contract (offline, no privileged credentials)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/verify-g3-tree-inventory.mjs'
+      - 'scripts/verify-g3-tree-inventory.test.mjs'
+      - 'docs/operations/iam-g3-main-lineage-inventory-20261122.json'
+      - '.github/workflows/iam-g3-tree-inventory-offline.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/verify-g3-tree-inventory.mjs'
+      - 'scripts/verify-g3-tree-inventory.test.mjs'
+      - 'docs/operations/iam-g3-main-lineage-inventory-20261122.json'
+      - '.github/workflows/iam-g3-tree-inventory-offline.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  g3-tree-inventory-offline:
+    if: github.repository == 'alexoaraujo/iam-control-center-new'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout unprivileged PR or main source, including Git history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Use pinned Node.js 24 for offline checks
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Run only static and synthetic negative tests; no external credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/verify-g3-tree-inventory.mjs
+          node --check scripts/verify-g3-tree-inventory.test.mjs
+          node --test scripts/verify-g3-tree-inventory.test.mjs
+      - name: Verify exact historic Git tree and deny privileged authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-g3-tree-inventory.mjs docs/operations/iam-g3-main-lineage-inventory-20261122.json > "${RUNNER_TEMP}/g3-inventory-evidence.jsonl"
+          G3_ATTESTATION_FILE="${RUNNER_TEMP}/g3-inventory-evidence.jsonl" node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const text = readFileSync(process.env.G3_ATTESTATION_FILE, 'utf8').trim();
+          const [payload, hold] = text.split('\\n');
+          const attestation = JSON.parse(payload);
+          assert.equal(attestation.verdict, 'PASS_READ_ONLY_INVENTORY');
+          assert.equal(attestation.changed_paths, 25);
+          assert.equal(attestation.critical_unchanged, 7);
+          assert.equal(attestation.privileged_execution_allowed, false);
+          assert.equal(attestation.g3_baseline_approved, false);
+          assert.match(hold, /^HOLD_G3_PRIVILEGED:/);
+          console.log('PASS_G3_READ_ONLY_TREE_INVENTORY_OFFLINE');
+          console.log('G3_PRIVILEGED_EXECUTION=NOT_AUTHORIZED');
+          NODE

@@ -63,6 +63,8 @@ function assertObject(object, reason) {
 function assertEntry(entry, reason) {
   assertObject(entry, reason);
   if (!MODES.has(entry.mode) || !['blob', 'commit'].includes(entry.type) || !SHA.test(entry.sha)) fail(reason);
+  // Git object semantics are an invariant: a submodule is a commit (160000), never a regular blob.
+  if ((entry.mode === '160000') !== (entry.type === 'commit')) fail(reason);
 }
 function isSafePath(path) {
   return typeof path === 'string' && path.length > 0 && !/[\0\r\n]/.test(path) &&
