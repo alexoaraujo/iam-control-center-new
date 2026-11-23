@@ -44,13 +44,23 @@ BEGIN
     OR EXISTS (SELECT 1 FROM pg_auth_members WHERE member=current_user::regrole)
     OR EXISTS (SELECT 1 FROM pg_db_role_setting WHERE setrole=current_user::regrole)
     OR has_database_privilege(current_user,current_database(),'CREATE,TEMP')
-    OR EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname NOT LIKE 'pg_%'
+    OR EXISTS (SELECT 1 FROM pg_namespace n WHERE left(n.nspname,3) <> 'pg_'
       AND n.nspname <> 'information_schema' AND has_schema_privilege(current_user,n.oid,'CREATE'))
     OR EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-      WHERE n.nspname IN ('iam','audit','app_private') AND c.relkind IN ('r','p','v','m','f')
-        AND NOT (n.nspname='iam' AND c.relname='schema_migrations')
-        AND (has_table_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
-          OR has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')))
+      WHERE left(n.nspname,3) <> 'pg_' AND n.nspname <> 'information_schema'
+        AND CASE WHEN c.relkind IN ('r','p','v','m','f')
+          AND NOT (n.nspname='iam' AND c.relname='schema_migrations')
+        THEN has_table_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
+          OR has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')
+        ELSE false END)
+    OR EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE left(n.nspname,3) <> 'pg_' AND n.nspname <> 'information_schema'
+        AND CASE WHEN c.relkind='S'
+          THEN has_sequence_privilege(current_user,c.oid,'SELECT,USAGE,UPDATE') ELSE false END)
+    OR EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE left(n.nspname,3) <> 'pg_' AND n.nspname <> 'information_schema'
+        AND p.prosecdef AND (n.nspname='iam' OR has_schema_privilege(current_user,n.oid,'USAGE'))
+        AND has_function_privilege(current_user,p.oid,'EXECUTE'))
   THEN RAISE EXCEPTION 'PEOS_READER_GUARD'; END IF;
 END $guard$;
 SELECT jsonb_build_object(
