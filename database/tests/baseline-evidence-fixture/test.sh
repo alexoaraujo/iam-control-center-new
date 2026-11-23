@@ -70,8 +70,54 @@ admin -c 'GRANT SELECT ON iam.schema_migrations TO iam_schema_export_reader; ALT
 fail BLOCKED_READONLY_SESSION run drift
 admin -c 'ALTER TABLE iam.schema_migrations DROP COLUMN unexpected; GRANT SELECT ON iam.private_business_fixture TO iam_schema_export_reader'
 fail BLOCKED_READONLY_SESSION run excess
-admin -c 'REVOKE SELECT ON iam.private_business_fixture FROM iam_schema_export_reader; ALTER ROLE iam_schema_export_reader BYPASSRLS'
+admin -c 'REVOKE SELECT ON iam.private_business_fixture FROM iam_schema_export_reader'
+preflight=database/scripts/iam-collector-reader-preflight.sql
+check_preflight() {
+  admin -f "$preflight" > "$tmp/preflight.json"
+  python3 - "$tmp/preflight.json" "$1" "$2" "$3" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1]))
+assert p["format"]=="iam-collector-reader-preflight/v1"
+assert p["database"]=="iam_schema_test" and p["branch_id"] is None
+assert p["ledger_present"] and p["ledger_contract"]
+assert p["authenticated_reader_proof"] is False and p["execution_authorized"] is False
+r=p["reader"]
+assert r["other_relation_access"]==int(sys.argv[2])
+assert r["sequence_access"]==int(sys.argv[3])
+assert r["projected_definer_execute"]==int(sys.argv[4])
+PY
+}
+check_preflight 0 0 0
+admin <<'SQL'
+CREATE FUNCTION iam.collector_guard_probe() RETURNS integer
+LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS 'SELECT 1';
+GRANT EXECUTE ON FUNCTION iam.collector_guard_probe() TO PUBLIC;
+REVOKE USAGE ON SCHEMA iam FROM iam_schema_export_reader;
+SQL
+check_preflight 0 0 1
+admin -c 'GRANT USAGE ON SCHEMA iam TO iam_schema_export_reader'
+fail BLOCKED_READONLY_SESSION run definer
+admin -c 'REVOKE EXECUTE ON FUNCTION iam.collector_guard_probe() FROM PUBLIC; GRANT EXECUTE ON FUNCTION iam.collector_guard_probe() TO iam_schema_export_reader'
+fail BLOCKED_READONLY_SESSION run directdefiner
+admin -c 'REVOKE EXECUTE ON FUNCTION iam.collector_guard_probe() FROM iam_schema_export_reader'
+check_preflight 0 0 0
+admin <<'SQL'
+CREATE SCHEMA collector_guard_fixture;
+GRANT USAGE ON SCHEMA collector_guard_fixture TO iam_schema_export_reader;
+CREATE TABLE collector_guard_fixture.private_row(secret text);
+GRANT SELECT(secret) ON collector_guard_fixture.private_row TO iam_schema_export_reader;
+SQL
+check_preflight 1 0 0
+fail BLOCKED_READONLY_SESSION run outside
+admin -c 'REVOKE SELECT(secret) ON collector_guard_fixture.private_row FROM iam_schema_export_reader; CREATE SEQUENCE collector_guard_fixture.counter; GRANT USAGE ON SEQUENCE collector_guard_fixture.counter TO iam_schema_export_reader'
+check_preflight 0 1 0
+fail BLOCKED_READONLY_SESSION run sequence
+admin -c 'DROP SCHEMA collector_guard_fixture CASCADE'
+check_preflight 0 0 0
+run recovered
+admin -c 'ALTER ROLE iam_schema_export_reader BYPASSRLS'
 fail BLOCKED_READONLY_SESSION run unsafe
-for dir in wrong password denied drift excess unsafe; do [[ ! -e "$tmp/$dir" ]]; done
+for dir in wrong password denied drift excess definer directdefiner outside sequence unsafe; do [[ ! -e "$tmp/$dir" ]]; done
 admin -c 'DROP SCHEMA iam CASCADE; REVOKE CONNECT ON DATABASE iam_schema_test FROM iam_schema_export_reader; DROP ROLE iam_schema_export_reader'
+echo 'PASS: PG18 reader privilege projection, PUBLIC/direct SECURITY DEFINER, cross-schema column ACL, sequence ACL and recovery'
 echo 'PASS: PG18 authenticated readonly snapshot, absent/empty/populated ledger, private hashes, fail-closed reader guards and no residue'
