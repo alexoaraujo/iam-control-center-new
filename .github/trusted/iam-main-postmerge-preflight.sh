@@ -39,6 +39,22 @@ main_sha="$(gh api "repos/$REPO/branches/main" --jq '.commit.sha')"
   echo "::error::Main changed after the first no-secret preflight."
   exit 1
 }
+# G3 rebaseline candidate (read-only): this is NOT an approved main release.
+# Preserve PR128/PR150/PR151 historical checks below. A separate SHA-specific
+# operator approval and lease custodial review are mandatory before any secrets.
+G3_REBASELINE_CANDIDATE_SHA="fcc379f39dbe49dfb9de857e4be19f1c4da3ddbf"
+G3_REBASELINE_CANDIDATE_TREE="a628c48bcb212c4bedc5ac616a274f24a2e3c05f"
+[[ "$GITHUB_SHA" == "$G3_REBASELINE_CANDIDATE_SHA" ]] || {
+  echo "::error::BLOCKED_G3_CURRENT_MAIN_DIFFERS_FROM_REVIEW_CANDIDATE"
+  exit 1
+}
+[[ "$(git rev-parse 'HEAD^{tree}')" == "$G3_REBASELINE_CANDIDATE_TREE" ]] || {
+  echo "::error::BLOCKED_G3_CURRENT_MAIN_TREE_DIFFERS_FROM_REVIEW_CANDIDATE"
+  exit 1
+}
+echo "::error::BLOCKED_G3_NEW_MAIN_BASELINE_NOT_INDEPENDENTLY_APPROVED"
+exit 1
+
 [[ -z "$G3_APPROVED_SHA" || "$G3_APPROVED_SHA" == "$BASE_PR_HEAD" ]] || {
   echo "::error::The protected G3 approval must remain bound to the reviewed PR128 SHA."
   exit 1

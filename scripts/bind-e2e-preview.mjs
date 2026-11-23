@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 
 const branchCallbacks = new Map([
   ["audit/peos-github-scope-hardening-20261117", "iam-control-center-new-pr117-ci.vercel.app"],
+  ["audit/peos-g3-current-main-rebaseline-20261123", "iam-control-center-new-pr171-ci.vercel.app"],
   ["test/peos-g3-tree-inventory-20261123", "iam-control-center-new-pr169-ci.vercel.app"],
   ["feat/iam-g1-b2-readback-independent-gate", "iam-control-center-new-pr101-ci.vercel.app"],
   ["ops/g1-full-recovery-preflight-20261118", "iam-control-center-new-pr134-ci.vercel.app"],

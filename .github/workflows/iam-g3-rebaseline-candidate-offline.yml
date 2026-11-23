@@ -1,0 +1,65 @@
+name: IAM G3 current-main candidate verification (no privileged credentials)
+on:
+  pull_request:
+    paths:
+      - '.github/trusted/iam-main-postmerge-preflight.sh'
+      - '.github/workflows/iam-g3-rebaseline-candidate-offline.yml'
+      - 'scripts/verify-g3-main-rebaseline-candidate.mjs'
+      - 'scripts/verify-g3-main-rebaseline-candidate.test.mjs'
+      - 'docs/operations/iam-g3-main-rebaseline-candidate-20261123.json'
+  push:
+    branches: [main]
+    paths:
+      - '.github/trusted/iam-main-postmerge-preflight.sh'
+      - '.github/workflows/iam-g3-rebaseline-candidate-offline.yml'
+      - 'scripts/verify-g3-main-rebaseline-candidate.mjs'
+      - 'scripts/verify-g3-main-rebaseline-candidate.test.mjs'
+      - 'docs/operations/iam-g3-main-rebaseline-candidate-20261123.json'
+permissions:
+  contents: read
+jobs:
+  g3-main-candidate-readonly:
+    if: github.repository == 'alexoaraujo/iam-control-center-new'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout full Git history without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Bash syntax and negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n .github/trusted/iam-main-postmerge-preflight.sh
+          node --check scripts/verify-g3-main-rebaseline-candidate.mjs
+          node --test scripts/verify-g3-main-rebaseline-candidate.test.mjs
+      - name: Verify exact historic Git trees with HOLD verdict
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-g3-main-rebaseline-candidate.mjs \
+            docs/operations/iam-g3-main-rebaseline-candidate-20261123.json \
+            > "$RUNNER_TEMP/g3-candidate.jsonl"
+          G3_REPORT="$RUNNER_TEMP/g3-candidate.jsonl" node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {readFileSync} from 'node:fs';
+          const lines=readFileSync(process.env.G3_REPORT,'utf8').trim().split('\n');
+          assert.equal(lines.length,2);
+          const result=JSON.parse(lines[0]);
+          assert.equal(result.verdict,'PASS_READ_ONLY_G3_MAIN_CANDIDATE');
+          assert.equal(result.paths,30);
+          assert.equal(result.critical,7);
+          assert.equal(result.privileged_execution_allowed,false);
+          assert.equal(result.lease_approved,false);
+          assert.match(lines[1],/^HOLD_G3_PRIVILEGED/);
+          console.log('PASS_G3_MAIN_REBASELINE_CANDIDATE_OFFLINE');
+          console.log('G3_PRIVILEGED_EXECUTION=NOT_AUTHORIZED');
+          NODE
