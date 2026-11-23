@@ -49,7 +49,7 @@ INSERT INTO expected_db_acl VALUES
 CREATE FUNCTION pg_temp.reconcile_fixture() RETURNS jsonb
 LANGUAGE plpgsql SECURITY INVOKER SET search_path TO pg_catalog, pg_temp AS $fn$
 DECLARE
-  e record; created_roles int:=0; created_edges int:=0; granted_db int:=0;
+  spec record; created_roles int:=0; created_edges int:=0; granted_db int:=0;
   public_removed int:=0; created_objects int:=0; object_grants int:=0;
   n oid; rel oid;
 BEGIN
@@ -91,22 +91,22 @@ BEGIN
     WHERE r.rolname IN (SELECT name FROM pg_temp.expected_roles)
   ) THEN RAISE EXCEPTION 'PEOS_DEFAULT_ACL_DRIFT'; END IF;
 
-  FOR e IN SELECT * FROM pg_temp.expected_roles ORDER BY name LOOP
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=e.name) THEN
+  FOR spec IN SELECT * FROM pg_temp.expected_roles ORDER BY name LOOP
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=spec.name) THEN
       EXECUTE format('CREATE ROLE %I %s %s NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS',
-        e.name, CASE WHEN e.can_login THEN 'LOGIN' ELSE 'NOLOGIN' END,
-        CASE WHEN e.can_inherit THEN 'INHERIT' ELSE 'NOINHERIT' END);
+        spec.name, CASE WHEN spec.can_login THEN 'LOGIN' ELSE 'NOLOGIN' END,
+        CASE WHEN spec.can_inherit THEN 'INHERIT' ELSE 'NOINHERIT' END);
       created_roles:=created_roles+1;
     END IF;
   END LOOP;
-  FOR e IN SELECT * FROM pg_temp.expected_edges ORDER BY member_name LOOP
+  FOR spec IN SELECT * FROM pg_temp.expected_edges ORDER BY member_name LOOP
     IF NOT EXISTS (
       SELECT 1 FROM pg_auth_members m JOIN pg_roles a ON a.oid=m.member
-      JOIN pg_roles b ON b.oid=m.roleid WHERE a.rolname=e.member_name AND b.rolname=e.group_name
+      JOIN pg_roles b ON b.oid=m.roleid WHERE a.rolname=spec.member_name AND b.rolname=spec.group_name
     ) THEN
       EXECUTE format('GRANT %I TO %I WITH INHERIT %s, SET %s, ADMIN FALSE',
-        e.group_name,e.member_name, CASE WHEN e.inherit_allowed THEN 'TRUE' ELSE 'FALSE' END,
-        CASE WHEN e.set_allowed THEN 'TRUE' ELSE 'FALSE' END);
+        spec.group_name,spec.member_name, CASE WHEN spec.inherit_allowed THEN 'TRUE' ELSE 'FALSE' END,
+        CASE WHEN spec.set_allowed THEN 'TRUE' ELSE 'FALSE' END);
       created_edges:=created_edges+1;
     END IF;
   END LOOP;
@@ -118,12 +118,12 @@ BEGIN
     EXECUTE format('REVOKE CONNECT, TEMP ON DATABASE %I FROM PUBLIC',current_database());
     public_removed:=1;
   END IF;
-  FOR e IN SELECT * FROM pg_temp.expected_db_acl ORDER BY role_name LOOP
+  FOR spec IN SELECT * FROM pg_temp.expected_db_acl ORDER BY role_name LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_database d CROSS JOIN LATERAL
       aclexplode(coalesce(d.datacl,acldefault('d',d.datdba))) x
       JOIN pg_roles r ON r.oid=x.grantee
-      WHERE d.datname=current_database() AND r.rolname=e.role_name AND x.privilege_type=e.privilege) THEN
-      EXECUTE format('GRANT %s ON DATABASE %I TO %I',e.privilege,current_database(),e.role_name);
+      WHERE d.datname=current_database() AND r.rolname=spec.role_name AND x.privilege_type=spec.privilege) THEN
+      EXECUTE format('GRANT %s ON DATABASE %I TO %I',spec.privilege,current_database(),spec.role_name);
       granted_db:=granted_db+1;
     END IF;
   END LOOP;
