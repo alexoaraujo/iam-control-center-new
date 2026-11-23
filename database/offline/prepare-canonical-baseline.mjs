@@ -46,7 +46,7 @@ export function wrapperReview(bytes) {
   assert(Buffer.from(sql,"utf8").equals(bytes) && !sql.includes("\r"),"UNSUPPORTED_SQL_ENCODING");
   const m = /^(?:(?:--[^\n]*|\s*)\n)*BEGIN;\n([\s\S]+)\nCOMMIT;\n?$/.exec(sql);
   assert(m,"UNREVIEWED_TRANSACTION_WRAPPER");
-  assert(!/^\s*(?:BEGIN|COMMIT|ROLLBACK|SAVEPOINT|START TRANSACTION|END TRANSACTION|ABORT|RELEASE SAVEPOINT)\s*(?:;|$)/im.test(m[1])
+  assert(!/^[ \t]*(?:BEGIN[ \t]*;|(?:COMMIT|ROLLBACK|SAVEPOINT|START[ \t]+TRANSACTION|END[ \t]+TRANSACTION|ABORT|RELEASE[ \t]+SAVEPOINT)\b[^\n]*;)/im.test(m[1])
     && !/^\s*\\/m.test(m[1]),"UNREVIEWED_TRANSACTION_BOUNDARY");
   return { source_sha256: digest(bytes), candidate_payload_sha256: digest(Buffer.from(m[1]+"\n")),
     disposition: "REVIEW_ONLY_NOT_EXECUTABLE" };
