@@ -71,3 +71,13 @@ sequence; após remoção, coleta volta a funcionar.
 - Não transformar relatório administrativo em evidência autenticada do leitor;
   validar sessão real, branch e snapshot, integrar ao pacote da PR #176.
 - Production, G3, migrations, lease e ledger backfill continuam HOLD.
+
+Readback de tipos do ledger de Development (catálogo, sem linhas):
+- migration_id: text; NOT NULL=true
+- checksum_sha256: character(64); NOT NULL=true
+- source_sha: text; NOT NULL=false
+- applied_at: timestamp with time zone; NOT NULL=true
+- execution_role: name; NOT NULL=true
+O contrato atual da fixture exige text e timestamptz exatamente. A divergência
+estrutural observada precisa de revisão explícita da semântica dos tipos e
+constraints; não converter ou alterar o ledger automaticamente.
