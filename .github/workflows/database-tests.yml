@@ -253,3 +253,5 @@ jobs:
           sudo apt-get install --yes postgresql-client
       - name: Test partial role reconciliation and authenticated runner integration
         run: bash database/tests/role-reconciliation-fixture/test.sh
+      - name: Test authenticated read-only baseline evidence collection
+        run: bash database/tests/baseline-evidence-fixture/test.sh
