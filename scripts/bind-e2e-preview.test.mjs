@@ -346,3 +346,19 @@ test("PR169 callback host is unique and rejects a stale or shared Vercel branch"
   assert.throws(() => verifyPreviewBinding(scoped, newDomain, newAlias,
     {...newDeployment, meta: {...newDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
 });
+
+test("PR171 dedicated callback rejects stale branch, wrong alias and SHA", () => {
+  const branch = "audit/peos-g3-current-main-rebaseline-20261123";
+  const host = "iam-control-center-new-pr171-ci.vercel.app";
+  assert.equal(approvedCallback(branch), host);
+  assert.notEqual(approvedCallback(branch), approvedCallback("test/peos-g3-tree-inventory-20261123"));
+  const scoped = { ...env, PR_HEAD_BRANCH: branch, E2E_CALLBACK_HOST: host };
+  const domainNew = { ...domain, name: host, gitBranch: branch };
+  const aliasNew = { ...alias, alias: host };
+  const deploymentNew = { ...deployment, meta: { ...deployment.meta, githubCommitRef: branch } };
+  assert.equal(verifyPreviewBinding(scoped, domainNew, aliasNew, deploymentNew).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...domainNew, gitBranch: "test/peos-g3-tree-inventory-20261123"}, aliasNew, deploymentNew), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, domainNew, {...aliasNew, alias: "iam-control-center-new-pr169-ci.vercel.app"}, deploymentNew), /mismatch|alias|invalid/i);
+  assert.throws(() => verifyPreviewBinding(scoped, domainNew, aliasNew,
+    {...deploymentNew, meta: {...deploymentNew.meta, githubCommitSha: "f".repeat(40)}}), /exact PR SHA/);
+});
