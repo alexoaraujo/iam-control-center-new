@@ -51,7 +51,7 @@ jobs:
           import assert from 'node:assert/strict';
           import { readFileSync } from 'node:fs';
           const text = readFileSync(process.env.G3_ATTESTATION_FILE, 'utf8').trim();
-          const [payload, hold] = text.split('\\n');
+          const [payload, hold] = text.split('\n');
           const attestation = JSON.parse(payload);
           assert.equal(attestation.verdict, 'PASS_READ_ONLY_INVENTORY');
           assert.equal(attestation.changed_paths, 25);

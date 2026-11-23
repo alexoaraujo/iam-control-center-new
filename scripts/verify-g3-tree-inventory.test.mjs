@@ -104,9 +104,9 @@ test('never allow a manifest authorization bit to become true',()=>{
   }
 });
 test('reject impossible Git object mode/type combinations',()=>{
-  assert.throws(()=>parseRawTree('100644 commit '+hex(40)+'\\twrong.txt\\0'),/TREE_OBJECT/);
-  assert.throws(()=>parseRawTree('160000 blob '+hex(41)+'\\tsubmodule\\0'),/TREE_OBJECT/);
-  assert.deepEqual([...parseRawTree('160000 commit '+hex(42)+'\\tsubmodule\\0')],
+  assert.throws(()=>parseRawTree('100644 commit '+hex(40)+'\twrong.txt\0'),/TREE_OBJECT/);
+  assert.throws(()=>parseRawTree('160000 blob '+hex(41)+'\tsubmodule\0'),/TREE_OBJECT/);
+  assert.deepEqual([...parseRawTree('160000 commit '+hex(42)+'\tsubmodule\0')],
     [['submodule',{mode:'160000',type:'commit',sha:hex(42)}]]);
 });
 test('reject partial/invalid Git output, duplicate paths and traversal',()=>{
