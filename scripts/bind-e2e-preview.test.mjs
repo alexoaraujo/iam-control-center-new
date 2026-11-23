@@ -362,3 +362,22 @@ test("PR171 dedicated callback rejects stale branch, wrong alias and SHA", () =>
   assert.throws(() => verifyPreviewBinding(scoped, domainNew, aliasNew,
     {...deploymentNew, meta: {...deploymentNew.meta, githubCommitSha: "f".repeat(40)}}), /exact PR SHA/);
 });
+
+test("PR173 canonical reconciliation callback is branch-bound and exact-SHA only", () => {
+  const prBranch = "feat/peos-canonical-reconciliation-readonly-20261123";
+  const host = "iam-control-center-new-pr173-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(approvedCallback(prBranch), approvedCallback("audit/peos-g3-current-main-rebaseline-20261123"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped,
+    { ...scopedDomain, gitBranch: "audit/peos-g3-current-main-rebaseline-20261123" },
+    scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain,
+    { ...scopedAlias, deploymentId: "dpl_stale" }, scopedDeployment), /not attached/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias,
+    { ...scopedDeployment, meta: { ...scopedDeployment.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+});
