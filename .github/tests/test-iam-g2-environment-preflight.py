@@ -79,6 +79,24 @@ class Contract(unittest.TestCase):
                     m.live(SHA, "synthetic")
                 get.assert_not_called()
 
+    def test_local_rejects_supplied_token_before_network(self):
+        with patch.object(m, "local_checkout", return_value=pathlib.Path("/synthetic")), \
+             patch.object(m, "get") as get, patch.object(m.getpass, "getpass") as prompt:
+            with self.assertRaisesRegex(m.Blocked, "TOKEN_MUST_BE_INTERACTIVE"):
+                m.live(SHA, "synthetic")
+            get.assert_not_called()
+            prompt.assert_not_called()
+
+    def test_local_rejects_dirty_or_wrong_checkout(self):
+        root = path.resolve().parents[2]
+        with patch.dict(m.os.environ, {}, clear=True), \
+             patch.object(m.sys.stdin, "isatty", return_value=True), \
+             patch.object(m.sys.stdout, "isatty", return_value=True):
+            for replies in [(str(root), "b"*40), (str(root), SHA, " M modified")]:
+                with patch.object(m, "git_read", side_effect=replies):
+                    with self.assertRaisesRegex(m.Blocked, "CHECKOUT_NOT_EXACT_AND_CLEAN"):
+                        m.local_checkout(SHA)
+
     def test_duplicates_and_collision(self):
         data = fixture()
         data["environments"][m.ACQUIRE]["environment"]["id"] = 1

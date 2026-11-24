@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """G2 protection metadata only. No environment job, secret values, DB or write API."""
+import getpass
 import json
+import pathlib
+import warnings
 import os
 import re
 import subprocess
@@ -150,18 +153,35 @@ def main_ref(token):
             ref["object"].get("type") == "commit", "MAIN_REF_UNATTESTED")
     return ref["object"].get("sha")
 
-def live(approved_sha, token):
-    require(os.environ.get("GITHUB_ACTIONS") == "true" and
-            os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch" and
-            os.environ.get("GITHUB_REPOSITORY") == REPO and
-            os.environ.get("GITHUB_REF") == "refs/heads/main" and
-            os.environ.get("GITHUB_SHA") == approved_sha and
-            isinstance(approved_sha, str) and SHA.fullmatch(approved_sha) is not None,
-            "TRUSTED_MAIN_DISPATCH_REQUIRED")
-    require(bool(token), "METADATA_READ_TOKEN_MISSING")
-    head = subprocess.run(["git", "rev-parse", "HEAD"], check=True, capture_output=True,
-                          text=True, timeout=5).stdout.strip()
-    require(head == approved_sha, "CHECKOUT_SHA_MISMATCH")
+def git_read(root, *args):
+    return subprocess.run(["git", "-C", str(root), *args], check=True,
+                          capture_output=True, text=True, timeout=10).stdout.strip()
+
+def local_checkout(approved_sha):
+    require(not os.environ.get("CI") and not os.environ.get("GITHUB_ACTIONS") and
+            sys.stdin.isatty() and sys.stdout.isatty(),
+            "PRIVATE_INTERACTIVE_SESSION_REQUIRED")
+    require(isinstance(approved_sha, str) and SHA.fullmatch(approved_sha) is not None,
+            "INVALID_APPROVED_SHA")
+    root = pathlib.Path(__file__).resolve().parents[2]
+    require(pathlib.Path(git_read(root, "rev-parse", "--show-toplevel")).resolve() == root,
+            "CHECKOUT_ROOT_MISMATCH")
+    require(git_read(root, "rev-parse", "HEAD") == approved_sha and
+            git_read(root, "status", "--porcelain", "--untracked-files=normal") == "",
+            "CHECKOUT_NOT_EXACT_AND_CLEAN")
+    return root
+
+def live(approved_sha, token=None):
+    root = local_checkout(approved_sha)
+    require(token is None, "TOKEN_MUST_BE_INTERACTIVE")
+    # No token in arguments, environment, repo or Actions; abort on getpass fallback.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", getpass.GetPassWarning)
+        token = getpass.getpass("Read-only fine-grained GitHub token: ")
+    require(isinstance(token, str) and token.startswith("github_pat_") and
+            re.fullmatch(r"[A-Za-z0-9_]+", token) is not None,
+            "FINE_GRAINED_TOKEN_REQUIRED")
+    head = approved_sha
     before = main_ref(token)
     require(before == approved_sha, "MAIN_SHA_CHANGED")
     snapshot = {"checkout_sha": head, "main_before": before, "repository": get("", token),
@@ -178,12 +198,13 @@ def live(approved_sha, token):
             "variables": get(path + "/variables?per_page=100", token),
         }
     snapshot["main_after"] = main_ref(token)
+    require(local_checkout(approved_sha) == root, "CHECKOUT_CHANGED")
     return verify(snapshot, approved_sha)
 
 if __name__ == "__main__":
     try:
         require(len(sys.argv) == 2, "INVALID_USAGE")
-        print(json.dumps(live(sys.argv[1], os.environ.get("GITHUB_TOKEN")), sort_keys=True))
+        print(json.dumps(live(sys.argv[1]), sort_keys=True))
     except Blocked as exc:
         print("BLOCKED_G2_ENVIRONMENT_PREFLIGHT " + str(exc), file=sys.stderr)
         sys.exit(2)

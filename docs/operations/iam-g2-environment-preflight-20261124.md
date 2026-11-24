@@ -1,11 +1,20 @@
 # G2 — preflight protegido de Environments
 Dependência #181. Apenas metadata, sem aquisição. Não criar ambientes automaticamente.
 O workflow PR executa somente fixtures sintéticas sem credenciais externas.
-A consulta real é workflow_dispatch em refs/heads/main, checkout SHA exato,
-main antes/depois, token Actions com contents/actions read, GET fixo sem redirects.
+O workflow_dispatch também executa apenas fixtures. O GITHUB_TOKEN não
+oferece as permissões Secrets/Variables/Environments necessárias aos inventários.
+A consulta real é local, interativa, após merge e revisão do SHA exato da main,
+checkout limpo e comparação main antes/depois, GET fixo sem redirects.
+Em dispositivo privado, usar um fine-grained PAT temporário restrito somente
+este repositório, com Contents, Actions, Secrets, Variables e Environments
+read (Metadata read implícita). Conferir permissões na emissão e revogar após uso.
+Não conceder write, não armazenar em CI, não enviar em chat ou argumentos.
+
+    python3 .github/scripts/iam-g2-environment-preflight.py SHA_MAIN_APROVADO
+
+O prompt privado lê o token sem eco; falha se não houver TTY. Se API negar
+leitura, HOLD, sem ampliar automaticamente permissões ou relaxar proteção.
 Nenhum job referencia um Environment, logo não libera seus secrets.
-Se a API negar leitura de inventário de secrets/vars/policies, HOLD;
-não substituir por PAT administrativo em código de PR nem relaxar proteção.
  
 ## Contrato
 Ambos: branch policy exclusiva main (sem tags/wildcards), reviewer
