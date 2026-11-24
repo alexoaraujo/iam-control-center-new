@@ -5,6 +5,7 @@ Deliberately no live Neon mode, arbitrary URL, SQL argument, signer or network
 destination. Future protected live acquisition needs a separately reviewed
 control-plane binding, TLS verify-full and dedicated reader custody.
 """
+from datetime import datetime
 import hashlib
 import json
 import os
@@ -80,25 +81,31 @@ SELECT to_regclass('iam.schema_migrations') IS NOT NULL AS ledger_present \gset
 DO $ledger$
 DECLARE t oid:=to_regclass('iam.schema_migrations');
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_class WHERE oid=t AND relkind='r' AND NOT relrowsecurity)
-     OR (SELECT array_agg(attname::text ORDER BY attname::text) FROM pg_attribute
-         WHERE attrelid=t AND attnum>0 AND NOT attisdropped)
-          IS DISTINCT FROM ARRAY['applied_at','checksum_sha256','execution_role','migration_id','source_sha']::text[]
+  IF NOT EXISTS (SELECT 1 FROM pg_class WHERE oid=t AND relkind='r' AND NOT relrowsecurity AND NOT relforcerowsecurity)
+     OR NOT COALESCE((((SELECT array_agg(a.attname::text||':'||format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull::text ORDER BY a.attname::text)
+       FROM pg_attribute a WHERE a.attrelid=t AND a.attnum>0 AND NOT a.attisdropped) = ARRAY['applied_at:timestamp with time zone:true','checksum_sha256:text:true','execution_role:text:true','migration_id:text:true','source_sha:text:true']::text[] OR (SELECT array_agg(a.attname::text||':'||format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull::text ORDER BY a.attname::text)
+       FROM pg_attribute a WHERE a.attrelid=t AND a.attnum>0 AND NOT a.attisdropped) = ARRAY['applied_at:timestamp with time zone:true','checksum_sha256:character(64):true','execution_role:name:true','migration_id:text:true','source_sha:text:false']::text[]) AND EXISTS (SELECT 1 FROM pg_constraint k JOIN pg_attribute a ON a.attrelid=k.conrelid AND a.attname='migration_id'
+      WHERE k.conrelid=t AND k.contype='p' AND k.convalidated AND NOT k.condeferrable
+        AND k.conkey=ARRAY[a.attnum]::smallint[]) AND NOT EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid=t AND a.attnum>0 AND NOT a.attisdropped AND (a.attgenerated<>'' OR a.attidentity<>''))),false)
      OR NOT has_schema_privilege(current_user,'iam','USAGE')
      OR NOT has_table_privilege(current_user,t,'SELECT')
      OR has_table_privilege(current_user,t,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN')
      OR has_any_column_privilege(current_user,t,'INSERT,UPDATE,REFERENCES')
-     OR EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid=t AND attnum>0 AND NOT attisdropped
-       AND ((attname='applied_at' AND atttypid<>'timestamptz'::regtype)
-         OR (attname<>'applied_at' AND atttypid<>'text'::regtype)))
   THEN RAISE EXCEPTION 'PEOS_LEDGER_CONTRACT'; END IF;
+  IF EXISTS (SELECT 1 FROM iam.schema_migrations
+      WHERE migration_id IS NULL OR migration_id !~ '^[0-9]{4}_[a-z0-9_]+$'
+        OR checksum_sha256 IS NULL OR checksum_sha256::text !~ '^[0-9a-f]{64}$'
+        OR source_sha IS NULL OR source_sha !~ '^[0-9a-f]{40}$'
+        OR execution_role IS NULL OR execution_role::text !~ '^iam_[a-z0-9_]+$'
+        OR applied_at IS NULL OR NOT isfinite(applied_at))
+  THEN RAISE EXCEPTION 'PEOS_LEDGER_ROW_PROVENANCE'; END IF;
   IF (SELECT count(*) FROM iam.schema_migrations)>10000
   THEN RAISE EXCEPTION 'PEOS_LEDGER_LIMIT'; END IF;
 END $ledger$;
 SELECT jsonb_build_object('format','iam-ledger-provenance/v1','branch_id','br-fixture-only',
   'rows',coalesce(jsonb_agg(jsonb_build_object('migration_id',migration_id,
-  'checksum_sha256',checksum_sha256,'source_sha',source_sha,'execution_role',execution_role,
-  'applied_at',to_char(applied_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+  'checksum_sha256',checksum_sha256::text,'source_sha',source_sha,'execution_role',execution_role::text,
+  'applied_at',to_char(applied_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))
   ORDER BY migration_id),'[]'::jsonb))::text FROM iam.schema_migrations;
 \else
 SELECT 'null';
@@ -145,7 +152,8 @@ def parse_result(raw, manifest_bytes, checkout_sha):
                     and re.fullmatch(r"[0-9a-f]{64}", row["checksum_sha256"])
                     and re.fullmatch(r"[0-9a-f]{40}", row["source_sha"])
                     and re.fullmatch(r"iam_[a-z0-9_]+", row["execution_role"])
-                    and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", row["applied_at"])
+                    and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z", row["applied_at"])
+                    and datetime.fromisoformat(row["applied_at"]).isoformat(timespec="microseconds").replace("+00:00","Z")==row["applied_at"]
                     and row["migration_id"] not in seen, "BLOCKED_LEDGER_ROW")
             seen.add(row["migration_id"])
     # Preserve the server's exact JSON bytes, without logging catalog definitions.
@@ -155,7 +163,7 @@ def parse_result(raw, manifest_bytes, checkout_sha):
              "checkout_sha":checkout_sha,"manifest_sql_sha256":digest(manifest_bytes),
              "artifact_sha256":{name:digest(content) for name,content in artifacts.items()},
              "ledger_present":exists,"ledger_rows":None if ledger is None else len(ledger["rows"]),
-             "authenticated_fixture_session":True,"live_neon_attested":False,
+             "authenticated_fixture_session":True,"ledger_provenance_authenticated":False,"live_neon_attested":False,
              "signed_baseline":False,"execution_authorized":False}
     artifacts["index.json"] = (json.dumps(index,sort_keys=True,indent=2)+"\n").encode()
     return artifacts

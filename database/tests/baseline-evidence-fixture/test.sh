@@ -88,6 +88,67 @@ assert r["projected_definer_execute"]==int(sys.argv[4])
 PY
 }
 check_preflight 0 0 0
+# Only the synthetic local ledger is altered to reproduce the observed Neon profile.
+admin <<'SQL'
+ALTER TABLE iam.schema_migrations
+  ALTER COLUMN checksum_sha256 TYPE character(64),
+  ALTER COLUMN execution_role TYPE name,
+  ALTER COLUMN source_sha DROP NOT NULL;
+UPDATE iam.schema_migrations SET applied_at='2026-01-01T00:00:00.123456Z';
+SQL
+check_preflight 0 0 0
+run canonical
+python3 - "$tmp/canonical" <<'PY'
+import json,pathlib,sys
+p=pathlib.Path(sys.argv[1])
+row=json.loads((p/"ledger.json").read_bytes())["rows"][0]
+assert row["checksum_sha256"]=="a"*64 and row["source_sha"]=="b"*40
+assert row["execution_role"]=="iam_migrator_login"
+assert row["applied_at"]=="2026-01-01T00:00:00.123456Z"
+assert json.loads((p/"index.json").read_bytes())["ledger_provenance_authenticated"] is False
+PY
+admin -c 'UPDATE iam.schema_migrations SET source_sha=NULL'
+fail BLOCKED_READONLY_SESSION run nullsource
+admin -c "UPDATE iam.schema_migrations SET source_sha='unverified'"
+fail BLOCKED_READONLY_SESSION run badsource
+admin -c "UPDATE iam.schema_migrations SET source_sha=repeat('b',40),checksum_sha256='short'"
+fail BLOCKED_READONLY_SESSION run badchecksum
+admin -c "UPDATE iam.schema_migrations SET checksum_sha256=repeat('a',64),execution_role='invalid'"
+fail BLOCKED_READONLY_SESSION run badrole
+admin -c "UPDATE iam.schema_migrations SET execution_role='iam_migrator_login',applied_at='infinity'"
+fail BLOCKED_READONLY_SESSION run badtime
+admin -c "UPDATE iam.schema_migrations SET applied_at='2026-01-01T00:00:00.123456Z'; ALTER TABLE iam.schema_migrations ALTER COLUMN checksum_sha256 TYPE character(65)"
+fail BLOCKED_READONLY_SESSION run badtype
+admin -c 'ALTER TABLE iam.schema_migrations ALTER COLUMN checksum_sha256 TYPE character(64)'
+run canonical_recovered
+# Reconciliation of the synthetic routine preserves explicit runtime access.
+admin <<'SQL'
+CREATE FUNCTION iam.clear_tenant_context_fixture() RETURNS integer
+LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS 'SELECT 1';
+ALTER FUNCTION iam.clear_tenant_context_fixture() OWNER TO iam_owner;
+GRANT USAGE ON SCHEMA iam TO iam_app_runtime;
+GRANT EXECUTE ON FUNCTION iam.clear_tenant_context_fixture() TO iam_app_runtime;
+BEGIN;
+REVOKE EXECUTE ON FUNCTION iam.clear_tenant_context_fixture() FROM PUBLIC;
+DO $assert$
+BEGIN
+  IF has_function_privilege('iam_schema_export_reader','iam.clear_tenant_context_fixture()','EXECUTE')
+    OR NOT has_function_privilege('iam_app_runtime_login','iam.clear_tenant_context_fixture()','EXECUTE')
+  THEN RAISE EXCEPTION 'PEOS_ACL_RECONCILIATION'; END IF;
+END $assert$;
+ROLLBACK;
+DO $assert$
+BEGIN
+  IF NOT has_function_privilege('iam_schema_export_reader','iam.clear_tenant_context_fixture()','EXECUTE')
+  THEN RAISE EXCEPTION 'PEOS_ACL_ROLLBACK'; END IF;
+END $assert$;
+SQL
+fail BLOCKED_READONLY_SESSION run aclrollback
+admin -c 'REVOKE EXECUTE ON FUNCTION iam.clear_tenant_context_fixture() FROM PUBLIC'
+run acl_reconciled
+[[ "$(admin -c 'SET ROLE iam_app_runtime_login; SELECT iam.clear_tenant_context_fixture(); RESET ROLE;')" == 1 ]]
+admin -c 'DROP FUNCTION iam.clear_tenant_context_fixture(); REVOKE USAGE ON SCHEMA iam FROM iam_app_runtime'
+check_preflight 0 0 0
 admin <<'SQL'
 CREATE FUNCTION iam.collector_guard_probe() RETURNS integer
 LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS 'SELECT 1';
@@ -117,7 +178,8 @@ check_preflight 0 0 0
 run recovered
 admin -c 'ALTER ROLE iam_schema_export_reader BYPASSRLS'
 fail BLOCKED_READONLY_SESSION run unsafe
-for dir in wrong password denied drift excess definer directdefiner outside sequence unsafe; do [[ ! -e "$tmp/$dir" ]]; done
+for dir in wrong password denied drift excess definer directdefiner outside sequence unsafe nullsource badsource badchecksum badrole badtime badtype aclrollback; do [[ ! -e "$tmp/$dir" ]]; done
 admin -c 'DROP SCHEMA iam CASCADE; REVOKE CONNECT ON DATABASE iam_schema_test FROM iam_schema_export_reader; DROP ROLE iam_schema_export_reader'
+echo 'PASS: PG18 canonical ledger adapter, strict row provenance, microsecond timestamps, ACL rollback and preserved runtime access'
 echo 'PASS: PG18 reader privilege projection, PUBLIC/direct SECURITY DEFINER, cross-schema column ACL, sequence ACL and recovery'
 echo 'PASS: PG18 authenticated readonly snapshot, absent/empty/populated ledger, private hashes, fail-closed reader guards and no residue'

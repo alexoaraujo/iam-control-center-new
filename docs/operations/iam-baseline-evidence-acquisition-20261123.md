@@ -81,3 +81,20 @@ Readback de tipos do ledger de Development (catálogo, sem linhas):
 O contrato atual da fixture exige text e timestamptz exatamente. A divergência
 estrutural observada precisa de revisão explícita da semântica dos tipos e
 constraints; não converter ou alterar o ledger automaticamente.
+
+## Contrato do adaptador — PR posterior a #178
+
+O readback real autenticado de catálogo em Development confirma tabela ordinária,
+owner iam_owner, sem RLS/FORCE RLS, PK migration_id, CHECK checksum hex e tipos
+text, character(64), name, timestamptz. source_sha aceita NULL. A fixture anterior
+exigia text e NOT NULL. O adaptador aceita exclusivamente os dois perfis de
+colunas completos, PK validada, sem coluna gerada/identity. Os casts explícitos
+para text ocorrem somente na projeção; o manifest mantém tipos reais. Não se
+alteram dados nem schema real. SHA de origem NULL/inválido, checksum curto ou
+inválido, role inválida, timestamp infinito e drift de tipo bloqueiam a coleta.
+Preserva precisão de microssegundos. Um SHA sintaticamente válido NÃO prova
+origem: ledger_provenance_authenticated permanece false, mesmo se preenchido.
+A fixture testa reconciliação de PUBLIC EXECUTE de uma rotina sintética com
+owner iam_owner, grant explícito runtime, rollback e acesso efetivo sob SET ROLE
+(não sessão runtime autenticada). Não executa REVOKE na rotina Neon real.
+A aquisição live, custódia e autorização continuam bloqueadas.

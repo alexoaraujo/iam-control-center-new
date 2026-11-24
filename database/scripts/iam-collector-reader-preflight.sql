@@ -6,7 +6,7 @@ WITH reader AS (
          rolcreatedb, rolreplication, rolconfig
   FROM pg_catalog.pg_roles WHERE rolname='iam_schema_export_reader'
 ), ledger AS (
-  SELECT c.oid,c.relkind,c.relrowsecurity
+  SELECT c.oid,c.relkind,c.relrowsecurity,c.relforcerowsecurity
   FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
   WHERE n.nspname='iam' AND c.relname='schema_migrations'
 ), scope AS (
@@ -20,13 +20,12 @@ SELECT pg_catalog.jsonb_build_object(
  'pg_version',pg_catalog.current_setting('server_version_num')::int,
  'session_user',session_user,'current_user',current_user,
  'ledger_present',EXISTS(SELECT 1 FROM ledger),
- 'ledger_contract',COALESCE((SELECT l.relkind='r' AND NOT l.relrowsecurity
-  AND (SELECT pg_catalog.array_agg(a.attname::text ORDER BY a.attname::text)
-       FROM pg_catalog.pg_attribute a WHERE a.attrelid=l.oid AND a.attnum>0 AND NOT a.attisdropped)
-     =ARRAY['applied_at','checksum_sha256','execution_role','migration_id','source_sha']::text[]
-  AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_attribute a WHERE a.attrelid=l.oid AND a.attnum>0 AND NOT a.attisdropped
-     AND ((a.attname='applied_at' AND a.atttypid<>'pg_catalog.timestamptz'::regtype)
-       OR (a.attname<>'applied_at' AND a.atttypid<>'pg_catalog.text'::regtype)))
+ 'ledger_contract',COALESCE((SELECT l.relkind='r' AND NOT l.relrowsecurity AND NOT l.relforcerowsecurity
+  AND COALESCE((((SELECT array_agg(a.attname::text||':'||format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull::text ORDER BY a.attname::text)
+       FROM pg_attribute a WHERE a.attrelid=l.oid AND a.attnum>0 AND NOT a.attisdropped) = ARRAY['applied_at:timestamp with time zone:true','checksum_sha256:text:true','execution_role:text:true','migration_id:text:true','source_sha:text:true']::text[] OR (SELECT array_agg(a.attname::text||':'||format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull::text ORDER BY a.attname::text)
+       FROM pg_attribute a WHERE a.attrelid=l.oid AND a.attnum>0 AND NOT a.attisdropped) = ARRAY['applied_at:timestamp with time zone:true','checksum_sha256:character(64):true','execution_role:name:true','migration_id:text:true','source_sha:text:false']::text[]) AND EXISTS (SELECT 1 FROM pg_constraint k JOIN pg_attribute a ON a.attrelid=k.conrelid AND a.attname='migration_id'
+      WHERE k.conrelid=l.oid AND k.contype='p' AND k.convalidated AND NOT k.condeferrable
+        AND k.conkey=ARRAY[a.attnum]::smallint[]) AND NOT EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid=l.oid AND a.attnum>0 AND NOT a.attisdropped AND (a.attgenerated<>'' OR a.attidentity<>''))),false)
   FROM ledger l),false),
  'reader',(SELECT pg_catalog.jsonb_build_object(
   'login',r.rolcanlogin,'inherit',r.rolinherit,'superuser',r.rolsuper,'bypassrls',r.rolbypassrls,
