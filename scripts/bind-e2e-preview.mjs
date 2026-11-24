@@ -2,6 +2,7 @@ import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const branchCallbacks = new Map([
+  ["feat/peos-protected-development-evidence-20261124", "iam-control-center-new-pr180-ci.vercel.app"],
   ["feat/peos-canonical-ledger-adapter-20261123", "iam-control-center-new-pr179-ci.vercel.app"],
   ["feat/peos-collector-effective-privilege-preflight-20261123", "iam-control-center-new-pr178-ci.vercel.app"],
   ["feat/peos-baseline-evidence-collector-fixture-20261123", "iam-control-center-new-pr177-ci.vercel.app"],
