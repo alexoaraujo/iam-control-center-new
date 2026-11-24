@@ -7,6 +7,7 @@ import { resolve, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { prepareBaseline, reviewInventory, wrapperReview } from "../database/offline/prepare-canonical-baseline.mjs";
 import { sha256 } from "./check-migration-lineage.mjs";
+import { assembleDetached } from "../database/offline/assemble-canonical-signatures.mjs";
 import { EXPECTED } from "../database/offline/reconcile-canonical-readonly.mjs";
 
 const root=resolve(import.meta.dirname,"..");
@@ -116,4 +117,36 @@ test("CLI rejects invalid inputs without leaking their contents",()=>{
     writeFileSync(paths[0],"PRIVATE_MALFORMED_EVIDENCE");
     const bad=cli();assert.equal(bad.status,2);assert.doesNotMatch(bad.stderr+bad.stdout,/PRIVATE_MALFORMED/);
   }finally{rmSync(tmp,{recursive:true,force:true});}
+});
+
+test("offline custody assembles exact detached signatures with independent packet/trust digest pins",()=>{
+  const f=fixture(),v=f.signed(),trustBytes=bytes(v.trust);
+  const a={packetBytes:v.packetBytes,evidenceBytes:v.evidenceBytes,trustBytes,
+    collectorSignature:Buffer.from(v.signatures.collector,"base64"),reviewerSignature:Buffer.from(v.signatures.reviewer,"base64"),
+    expectedPacketSha256:sha256(v.packetBytes),expectedTrustSha256:sha256(trustBytes),root,now};
+  const result=assembleDetached(a);
+  assert.deepEqual(result.signatures,v.signatures);
+  assert.equal(result.receipt.signature_status,"VERIFIED_AGAINST_SUPPLIED_PINS_ONLY");
+  assert.equal(result.receipt.trust_roots_independently_approved,false);
+  assert.equal(result.receipt.baseline_approved,false);
+  assert.equal(result.receipt.execution_authorized,false);
+  for(const changes of [
+    {expectedPacketSha256:"0".repeat(64)},
+    {expectedTrustSha256:"0".repeat(64)},
+    {packetBytes:Buffer.concat([a.packetBytes,Buffer.from(" ")])},
+    {trustBytes:Buffer.concat([trustBytes,Buffer.from(" ")])},
+    {collectorSignature:a.reviewerSignature,reviewerSignature:a.collectorSignature},
+    {reviewerSignature:a.collectorSignature},
+    {reviewerSignature:Buffer.alloc(63)},
+    {evidenceBytes:Buffer.concat([a.evidenceBytes,Buffer.from(" ")])},
+    {now:now+25*3600000},
+  ])assert.throws(()=>assembleDetached({...a,...changes}));
+});
+test("offline custody rejects CI or non-interactive CLI before reading inputs",()=>{
+  const run=spawnSync(process.execPath,[join(root,"database/offline/assemble-canonical-signatures.mjs"),
+    "PRIVATE_PACKET_PATH","PRIVATE_EVIDENCE_PATH","trust","c","r","0".repeat(64),"1".repeat(64),"out"],
+    {env:{...process.env,CI:"true"},encoding:"utf8"});
+  assert.equal(run.status,2);
+  assert.match(run.stderr,/BLOCKED_OFFLINE_SIGNATURE_ASSEMBLY/);
+  assert.doesNotMatch(run.stdout+run.stderr,/PRIVATE_PACKET_PATH|PRIVATE_EVIDENCE_PATH/);
 });
