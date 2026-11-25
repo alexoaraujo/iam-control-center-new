@@ -1,0 +1,29 @@
+name: G2 historical migration provenance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/verify-legacy-provenance*'
+      - 'database/migrations/lineage-policy.json'
+      - 'database/baselines/legacy-source-candidate.json'
+      - '.github/workflows/iam-g2-legacy-provenance.yml'
+permissions:
+  contents: read
+jobs:
+  file-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Fetch historical commit as data only (public repository)
+        run: git fetch --no-tags --depth=1 https://github.com/alexoaraujo/iam-control-center-new.git b80c98c51746e1d49039015eb649b9bdd735ef7f
+      - run: node --test scripts/verify-legacy-provenance.test.mjs
+        env:
+          IAM_G2_LEGACY_OBJECT_TEST: "1"
+      - run: node scripts/verify-legacy-provenance.mjs
