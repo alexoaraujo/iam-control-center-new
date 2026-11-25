@@ -29,6 +29,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       eligible: ${{ steps.preflight.outputs.eligible }}
+      environment_id: ${{ steps.preflight.outputs.environment_id }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
@@ -53,9 +54,18 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Verify actual independent approval before mounting provider token
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREFLIGHT_ENVIRONMENT_ID: ${{ needs.preflight.outputs.environment_id }}
+        run: |
+          set -euo pipefail
+          export CHECKOUT_SHA="$(git rev-parse HEAD)"
+          node .github/trusted/peos-preview-vercel-metadata.mjs approval
       - name: Validate effective policy and approved SHA, read Preview metadata only
         env:
           GH_TOKEN: ${{ github.token }}
+          PREFLIGHT_ENVIRONMENT_ID: ${{ needs.preflight.outputs.environment_id }}
           APPROVED_PR_SHA: ${{ vars.IAM_PREVIEW_METADATA_APPROVED_PR_SHA }}
           APPROVED_MAIN_SHA: ${{ vars.IAM_PREVIEW_METADATA_APPROVED_MAIN_SHA }}
           APPROVED_PR_NUMBER: ${{ vars.IAM_PREVIEW_METADATA_APPROVED_PR_NUMBER }}

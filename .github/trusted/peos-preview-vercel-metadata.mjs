@@ -23,6 +23,8 @@ export function validateContext(e) {
     "EXECUTOR_SHA_MISMATCH");
   reject(SHA.test(e.EXPECTED_PR_SHA ?? "") && /^[1-9][0-9]{0,8}$/.test(e.PR_NUMBER ?? ""),
     "PR_INPUT_INVALID");
+  reject(/^[1-9][0-9]{0,19}$/.test(e.GITHUB_RUN_ID ?? "") && e.GITHUB_RUN_ATTEMPT === "1",
+    "FRESH_DISPATCH_REQUIRED");
 }
 
 export function validatePR(e, main, pr) {
@@ -52,13 +54,30 @@ export function validateProtection(meta, policies, custom) {
     reviewers.reviewers.length > 0 && reviewers.reviewers.every(r =>
       ["User","Team"].includes(r.type) && Number.isSafeInteger(r.reviewer?.id) && r.reviewer.id > 0),
     "INDEPENDENT_REVIEW_REQUIRED");
+  // Personal repository: accept explicit eligible users, not unverified team membership.
+  const ids = reviewers.reviewers.map(r=>r.reviewer.id);
+  reject(reviewers.reviewers.every(r=>r.type==="User") && new Set(ids).size===ids.length &&
+    ids.some(id=>id!==325264809), "NO_DISTINCT_ELIGIBLE_REVIEWER");
   reject(rules.filter(r=>r.type==="wait_timer").every(r=>r.wait_timer===0), "WAIT_TIMER_REVIEW_REQUIRED");
   reject(policies?.total_count===1 && policies.branch_policies?.length===1 &&
     policies.branch_policies[0]?.type==="branch" && policies.branch_policies[0]?.name==="main",
     "ENVIRONMENT_MAIN_ONLY_NOT_ATTESTED");
   reject(custom?.total_count===0 && Array.isArray(custom.custom_deployment_protection_rules) &&
     custom.custom_deployment_protection_rules.length===0, "CUSTOM_RULES_UNREVIEWED");
+  return {id:meta.id, reviewerIds:ids.filter(id=>id!==325264809).sort((a,b)=>a-b)};
 }
+
+export function validateReviewHistory(e, protection, history) {
+  reject(Array.isArray(history) && history.length > 0 && history.length <= 100 &&
+    history.every(r=>r && Array.isArray(r.environments) && r.environments.every(x=>x &&
+      Number.isSafeInteger(x.id) && typeof x.name==="string")), "APPROVAL_HISTORY_UNATTESTED");
+  const relevant=history.filter(r=>r.environments.some(x=>x.id===protection.id && x.name===ENV));
+  // Fail closed on ambiguous/rejected history. No reuse of old attempts.
+  reject(relevant.length===1 && relevant[0].state==="approved" &&
+    protection.reviewerIds.includes(relevant[0].user?.id) &&
+    String(relevant[0].user.id)!==e.GITHUB_ACTOR_ID, "DISTINCT_APPROVAL_NOT_ATTESTED");
+}
+
 
 export function validateApproval(e, identity) {
   reject(e.APPROVED_PR_SHA === identity.sha && e.APPROVED_MAIN_SHA === e.GITHUB_SHA &&
@@ -82,15 +101,19 @@ function getter(origin, token, fetcher) {
   };
 }
 
-export async function inspectGitHub(e, fetcher=fetch) {
+export async function inspectGitHub(e, fetcher=fetch, requireReview=false) {
   validateContext(e);
   const get = getter("https://api.github.com", e.GH_TOKEN, fetcher);
   const root = "/repos/"+REPO;
   const identity = validatePR(e, await get(root+"/branches/main"), await get(root+"/pulls/"+e.PR_NUMBER));
   const path = root+"/environments/"+ENV;
-  validateProtection(await get(path), await get(path+"/deployment-branch-policies?per_page=100"),
+  const protection = validateProtection(await get(path), await get(path+"/deployment-branch-policies?per_page=100"),
     await get(path+"/deployment_protection_rules?per_page=100"));
-  return identity;
+  if (requireReview) {
+    reject(String(protection.id) === e.PREFLIGHT_ENVIRONMENT_ID, "ENVIRONMENT_ID_CHANGED");
+    validateReviewHistory(e, protection, await get(root+"/actions/runs/"+e.GITHUB_RUN_ID+"/approvals"));
+  }
+  return {...identity, environmentId:protection.id};
 }
 
 export async function inspectVercel(e, identity, fetcher=fetch) {
@@ -110,15 +133,19 @@ export async function inspectVercel(e, identity, fetcher=fetch) {
 }
 
 async function main(e) {
-  reject(["preflight","metadata"].includes(process.argv[2]), "MODE_INVALID");
-  const identity = await inspectGitHub(e);
+  reject(["preflight","approval","metadata"].includes(process.argv[2]), "MODE_INVALID");
+  const identity = await inspectGitHub(e, fetch, process.argv[2]!=="preflight");
   if (process.argv[2] === "preflight") {
-    appendFileSync(e.GITHUB_OUTPUT, "eligible=true\n");
+    appendFileSync(e.GITHUB_OUTPUT, "eligible=true\nenvironment_id="+identity.environmentId+"\n");
     console.log("PASS_PREVIEW_METADATA_PREFLIGHT_ONLY");
     return;
   }
+  if (process.argv[2] === "approval") {
+    console.log("PASS_DISTINCT_ENVIRONMENT_APPROVAL_HISTORY");
+    return;
+  }
   const result = await inspectVercel(e, identity);
-  const again = await inspectGitHub(e);
+  const again = await inspectGitHub(e, fetch, true);
   reject(JSON.stringify(again)===JSON.stringify(identity), "PR_IDENTITY_CHANGED");
   console.log("PASS_PREVIEW_PROVIDER_METADATA_ONLY", JSON.stringify(result));
   console.log("E2E_AND_WILDCARD_AUTHORIZATION=HOLD");

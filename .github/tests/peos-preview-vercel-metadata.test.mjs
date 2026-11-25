@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { REPO, ENV, validateContext, validatePR, validateProtection, validateApproval, inspectVercel } from "../trusted/peos-preview-vercel-metadata.mjs";
+import { REPO, ENV, validateContext, validatePR, validateProtection, validateApproval, validateReviewHistory, inspectVercel } from "../trusted/peos-preview-vercel-metadata.mjs";
 const a="a".repeat(40), b="b".repeat(40);
 const host="iam-control-center-new-pr199-ci.vercel.app";
 const branch="security/peos-environments-governance-20261125";
 const context={GITHUB_REPOSITORY:REPO,GITHUB_REPOSITORY_ID:"1451861889",GITHUB_REPOSITORY_OWNER_ID:"325264809",
  GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_REF:"refs/heads/main",GITHUB_WORKFLOW_REF:REPO+"/.github/workflows/peos-preview-vercel-metadata.yml@refs/heads/main",
  GITHUB_ACTOR:"alexoaraujo",GITHUB_ACTOR_ID:"325264809",GITHUB_TRIGGERING_ACTOR:"alexoaraujo",GITHUB_SHA:a,GITHUB_WORKFLOW_SHA:a,CHECKOUT_SHA:a,
- EXPECTED_MAIN_SHA:a,EXPECTED_PR_SHA:b,PR_NUMBER:"199"};
+ EXPECTED_MAIN_SHA:a,EXPECTED_PR_SHA:b,PR_NUMBER:"199",GITHUB_RUN_ID:"123",GITHUB_RUN_ATTEMPT:"1"};
 const repo={id:1451861889,full_name:REPO};
 const pr={number:199,state:"open",head:{repo,sha:b,ref:branch},base:{repo,sha:a,ref:"main"}};
 const main={commit:{sha:a}};
@@ -51,4 +51,19 @@ test("provider GET only, no redirects, metadata validated",async()=>{
  const read=async(url,opts)=>{assert.equal(url.origin,"https://api.vercel.com");assert.equal(opts.method,"GET");assert.equal(opts.redirect,"error");return {ok:true,json:async()=>responses.shift()};};
  assert.deepEqual(await inspectVercel(approved,identity,read),{sha:b,host,deployment_id:"dpl_test"});
  assert.equal(responses.length,0);
+});
+
+test("fresh dispatch only, no prior attempt replay",()=>{
+ assert.throws(()=>validateContext({...context,GITHUB_RUN_ATTEMPT:"2"}), /FRESH_DISPATCH_REQUIRED/);
+});
+test("sole initiating reviewer and team membership not accepted",()=>{
+ for(const actor of [{type:"User",reviewer:{id:325264809}},{type:"Team",reviewer:{id:2}}]){
+   assert.throws(()=>validateProtection({...meta,protection_rules:[meta.protection_rules[0],{...meta.protection_rules[1],reviewers:[actor]}]},policies,custom),/NO_DISTINCT_ELIGIBLE_REVIEWER/);
+ }
+});
+test("actual distinct approval for same Environment ID",()=>{
+ const protection=validateProtection(meta,policies,custom);
+ const approval={state:"approved",user:{id:2},environments:[{id:1,name:ENV}]};
+ validateReviewHistory(context,protection,[approval]);
+ for(const history of [[],[{...approval,user:{id:325264809}}],[{...approval,user:{id:3}}],[{...approval,state:"rejected"}],[{...approval,environments:[{id:9,name:ENV}]}],[approval,approval]])assert.throws(()=>validateReviewHistory(context,protection,history));
 });
