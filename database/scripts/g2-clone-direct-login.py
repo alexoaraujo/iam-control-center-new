@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import ssl
 import subprocess
+import tempfile
 import sys
 import urllib.request
 import warnings
@@ -32,14 +33,15 @@ def require(ok, code):
 def check_expiry(now):
     require(now.tzinfo is not None and now < EXPIRY, "CLONE_EXPIRED")
 
-def conn_env(password):
+def conn_env(password, private_dir=None):
     require(isinstance(password,str) and password and "\0" not in password, "PASSWORD_INVALID")
     return {"PATH":"/usr/bin:/bin","LC_ALL":"C","PGHOST":HOST,"PGPORT":"5432",
             "PGDATABASE":DB,"PGUSER":ROLE,"PGCONNECT_TIMEOUT":"8",
             "PGSSLMODE":"verify-full","PGSSLROOTCERT":CA,
             "PGGSSENCMODE":"disable","PGCHANNELBINDING":"require",
             "PGPASSWORD":password,"PGPASSFILE":"/dev/null",
-            "PGSSLCERT":"/dev/null","PGSSLKEY":"/dev/null",
+            "PGSSLCERT":str(Path(private_dir or "/nonexistent")/"no-client.crt"),
+            "PGSSLKEY":str(Path(private_dir or "/nonexistent")/"no-client.key"),
             "PGOPTIONS":"-c default_transaction_read_only=on -c statement_timeout=10000"}
 
 SQL = r"""
@@ -118,8 +120,9 @@ def live(sha):
         warnings.simplefilter("error",getpass.GetPassWarning)
         password=getpass.getpass("Existing clone reader password (not stored): ")
     check_expiry(dt.datetime.now(dt.timezone.utc))
-    proc=subprocess.run(["/usr/bin/psql","-X","-w","-qAt","-v","ON_ERROR_STOP=1"],
-      input=SQL,text=True,capture_output=True,timeout=20,env=conn_env(password))
+    with tempfile.TemporaryDirectory(prefix="g2-login-") as private_dir:
+        proc=subprocess.run(["/usr/bin/psql","-X","-w","-qAt","-v","ON_ERROR_STOP=1"],
+          input=SQL,text=True,capture_output=True,timeout=20,env=conn_env(password,private_dir))
     del password
     require(proc.returncode==0,"DIRECT_LOGIN_OR_TLS_FAILED")
     result=validate(proc.stdout.strip())
