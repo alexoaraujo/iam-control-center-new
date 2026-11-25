@@ -19,6 +19,7 @@ ENVS = {
     "IAM-G1-Disposable-Lease-Probe": "audit/iam-g1-lease-schema-probe-20261115",
     "IAM-G1-Full-Backup-Custody": "main",
     "IAM-G1-B2-Full-Readback-Custody": "main",
+    "IAM-G1-Full-Restore-Custody": "main",
 }
 API_ROOT = f"https://api.github.com/repos/{REPO}/environments"
 
@@ -121,6 +122,7 @@ def live_attest() -> None:
         raise GateBlocked("GITHUB_REPOSITORY_NOT_ALLOWLISTED")
     token = os.environ.get("GITHUB_TOKEN", "")
     blocked = []
+    attested_ids: set[int] = set()
     for env in ENVS:
         try:
             read = get_json("/" + env, token)
@@ -129,6 +131,12 @@ def live_attest() -> None:
             # before that endpoint, without mislabeling it as inaccessible.
             if read.get("name") != env:
                 raise GateBlocked("ENV_NAME_MISMATCH")
+            # Numeric IDs come from the named REST resource, not a copied URL.
+            env_id = read.get("id")
+            if isinstance(env_id, bool) or not isinstance(env_id, int) or env_id <= 0:
+                raise GateBlocked("ENVIRONMENT_ID_MISSING_OR_INVALID")
+            if env_id in attested_ids:
+                raise GateBlocked("ENVIRONMENT_ID_COLLISION")
             if read.get("can_admins_bypass") is not False:
                 raise GateBlocked("ADMIN_BYPASS_ENABLED_OR_NOT_ATTESTED")
             guard = read.get("deployment_branch_policy") or {}
@@ -138,12 +146,16 @@ def live_attest() -> None:
             branch_rules = get_json("/" + env + "/deployment-branch-policies?per_page=100", token)
             custom_rules = get_json("/" + env + "/deployment_protection_rules", token)
             review_mode = verify_configuration(env, read, branch_rules, custom_rules)
+            attested_ids.add(env_id)
         except GateBlocked as error:
             # Continue gathering independent Environment metadata, but NEVER
             # return success after a partial audit or print token/API response.
             blocked.append(env + ": " + str(error))
             continue
         print("PASS_G1_LIVE_ENV_METADATA_READONLY " + env +
+              " environment_id=" + str(env_id) +
+              " console_url=https://github.com/" + REPO +
+              "/settings/environments/" + str(env_id) +
               " reviewer_mode=" + review_mode)
         if review_mode == "SOLO_NO_REQUIRED_REVIEWER":
             print("NOT_ATTESTED_G1_INDEPENDENT_REVIEW " + env)
@@ -151,7 +163,7 @@ def live_attest() -> None:
         for failure in blocked:
             print("BLOCKED_G1_LIVE_ENVIRONMENT_DETAIL: " + failure, file=sys.stderr)
         raise GateBlocked("TOTAL_BLOCKED_ENVIRONMENTS=" + str(len(blocked)))
-    print("PASS_G1_LIVE_ENV_METADATA_FOUR_READONLY_NO_SECRETS")
+    print("PASS_G1_LIVE_ENV_METADATA_FIVE_READONLY_NO_SECRETS")
     print("G1_PRIVILEGED_OPERATIONS=NOT_AUTHORIZED_BY_METADATA_AUDIT")
 
 

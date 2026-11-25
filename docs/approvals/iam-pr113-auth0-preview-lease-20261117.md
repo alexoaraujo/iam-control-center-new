@@ -1,5 +1,8 @@
 # IAM — Autorização operacional independente do lease Auth0/Preview para a PR #113
 
+> **HISTORICAL / CLOSED OPERATIONAL WINDOW — reconciliation 2026-11-25.** Baseline 19c265139404939814ffc59efb9c3f28016eab88. The original evidence below is preserved verbatim after this notice. Its target HEAD 51c857a1f130300cdb3f34686511200364558b87 is historical. No approval marker, reviewer statement, placeholder, prior deployment ID or window below grants a new authorization. The #113 proposal is being superseded by an evidence-only record, not an offline Auth0 exemption. This PR remains an approval/evidence vehicle, not a merge candidate or an instruction to execute a lease. Current single-maintainer governance does not waive any technical evidence, exclusivity, rollback or SHA constraint. All five operational controls remain unverified for a new lease; no claim of new approval or execution.
+
+
 > **Solicitação — NÃO é autorização concedida.** Este artefato documenta um procedimento de validação não produtiva. A criação da branch/PR, o review sem marcador ou o merge deste documento não autoriza modificar Vercel, Auth0, Neon, secrets ou Production.
 
 ## 1. Identidades e pré-condições imutáveis

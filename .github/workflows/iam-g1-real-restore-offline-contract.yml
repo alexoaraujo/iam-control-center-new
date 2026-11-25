@@ -5,6 +5,10 @@ on:
     paths:
       - 'scripts/iam-g1-full-restore.py'
       - '.github/tests/test-iam-g1-real-restore.py'
+      - '.github/tests/g1-pg18-private-toc.py'
+      - 'database/tests/fixtures/pg18-system-ca.Dockerfile'
+      - '.github/tests/test-iam-g1-main-checks-pagination.py'
+      - '.github/scripts/iam-g1-verify-main-checks.py'
       - '.github/workflows/iam-g1-b2-isolated-full-restore.yml'
       - '.github/workflows/iam-g1-real-restore-offline-contract.yml'
       - 'docs/operations/iam-g1-real-isolated-restore-20261122.md'
@@ -13,6 +17,10 @@ on:
     paths:
       - 'scripts/iam-g1-full-restore.py'
       - '.github/tests/test-iam-g1-real-restore.py'
+      - '.github/tests/g1-pg18-private-toc.py'
+      - 'database/tests/fixtures/pg18-system-ca.Dockerfile'
+      - '.github/tests/test-iam-g1-main-checks-pagination.py'
+      - '.github/scripts/iam-g1-verify-main-checks.py'
       - '.github/workflows/iam-g1-b2-isolated-full-restore.yml'
       - '.github/workflows/iam-g1-real-restore-offline-contract.yml'
       - 'docs/operations/iam-g1-real-isolated-restore-20261122.md'
@@ -35,7 +43,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/iam-g1-full-restore.py \
-            .github/tests/test-iam-g1-real-restore.py
+            .github/tests/test-iam-g1-real-restore.py \
+            .github/scripts/iam-g1-verify-main-checks.py \
+            .github/tests/test-iam-g1-main-checks-pagination.py
       - name: Execute synthetic negative security contracts without B2 or Neon
         shell: bash
         run: |
@@ -45,6 +55,17 @@ jobs:
             --disable-pip-version-check --quiet 'cryptography>=44,<47'
           "$RUNNER_TEMP/g1-restore-tests/bin/python" \
             .github/tests/test-iam-g1-real-restore.py -v
+          python3 .github/tests/test-iam-g1-main-checks-pagination.py -v
           echo 'PASS_G1_REAL_RESTORE_OFFLINE_GUARDS'
           echo 'G1_REAL_AES_GCM_DECRYPTION=NOT_ATTESTED'
           echo 'G1_FULL_BACKUP_RESTORE=NOT_ATTESTED'
+      - name: Restore a synthetic PG18 archive using the private runner-owned TOC
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -f database/tests/fixtures/pg18-system-ca.Dockerfile \
+            -t iam-pg18-system-ca:local database/tests/fixtures
+          fixture=$(docker run -d --rm -p 127.0.0.1::5432 \
+            -e POSTGRES_PASSWORD=synthetic-local-only postgres:18-bookworm)
+          trap 'docker rm -fv "$fixture" >/dev/null' EXIT
+          python3 .github/tests/g1-pg18-private-toc.py "$fixture"

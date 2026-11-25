@@ -281,3 +281,299 @@ test("PR155 callback scoped exclusively to synthetic marker fix branch SHA", () 
   assert.throws(() => verifyPreviewBinding(e, { ...d, name: "iam-control-center-new-ci-preview.vercel.app" }, a, dep), /not bound/);
   assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "c".repeat(40) } }), /exact PR SHA/);
 });
+
+test("PR156 pagination fix callback matches exact branch and PR SHA", () => {
+  const b = "fix/g1-main-checks-paginated-gate-20261122";
+  const h = "iam-control-center-new-pr156-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.deepEqual(verifyPreviewBinding(e, d, a, dep), {
+    callbackHost: h, callbackBranch: b, callbackUrl: `https://${h}`,
+  });
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "fix/g1-restore-synthetic-marker-isolation-20261122" }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, { ...d, name: "iam-control-center-new-ci-preview.vercel.app" }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "c".repeat(40) } }), /exact PR SHA/);
+});
+
+test("PR164 callback is exclusive to its original branch and exact-SHA Preview deployment", () => {
+  const prBranch = "fix/peos-g1-rollback-marker-transactional-20261122";
+  const host = "iam-control-center-new-pr164-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  const scopedEnv = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scopedEnv, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scopedEnv, { ...scopedDomain, gitBranch: branch }, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scopedEnv, scopedDomain, { ...scopedAlias, deploymentId: "dpl_stale" }, scopedDeployment), /not attached/);
+  assert.throws(() => verifyPreviewBinding(scopedEnv, scopedDomain, scopedAlias,
+    { ...scopedDeployment, meta: { ...scopedDeployment.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+  assert.throws(() => verifyPreviewBinding({ ...scopedEnv, E2E_CALLBACK_HOST: aliasHost },
+    scopedDomain, scopedAlias, scopedDeployment), /invalid/);
+});
+
+test("PR166 ledger branch has its own callback and refuses stale branch, alias or SHA", () => {
+  const prBranch = "fix/peos-g1-empty-ledger-fail-closed-20261122";
+  const host = "iam-control-center-new-pr166-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  const e = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const d = { ...domain, name: host, gitBranch: prBranch };
+  const a = { ...alias, alias: host };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(e, d, a, dep).callbackBranch, prBranch);
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: branch }, a, dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, { ...a, deploymentId: "dpl_old" }, dep), /not attached/);
+  assert.throws(() => verifyPreviewBinding(e, d, a,
+    { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+  assert.throws(() => verifyPreviewBinding({ ...e, E2E_CALLBACK_HOST: aliasHost },
+    d, a, dep), /invalid/);
+});
+
+test("PR169 callback host is unique and rejects a stale or shared Vercel branch", () => {
+  const newBranch = "test/peos-g3-tree-inventory-20261123";
+  const callbackHost = "iam-control-center-new-pr169-ci.vercel.app";
+  assert.equal(approvedCallback(newBranch), callbackHost);
+  assert.notEqual(approvedCallback(newBranch), approvedCallback("alexoaraujo-patch-1"));
+  const scoped = { ...env, PR_HEAD_BRANCH: newBranch, E2E_CALLBACK_HOST: callbackHost };
+  const newDomain = { ...domain, name: callbackHost, gitBranch: newBranch };
+  const newAlias = { ...alias, alias: callbackHost };
+  const newDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: newBranch } };
+  assert.equal(verifyPreviewBinding(scoped, newDomain, newAlias, newDeployment).callbackHost, callbackHost);
+  assert.throws(() => verifyPreviewBinding(scoped, {...newDomain, gitBranch: "alexoaraujo-patch-1"}, newAlias, newDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, newDomain, newAlias,
+    {...newDeployment, meta: {...newDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR171 dedicated callback rejects stale branch, wrong alias and SHA", () => {
+  const branch = "audit/peos-g3-current-main-rebaseline-20261123";
+  const host = "iam-control-center-new-pr171-ci.vercel.app";
+  assert.equal(approvedCallback(branch), host);
+  assert.notEqual(approvedCallback(branch), approvedCallback("test/peos-g3-tree-inventory-20261123"));
+  const scoped = { ...env, PR_HEAD_BRANCH: branch, E2E_CALLBACK_HOST: host };
+  const domainNew = { ...domain, name: host, gitBranch: branch };
+  const aliasNew = { ...alias, alias: host };
+  const deploymentNew = { ...deployment, meta: { ...deployment.meta, githubCommitRef: branch } };
+  assert.equal(verifyPreviewBinding(scoped, domainNew, aliasNew, deploymentNew).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...domainNew, gitBranch: "test/peos-g3-tree-inventory-20261123"}, aliasNew, deploymentNew), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, domainNew, {...aliasNew, alias: "iam-control-center-new-pr169-ci.vercel.app"}, deploymentNew), /mismatch|alias|invalid/i);
+  assert.throws(() => verifyPreviewBinding(scoped, domainNew, aliasNew,
+    {...deploymentNew, meta: {...deploymentNew.meta, githubCommitSha: "f".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR173 canonical reconciliation callback is branch-bound and exact-SHA only", () => {
+  const prBranch = "feat/peos-canonical-reconciliation-readonly-20261123";
+  const host = "iam-control-center-new-pr173-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(approvedCallback(prBranch), approvedCallback("audit/peos-g3-current-main-rebaseline-20261123"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped,
+    { ...scopedDomain, gitBranch: "audit/peos-g3-current-main-rebaseline-20261123" },
+    scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain,
+    { ...scopedAlias, deploymentId: "dpl_stale" }, scopedDeployment), /not attached/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias,
+    { ...scopedDeployment, meta: { ...scopedDeployment.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+});
+
+test("PR174 transactional fixture runner Preview binds the unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-fixture-transactional-migration-runner-20261123";
+  const host = "iam-control-center-new-pr174-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-canonical-reconciliation-readonly-20261123"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR175 role reconciliation fixture Preview binds unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-role-reconciliation-fixture-20261123";
+  const host = "iam-control-center-new-pr175-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-fixture-transactional-migration-runner-20261123"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR176 baseline preparation Preview binds unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-canonical-baseline-preparation-20261123";
+  const host = "iam-control-center-new-pr176-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-role-reconciliation-fixture-20261123"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR177 evidence collector Preview binds unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-baseline-evidence-collector-fixture-20261123";
+  const host = "iam-control-center-new-pr177-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-canonical-baseline-preparation-20261123"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR178 collector privilege preflight Preview binds unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-collector-effective-privilege-preflight-20261123";
+  const host = "iam-control-center-new-pr178-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-baseline-evidence-collector-fixture-20261123"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR179 canonical ledger adapter Preview binds unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-canonical-ledger-adapter-20261123";
+  const host = "iam-control-center-new-pr179-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-collector-effective-privilege-preflight-20261123"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR180 protected Development collector Preview binds unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-protected-development-evidence-20261124";
+  const host = "iam-control-center-new-pr180-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-canonical-ledger-adapter-20261123"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR181 offline signature custody Preview binds unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-offline-signature-custody-20261124";
+  const host = "iam-control-center-new-pr181-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-protected-development-evidence-20261124"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR182 G2 environment preflight Preview binds unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-g2-protected-environment-preflight-20261124";
+  const host = "iam-control-center-new-pr182-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-protected-development-evidence-20261124"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR183 G2 reader ACL rehearsal Preview binds unique branch and exact SHA", () => {
+  const prBranch = "test/peos-g2-reader-acl-rehearsal-20261125";
+  const host = "iam-control-center-new-pr183-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-g2-protected-environment-preflight-20261124"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR184 G2 direct login preflight Preview binds unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-g2-clone-direct-login-preflight-20261125";
+  const host = "iam-control-center-new-pr184-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("test/peos-g2-reader-acl-rehearsal-20261125"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR185 G2 legacy provenance proof Preview binds unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-g2-legacy-provenance-proof-20261125";
+  const host = "iam-control-center-new-pr185-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-g2-clone-direct-login-preflight-20261125"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR186 G2 local preflight diagnostics Preview binds unique branch and exact SHA", () => {
+  const prBranch = "fix/peos-g2-local-preflight-diagnostics-20261125";
+  const host = "iam-control-center-new-pr186-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("feat/peos-g2-legacy-provenance-proof-20261125"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});
+
+test("PR187 G2 ACL review candidate Preview binds unique branch and exact SHA", () => {
+  const prBranch = "feat/peos-g2-acl-candidate-contract-20261125";
+  const host = "iam-control-center-new-pr187-ci.vercel.app";
+  assert.equal(approvedCallback(prBranch), host);
+  assert.notEqual(host, approvedCallback("fix/peos-g2-local-preflight-diagnostics-20261125"));
+  const scoped = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: host };
+  const scopedDomain = { ...domain, name: host, gitBranch: prBranch };
+  const scopedAlias = { ...alias, alias: host };
+  const scopedDeployment = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+  assert.equal(verifyPreviewBinding(scoped, scopedDomain, scopedAlias, scopedDeployment).callbackHost, host);
+  assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
+  assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
+});

@@ -75,18 +75,14 @@ jobs:
                  "$APPROVED_MAIN_SHA" == "$GITHUB_SHA" ]] || {
                 echo "::error::BLOCKED_G1_RESTORE_DISPATCH_NOT_EXACT_APPROVED_SHA"; exit 2;
               }
-              checks="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100")"
-              jq -e --arg sha "$GITHUB_SHA" '
-                .check_runs as $runs |
-                ["quality","pg18-security-contracts","g1-real-restore-offline-contract"] |
-                all(.[]; . as $name |
-                  ([$runs[] | select(.head_sha == $sha and
-                    .name == $name and .status == "completed" and
-                    .conclusion == "success")] | length) >= 1)
-              ' <<< "$checks" >/dev/null || {
-                echo "::error::BLOCKED_G1_RESTORE_MISSING_MAIN_GATES"; exit 2;
-              }
-              echo 'PASS_G1_RESTORE_MAIN_SHA_AND_PG18_QUALITY_OFFLINE_CHECKS'
+              # The main SHA can have >100 check runs due to other audited workflows.
+              # Read EVERY GitHub API page; an incomplete or changed page fails closed.
+              # Never trust a check name alone: require same SHA, GitHub Actions and SUCCESS.
+              gh api --paginate --slurp \
+                "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100" \
+                | python3 .github/scripts/iam-g1-verify-main-checks.py "$GITHUB_SHA" || {
+                  echo "::error::BLOCKED_G1_RESTORE_MISSING_MAIN_GATES"; exit 2;
+                }
               ;;
             *)
               echo "::error::BLOCKED_G1_RESTORE_DISPATCH_PAIR"; exit 2
@@ -108,6 +104,7 @@ jobs:
             --quiet --disable-pip-version-check 'cryptography>=44,<47'
           "$RUNNER_TEMP/g1-restore-tests/bin/python" \
             .github/tests/test-iam-g1-real-restore.py -v
+          python3 .github/tests/test-iam-g1-main-checks-pagination.py -v
           echo 'PASS_G1_REAL_RESTORE_OFFLINE_GUARDS'
 
   stage-encrypted-ciphertext:
@@ -148,7 +145,7 @@ jobs:
             --quiet --disable-pip-version-check 'boto3>=1.35,<2' 'cryptography>=44,<47'
           "$RUNNER_TEMP/g1-b2-reader/bin/python" scripts/iam-g1-full-restore.py --stage-b2
       - name: Upload AES-GCM ciphertext ONLY, protected one-day transfer
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0, node24
         with:
           name: iam-g1-ciphertext-${{ github.run_id }}
           path: ${{ runner.temp }}/iam-g1-stage/approved-ciphertext.aesgcm
@@ -187,11 +184,43 @@ jobs:
           set -euo pipefail
           python3 scripts/iam-g1-full-restore.py --check
           python3 scripts/iam-g1-full-restore.py --attest-env
-      - name: Download same-run encrypted artifact (never plaintext)
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: iam-g1-ciphertext-${{ github.run_id }}
-          path: ${{ runner.temp }}/iam-g1-stage
+      - name: Download same-run encrypted artifact using trusted GitHub CLI
+        # Avoid an action outside the repository's SHA-pinned Allowed actions.
+        # GH CLI uses the existing read-only actions permission; never use
+        # "latest run" or an artifact selected by a mutable name alone.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$GITHUB_REPOSITORY" == 'alexoaraujo/iam-control-center-new' &&
+             "$GITHUB_REF" == 'refs/heads/main' &&
+             "$GITHUB_EVENT_NAME" == 'workflow_dispatch' &&
+             "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]] || {
+            echo '::error::BLOCKED_G1_RESTORE_UNTRUSTED_ARTIFACT_ORIGIN'; exit 2;
+          }
+          stage="$RUNNER_TEMP/iam-g1-stage"
+          [[ ! -L "$stage" ]] || {
+            echo '::error::BLOCKED_G1_RESTORE_ARTIFACT_DIRECTORY_LINK'; exit 2;
+          }
+          install -d -m 700 -- "$stage"
+          [[ -d "$stage" && ! -e "$stage/approved-ciphertext.aesgcm" ]] || {
+            echo '::error::BLOCKED_G1_RESTORE_ARTIFACT_STAGE_RESIDUE'; exit 2;
+          }
+          # This exact run ID plus immutable artifact name identifies only
+          # the ciphertext produced by stage-encrypted-ciphertext above.
+          gh run download "$GITHUB_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "iam-g1-ciphertext-${GITHUB_RUN_ID}" \
+            --dir "$stage" >/dev/null || {
+              echo '::error::BLOCKED_G1_RESTORE_SAME_RUN_ARTIFACT_DOWNLOAD'; exit 2;
+            }
+          [[ -f "$stage/approved-ciphertext.aesgcm" &&
+             ! -L "$stage/approved-ciphertext.aesgcm" ]] || {
+            echo '::error::BLOCKED_G1_RESTORE_SAME_RUN_ARTIFACT_NOT_REGULAR'; exit 2;
+          }
+          echo 'PASS_G1_RESTORE_SAME_RUN_CIPHERTEXT_STAGED'
       - name: Build PostgreSQL 18 libpq client with system CA, no secrets
         shell: bash
         run: |
