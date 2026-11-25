@@ -1,0 +1,385 @@
+{
+  "format": "peos/g3-trusted-main-drift-observation/v1",
+  "repository": "alexoaraujo/iam-control-center-new",
+  "observed_at_utc": "2026-11-22",
+  "baseline": {
+    "pr": 151,
+    "merge_sha": "6af7e9e62cbc7f6febf92e630ecf209b00b99981",
+    "tree_sha": "5efd5e502d4d251f060545501c6aa94a1f154729"
+  },
+  "observed_main": {
+    "sha": "aec29f9b9daaa979e02c25df2d027bd4d040aee7",
+    "tree_sha": "987db2cfb0eb70e2038e9949be26138a640dd7fc"
+  },
+  "compare": {
+    "status": "ahead",
+    "ahead_by": 103,
+    "behind_by": 0,
+    "total_commits": 103,
+    "path_count": 25
+  },
+  "critical_unchanged": [
+    {
+      "path": ".github/trusted/iam-main-postmerge-preflight.sh",
+      "base_blob": "a249595a6eade403248d4d12d7260387c757c4a7",
+      "main_blob": "a249595a6eade403248d4d12d7260387c757c4a7",
+      "unchanged": true,
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/trusted/g3-pr128.spec.cjs",
+      "base_blob": "78c221e1d49492dc53efd95f2a1e7c235b00978e",
+      "main_blob": "78c221e1d49492dc53efd95f2a1e7c235b00978e",
+      "unchanged": true,
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/trusted/g3-pr128.playwright.config.cjs",
+      "base_blob": "2074dd5d52534ea57dc8d6dd220cf147c9bb70b3",
+      "main_blob": "2074dd5d52534ea57dc8d6dd220cf147c9bb70b3",
+      "unchanged": true,
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/workflows/iam-main-postmerge-auth0-rbac.yml",
+      "base_blob": "f69a5578a1c3e8e7a5ea86b78177f1da6336b73e",
+      "main_blob": "f69a5578a1c3e8e7a5ea86b78177f1da6336b73e",
+      "unchanged": true,
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": "apps/web/src/lib/authorization.ts",
+      "base_blob": "e545f7b82ca17d3f4b997364485efab3768e791b",
+      "main_blob": "e545f7b82ca17d3f4b997364485efab3768e791b",
+      "unchanged": true,
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": "apps/web/src/lib/readiness.ts",
+      "base_blob": "fda1fb8c977eba704d2cc50d81b7123893870260",
+      "main_blob": "fda1fb8c977eba704d2cc50d81b7123893870260",
+      "unchanged": true,
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": "database/migrations/lineage-policy.json",
+      "base_blob": "909aa6750c159c4faffccc10ad81335c05102122",
+      "main_blob": "909aa6750c159c4faffccc10ad81335c05102122",
+      "unchanged": true,
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    }
+  ],
+  "changed_paths": [
+    {
+      "path": ".github/scripts/iam-g1-environment-readonly-attestation.py",
+      "status": "modified",
+      "base_blob": "53c6d98aaf8f2d11e5993bb5540a9312427284dd",
+      "main_blob": "b9550ee00ffa937ccd6ac373bd1850c1df24d656",
+      "review_category": "automation_G1",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/scripts/iam-g1-verify-main-checks.py",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "0de7e06f42e4034e103531d7693b21402cb96623",
+      "review_category": "automation_G1",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/tests/g1-pg18-private-toc.py",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "8a53df6e5a5808bcf52b4a029daf312fa1bbfeb7",
+      "review_category": "test_G1",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/tests/test-iam-g1-archive-authentication.py",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "b1e8d2bb46e39341b34ca04b4a645eace1bb4d95",
+      "review_category": "test_G1",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/tests/test-iam-g1-b2-full-readback.py",
+      "status": "modified",
+      "base_blob": "19681fe9930241f8d3453ecf5b4506cb767ca3ab",
+      "main_blob": "923e5986ae931b88b277099c97990989938f7861",
+      "review_category": "test_G1",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/tests/test-iam-g1-environment-readonly-attestation.py",
+      "status": "modified",
+      "base_blob": "c87869baccde4e96c5ca9bb06f49abb2d4c90e7e",
+      "main_blob": "8db7836eefd8c5e3ebf4fe5c4558243ec36deff1",
+      "review_category": "test_G1",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/tests/test-iam-g1-main-checks-pagination.py",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "81469ced1a5d6d178187ff499dd1775f307ac05e",
+      "review_category": "test_G1",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/tests/test-iam-g1-real-restore.py",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "b0eb94b6efb753837738aef4b10af66a663b9f7e",
+      "review_category": "test_G1",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/workflows/iam-g1-b2-full-readback.yml",
+      "status": "modified",
+      "base_blob": "4f7fc211fba8f3f1d6827bb9a5c7477bcc50aa2d",
+      "main_blob": "404cfa1771316803826694ed3999f8a03d9645a8",
+      "review_category": "workflow_G1",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/workflows/iam-g1-b2-isolated-full-restore.yml",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "54c9a32ce09422cfd781cb249249ce33e5604e0b",
+      "review_category": "workflow_G1",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/workflows/iam-g1-environments-readonly-attestation.yml",
+      "status": "modified",
+      "base_blob": "19dd58c36e590f951c2ed23c2a328ad5ca9d174c",
+      "main_blob": "773e0fc311c875bbd4ac206f86bbdf7b92082893",
+      "review_category": "workflow_G1",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/workflows/iam-g1-full-recovery-contract.yml",
+      "status": "modified",
+      "base_blob": "e1123e7466cc905ee34c6475534f410f0b97a258",
+      "main_blob": "4724404e561fcccd3c2fde7e4fa5fd22484fbb23",
+      "review_category": "workflow_G1",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": ".github/workflows/iam-g1-real-restore-offline-contract.yml",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "5887dfa83a03f5a8d4efb9eae49775c43f0fea26",
+      "review_category": "workflow_G1",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": "database/offline/compare-migration-ledgers.mjs",
+      "status": "modified",
+      "base_blob": "82e0b8375a6245a8c1df68b1aec029adc7421acc",
+      "main_blob": "6acf067157f52444c5b4428abb6b3387cfc25622",
+      "review_category": "migration_lineage_offline",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": "database/offline/compare-migration-ledgers.test.mjs",
+      "status": "modified",
+      "base_blob": "dc0782511842e2e1a60051b42501d9cdfee566b5",
+      "main_blob": "bcb099624d12f679119843b9f4d2cf60165365dd",
+      "review_category": "migration_lineage_offline",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": "docs/operations/iam-g1-b2-authenticated-restore-design-20261121.md",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "dd473202a76e86dbed64463d38c50c136a47bf83",
+      "review_category": "documentation",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": "docs/operations/iam-g1-b2-real-restore-attestation-45060036018.md",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "7332c61b59caefc9e16dd2038a4a14625d3c0ef5",
+      "review_category": "documentation",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": "docs/operations/iam-g1-real-isolated-restore-20261122.md",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "cbb9292b7bc48ac8ec93957875edc92ebae68e5c",
+      "review_category": "documentation",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": "scripts/auth0-preview-contract.test.mjs",
+      "status": "modified",
+      "base_blob": "63876f299db7401c081d4c3e02907eba3df9409a",
+      "main_blob": "4830c4d23a1f89b05d10a89e685c6d9376122b85",
+      "review_category": "callback_preview",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": "scripts/bind-e2e-preview.mjs",
+      "status": "modified",
+      "base_blob": "3a6a5ea3c06e295399c20275fab858f2ea3cf263",
+      "main_blob": "4a9b957895738a15fc44a4700f9557cc8d5b3227",
+      "review_category": "callback_preview",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": "scripts/bind-e2e-preview.test.mjs",
+      "status": "modified",
+      "base_blob": "28e385004f9f25c92c2d84fe83b595fb0312ea89",
+      "main_blob": "f7c01083b22793324efbcd5337a8daf07514443f",
+      "review_category": "callback_preview",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": "scripts/iam-g1-archive-authentication.py",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "bd17bc9366203c0886ae899e136ae6e49bf049d0",
+      "review_category": "G1_executor_or_utility",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": "scripts/iam-g1-b2-full-readback.py",
+      "status": "modified",
+      "base_blob": "37e76d6dd43e13e8f4899521572336a8e2228ab0",
+      "main_blob": "13ac05132a5f6c9fef63eef38d8e2cd13eab8a7d",
+      "review_category": "G1_executor_or_utility",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    },
+    {
+      "path": "scripts/iam-g1-full-restore.py",
+      "status": "added",
+      "base_blob": null,
+      "main_blob": "2169086290d191bdf48fdb3d5d35dc9990ab606c",
+      "review_category": "G1_executor_or_utility",
+      "base_mode": null,
+      "main_mode": "100644",
+      "base_type": null,
+      "main_type": "blob"
+    },
+    {
+      "path": "scripts/sync-auth0-e2e-preview.test.mjs",
+      "status": "modified",
+      "base_blob": "fc93e8259710baa1db1d71464655559de35665a3",
+      "main_blob": "0a69044594f356a71bd426bf271718e58648ef53",
+      "review_category": "callback_preview",
+      "base_mode": "100644",
+      "main_mode": "100644",
+      "base_type": "blob",
+      "main_type": "blob"
+    }
+  ],
+  "read_only_observation": true,
+  "independently_reviewed": false,
+  "privileged_executor_authorized": false,
+  "g3_live_grant_revoke_attested_on_current_main": false,
+  "new_g3_lease_approved": false,
+  "production_cutover_authorized": false,
+  "tree_object_attestation": {
+    "all_objects_enumerated": true,
+    "baseline_tree_truncated": false,
+    "main_tree_truncated": false,
+    "object_differences": 25,
+    "mode_only_differences": 0,
+    "critical_mode_and_type_unchanged": true,
+    "contains_privilege_authorization": false
+  }
+}
