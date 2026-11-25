@@ -620,3 +620,18 @@ test("retired Preview branches fail closed before shared or historical binding",
   }
   assert.equal(approvedCallback("unknown-branch"), aliasHost);
 });
+
+
+test("PR194 retirement reconciliation uses dedicated exact-SHA Preview", () => {
+  const b = "fix/peos-preview-retirement-reconcile-20261125";
+  const h = "iam-control-center-new-pr194-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.equal(verifyPreviewBinding(e,d,a,dep).callbackHost,h);
+  assert.throws(() => verifyPreviewBinding({...e,E2E_CALLBACK_HOST:aliasHost},d,a,dep), /invalid/);
+  assert.throws(() => verifyPreviewBinding(e,{...d,gitBranch:branch},a,dep), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e,d,a,{...dep,meta:{...dep.meta,githubCommitSha:"b".repeat(40)}}), /exact PR SHA/);
+});
