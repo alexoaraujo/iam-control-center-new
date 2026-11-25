@@ -1,19 +1,20 @@
-# Vercel Preview build filter
+# Vercel Preview build and authenticated E2E policy
 
 ## Purpose
 
-Keep GitHub quality gates mandatory while avoiding a Vercel Preview build when a pull request changes only documentation or operational material that cannot affect the deployed Next.js application.
+Every PR that requires Preview evidence must have a real READY deployment at its exact HEAD SHA. A Vercel commit status of success with description "Canceled by Ignored Build Step" is not READY. The PR #129 incident demonstrated that a documentation-only build cancellation can deadlock the documentation gate.
 
-## Build policy
+## Separate deployment from authentication classification
 
-- Production deployments are never skipped.
-- Preview deployments build when `apps/web/**`, `packages/**`, workspace dependency manifests, or shared build configuration changes.
-- Preview deployments may be skipped for documentation-only, database proposal, or workflow-only changes.
-- Missing commit metadata, an unavailable previous SHA, or a Git diff failure must fall back to a normal build.
-- GitHub CI continues to run frozen install, dependency audit, lint, typecheck, application tests, filter tests, and the application build on every pull request. Only the external Preview wait gate is skipped when the same path-impact check says no deployment is required.
+- Vercel Ignored Build Step: every Preview builds (exit 1), including docs-only updates, main-sync merges, and redeployments. No skipped build is accepted as deployment evidence.
+- GitHub CI: `node scripts/vercel-ignore-build.mjs --github-output` preserves the existing `preview_required` contract. This flag means authenticated Preview/E2E is required. Only a verified nonempty diff containing README.md, SECURITY.md or docs/** may omit that path. Unknown, empty or invalid scope requires authenticated E2E.
+- Documentation-only PRs still require the trusted exact-SHA `docs-preview-gate` and `docs-preview-evidence` checks. Code, SQL, workflow and security changes still require Preview, Auth0 preflight and E2E. No gate changes or exemptions are introduced.
+- Production remains governed by the existing exact reviewed SHA on main predicate. The Ignored Build Step is defense in depth, not release authorization; Vercel deployment-source protection and explicit promotion remain separate.
 
-## Provider rollout
+## Provider rollout and operational cost
 
-The Vercel project-level Ignored Build Step calls `scripts/vercel-ignore-build.mjs` from the repository root. The shell command resolves the Git root so it works even when the Vercel project Root Directory is a subdirectory. Branches that do not yet contain the script fall back to a normal build. The script is intentionally fail-closed.
+Keep the project-level command pointing to the repository script; do not set a global unconditional exit 1. Verify live provider readback, preserve Production protection and validate a documentation-only PR after this change is integrated. This trades additional Preview builds for the existing READY requirement. Keep free-tier rate limits and concurrency protections; do not retry repeatedly or cancel unrelated deployments.
 
-This policy does not authorize a Production deployment, alter deployment protection, or change any Auth0/Neon setting.
+For old branches that still contain the previous filter, a single exact-SHA Preview redeploy can recover the gate, without changing the branch or Production. Verify actual READY and the GitHub status description "Deployment has completed".
+
+This change does not alter Vercel project settings, authorize Production, or change any Auth0/Neon credential or permission.

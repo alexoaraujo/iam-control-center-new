@@ -8,7 +8,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { isApprovedProductionRelease } from "./production-deploy-approval.mjs";
-import { shouldBuild } from "./vercel-ignore-build.mjs";
+import { shouldBuild, requiresAuthenticatedPreview } from "./vercel-ignore-build.mjs";
 import { decideSecurityGate } from "./release-security-gate.mjs";
 
 const releaseSha = "a".repeat(40);
@@ -73,10 +73,10 @@ test("PR41+PR70: security-gate never treats skipped/failed Auth0 E2E as a pass",
 
 test("PR41+PR70: docs-only changes need real documentation Preview evidence", () => {
   const changedFiles = ["docs/operations/release-runbook.md"];
-  assert.equal(shouldBuild({
-    environment: "preview", previousSha: otherSha, currentSha: releaseSha,
-    changedFiles,
+  assert.equal(requiresAuthenticatedPreview({
+    previousSha: otherSha, currentSha: releaseSha, changedFiles,
   }), false);
+  assert.equal(shouldBuild({ environment: "preview", currentSha: releaseSha }), true);
   const evidence = {
     quality: "success", previewRequired: "false", preview: "skipped",
     auth0Enabled: "false", syncAuth0: "skipped", auth0E2E: "skipped",
