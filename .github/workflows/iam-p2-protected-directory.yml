@@ -1,0 +1,132 @@
+name: IAM P2 protected disposable directory proof
+# Reviewed default branch only. No pull_request_target or candidate checkout.
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact reviewed PR 197 head SHA
+        required: true
+        type: string
+      trusted_main_sha:
+        description: Exact reviewed executor main SHA
+        required: true
+        type: string
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  actions: read
+concurrency:
+  group: iam-p2-pr197-exclusive-disposable
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/main' && github.actor == 'alexoaraujo'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+      - name: Read-only exact candidate and trusted main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          P2_HEAD_SHA: ${{ inputs.candidate_sha }}
+          P2_TRUSTED_MAIN_SHA: ${{ inputs.trusted_main_sha }}
+        run: node scripts/p2-protected-preflight.mjs
+  execute:
+    needs: preflight
+    if: needs.preflight.result == 'success' && github.ref == 'refs/heads/main'
+    environment: IAM-P2-PR197-Disposable-Directory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      actions: read
+      id-token: write
+    env:
+      P2_HEAD_SHA: ${{ inputs.candidate_sha }}
+      P2_TRUSTED_MAIN_SHA: ${{ inputs.trusted_main_sha }}
+      P2_APPROVED_SHA: ${{ vars.IAM_P2_APPROVED_SHA }}
+      P2_APPROVED_MAIN_SHA: ${{ vars.IAM_P2_APPROVED_MAIN_SHA }}
+      P2_BRANCH_ID: ${{ vars.IAM_P2_BRANCH_ID }}
+      P2_ENDPOINT_ID: ${{ vars.IAM_P2_ENDPOINT_ID }}
+      P2_LEASE_START_AT: ${{ vars.IAM_P2_LEASE_START_AT }}
+      P2_LEASE_EXPIRES_AT: ${{ vars.IAM_P2_LEASE_EXPIRES_AT }}
+      P2_OPERATOR_APPROVAL: ${{ vars.IAM_P2_OPERATOR_APPROVAL }}
+      P2_ENVIRONMENT_READBACK: ${{ vars.IAM_P2_ENVIRONMENT_READBACK }}
+      E2E_BASE_URL: https://iam-control-center-new-p2-directory-ci.vercel.app
+      E2E_CALLBACK_HOST: iam-control-center-new-p2-directory-ci.vercel.app
+      E2E_DEPLOYMENT_HOST: iam-control-center-new-p2-directory-ci.vercel.app
+      PR_HEAD_BRANCH: feat/peos-p2-tenant-directory-20261125
+      PR_HEAD_REPOSITORY: alexoaraujo/iam-control-center-new
+      PR_NUMBER: '197'
+      PR_HEAD_SHA: ${{ inputs.candidate_sha }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+      - name: Check protected approval, live metadata and lease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          P2_NEON_READ_TOKEN: ${{ secrets.IAM_P2_NEON_ENDPOINT_READ_TOKEN }}
+          P2_GITHUB_ENVIRONMENT_READ_TOKEN: ${{ secrets.IAM_P2_GITHUB_ENVIRONMENT_READ_TOKEN }}
+          P2_OWNER_DATABASE_URL: ${{ secrets.IAM_P2_OWNER_DATABASE_URL }}
+          P2_CONTEXT_KEY_HEX: ${{ secrets.IAM_P2_CONTEXT_KEY_HEX }}
+        run: node scripts/p2-protected-preflight.mjs protected
+      - name: Install reviewed pinned browser and direct PostgreSQL clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          mkdir -p p2-deps
+          cd p2-deps
+          npm init -y >/dev/null
+          npm install --save-exact --no-audit --no-fund @playwright/test@1.64.1 postgres@4.1.1
+          npm audit --audit-level=high
+          node --check "$GITHUB_WORKSPACE/.github/trusted/p2-directory.spec.cjs"
+          ./node_modules/.bin/playwright install --with-deps chromium
+      - name: Verify OIDC exact protected workflow identity and execute test
+        env:
+          GH_TOKEN: ${{ github.token }}
+          P2_NEON_READ_TOKEN: ${{ secrets.IAM_P2_NEON_ENDPOINT_READ_TOKEN }}
+          P2_GITHUB_ENVIRONMENT_READ_TOKEN: ${{ secrets.IAM_P2_GITHUB_ENVIRONMENT_READ_TOKEN }}
+          P2_OWNER_DATABASE_URL: ${{ secrets.IAM_P2_OWNER_DATABASE_URL }}
+          P2_CONTEXT_KEY_HEX: ${{ secrets.IAM_P2_CONTEXT_KEY_HEX }}
+          AUTH0_E2E_USERNAME: ${{ secrets.IAM_P2_AUTH0_E2E_USERNAME }}
+          AUTH0_E2E_PASSWORD: ${{ secrets.IAM_P2_AUTH0_E2E_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          node scripts/p2-protected-preflight.mjs protected
+          token="$(curl --fail --silent --show-error --get --data-urlencode 'audience=https://github.com/alexoaraujo' --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -er '.value')"
+          printf '::add-mask::%s\n' "$token"
+          export VERCEL_TRUSTED_OIDC_TOKEN="$token"
+          node --input-type=module <<'NODE'
+          const claims=JSON.parse(Buffer.from(process.env.VERCEL_TRUSTED_OIDC_TOKEN.split(".")[1],"base64url").toString("utf8"));
+          const aud=Array.isArray(claims.aud)?claims.aud:[claims.aud];
+          if(claims.iss!=="https://token.actions.githubusercontent.com"||!aud.includes("https://github.com/alexoaraujo")||
+            claims.sub!=="repo:alexoaraujo@325264809/iam-control-center-new@1451861889:environment:IAM-P2-PR197-Disposable-Directory"||
+            claims.environment!=="IAM-P2-PR197-Disposable-Directory"||claims.ref!=="refs/heads/main"||
+            claims.workflow_ref!=="alexoaraujo/iam-control-center-new/.github/workflows/iam-p2-protected-directory.yml@refs/heads/main"||
+            claims.workflow_sha!==process.env.GITHUB_SHA||claims.event_name!=="workflow_dispatch"||
+            String(claims.repository_id)!=="1451861889"||String(claims.repository_owner_id)!=="325264809"||
+            !Number.isFinite(claims.exp)||claims.exp<=Date.now()/1000) throw Error("BLOCKED_P2_OIDC");
+          NODE
+          node scripts/verify-preview-alias.mjs
+          export NODE_PATH="$RUNNER_TEMP/p2-deps/node_modules"
+          "$RUNNER_TEMP/p2-deps/node_modules/.bin/playwright" test --config .github/trusted/p2-directory.playwright.config.cjs
+          unset token VERCEL_TRUSTED_OIDC_TOKEN
+          echo 'PASS_P2_HTTP_GRANT_REVOKE_ROLLBACK_AND_ZERO_FIXTURE_RESIDUE' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Separate Vercel credential/flag removal and Neon lease closure required; this result is not Production approval.' >> "$GITHUB_STEP_SUMMARY"
