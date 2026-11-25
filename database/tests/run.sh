@@ -138,5 +138,12 @@ node --test database/offline/compare-schema-manifests.test.mjs
 # Migration ledger provenance is checked against synthetic metadata only.
 node --test database/offline/compare-migration-ledgers.test.mjs
 
+# G2 canonical reconciliation orchestration: offline, no Production SQL or DDL.
+node --test scripts/canonical-reconciliation-readonly.test.mjs
+node --test scripts/canonical-baseline-preparation.test.mjs
+
+# PEOS G2 migration runner: real PG18 disposable fixture only.
+bash database/tests/migration-runner-fixture/test.sh
+
 # G2 canonical drift regression uses synthetic fixtures only; no live Neon access.
 node --test database/offline/g2-canonical-drift-contract.test.mjs
