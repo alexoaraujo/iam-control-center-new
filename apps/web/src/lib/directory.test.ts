@@ -11,6 +11,8 @@ beforeEach(() => {
     IAM_DIRECTORY_PREVIEW_ENABLED: "true", VERCEL_ENV: "preview",
     VERCEL_GIT_COMMIT_REF: "feat/peos-p2-tenant-directory-20261125", APP_BASE_URL: "https://iam-control-center-new-p2-directory-ci.vercel.app",
     IAM_DIRECTORY_PREVIEW_BRANCH_ID: "br-fixture-directory", IAM_DIRECTORY_PREVIEW_EXPIRES_AT: new Date(Date.now()+600000).toISOString(),
+    IAM_DIRECTORY_PREVIEW_LEASE_START_AT: new Date(Date.now()-1000).toISOString(),
+    VERCEL_GIT_COMMIT_SHA: "a".repeat(40), IAM_DIRECTORY_PREVIEW_APPROVED_SHA: "a".repeat(40),
     DATABASE_RUNTIME_ROLE: "iam_app_runtime_login", AUTH0_DOMAIN: "example.auth0.com", AUTHZ_CONTEXT_SIGNING_KEY_HEX: "42".repeat(32),
   })) vi.stubEnv(key,value);
   getSql.mockReturnValue({ query, transaction });
@@ -44,4 +46,24 @@ it("fails closed on missing permission and unexpected result", async () => {
   expect(await readTenantDirectory("auth0|fixture",tenant,identity,"identities",null)).toBeNull();
   transaction.mockResolvedValueOnce([[], [{ allowed: true, rows: [{ id: identity, displayName: null, status: "revoked" }] }]]);
   expect(await readTenantDirectory("auth0|fixture",tenant,identity,"identities",null)).toBeNull();
+});
+
+it("rejects a missing or different approved SHA before any SQL", async () => {
+  for (const sha of ["", "b".repeat(40), "a".repeat(12)]) {
+    vi.stubEnv("IAM_DIRECTORY_PREVIEW_APPROVED_SHA", sha);
+    expect(await readTenantDirectory("auth0|fixture",tenant,identity,"identities",null)).toBeNull();
+  }
+  expect(getSql).not.toHaveBeenCalled();
+});
+it("rejects an oversized or future lease and reserved branches", async () => {
+  vi.stubEnv("IAM_DIRECTORY_PREVIEW_LEASE_START_AT", new Date(Date.now()-3*60*60*1000).toISOString());
+  expect(directoryEnabled()).toBe(false);
+  vi.stubEnv("IAM_DIRECTORY_PREVIEW_LEASE_START_AT", new Date(Date.now()+1000).toISOString());
+  expect(directoryEnabled()).toBe(false);
+  vi.stubEnv("IAM_DIRECTORY_PREVIEW_LEASE_START_AT", new Date(Date.now()-1000).toISOString());
+  for (const id of ["br-muddy-snow-b63cepcv","br-ancient-term-b6mmx5ol","br-calm-forest-b6a1jpzs","br-floral-glitter-b6zvytjp","br-solitary-sunset-b681d15f"]) {
+    vi.stubEnv("IAM_DIRECTORY_PREVIEW_BRANCH_ID", id);
+    expect(await readTenantDirectory("auth0|fixture",tenant,identity,"identities",null)).toBeNull();
+  }
+  expect(getSql).not.toHaveBeenCalled();
 });

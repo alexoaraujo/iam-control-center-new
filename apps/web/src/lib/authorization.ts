@@ -124,13 +124,22 @@ const directoryBranch = "feat/peos-p2-tenant-directory-20261125";
 
 /** Never enabled by default; only an explicitly leased, exact Preview branch. */
 export function directoryEnabled(): boolean {
+  const start = Date.parse(process.env.IAM_DIRECTORY_PREVIEW_LEASE_START_AT ?? "");
   const expiry = Date.parse(process.env.IAM_DIRECTORY_PREVIEW_EXPIRES_AT ?? "");
   const now = Date.now();
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA ?? "";
+  const branchId = process.env.IAM_DIRECTORY_PREVIEW_BRANCH_ID ?? "";
+  const reserved = ["br-muddy-snow-b63cepcv", "br-ancient-term-b6mmx5ol", "br-floral-glitter-b6zvytjp", "br-solitary-sunset-b681d15f", "br-calm-forest-b6a1jpzs", "br-muddy-bar-b63ksdy7", "br-nameless-hat-b6j2p4m4", "br-plain-cell-b68uorki"];
   return process.env.IAM_DIRECTORY_PREVIEW_ENABLED === "true"
+    && /^[a-f0-9]{40}$/.test(sha)
+    && sha === process.env.IAM_DIRECTORY_PREVIEW_APPROVED_SHA
+    && !reserved.includes(branchId)
+    && Number.isFinite(start) && start <= now
+    && expiry > start && expiry - start <= 2 * 60 * 60 * 1000
     && process.env.VERCEL_ENV === "preview"
     && process.env.VERCEL_GIT_COMMIT_REF === directoryBranch
     && process.env.APP_BASE_URL === directoryHost
-    && /^br-[a-z0-9-]{3,100}$/.test(process.env.IAM_DIRECTORY_PREVIEW_BRANCH_ID ?? "")
+    && /^br-[a-z0-9-]{3,100}$/.test(branchId)
     && Number.isFinite(expiry) && expiry > now && expiry <= now + 2 * 60 * 60 * 1000;
 }
 
