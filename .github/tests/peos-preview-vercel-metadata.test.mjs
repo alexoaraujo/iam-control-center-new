@@ -43,14 +43,45 @@ test("exact approval, no token access before approval",async()=>{
  await assert.rejects(()=>inspectVercel({...approved,APPROVED_PR_SHA:a},identity,async()=>{calls++;}));
  assert.equal(calls,0);
 });
+const project="prj_OnuwD1iarOsXh6FFGkSpK4A5mj80";
+const domain={name:host,projectId:project,verified:true,gitBranch:branch};
+const alias={alias:host,projectId:project,deploymentId:"dpl_test"};
+const deployment={id:"dpl_test",target:null,readyState:"READY",project:{id:project},url:"test.vercel.app",meta:{githubCommitRef:branch,githubCommitSha:b,githubOrg:"alexoaraujo",githubRepo:"iam-control-center-new"}};
+const envs=[
+ ...Object.entries({AUTH0_DOMAIN:"iam-control-center.us.auth0.com",APP_BASE_URL:"https://"+host,E2E_CALLBACK_HOST:host,E2E_CALLBACK_BRANCH:branch}).map(([key,value])=>({key,value,type:"plain",target:["preview"],gitBranch:branch})),
+ ...["AUTH0_CLIENT_ID","AUTH0_CLIENT_SECRET","AUTH0_SECRET"].map(key=>({key,type:"sensitive",target:["preview"]}))
+];
+function provider(inventory={envs},finalDomain=domain,finalAlias=alias){
+ const responses=[domain,alias,deployment,inventory,finalDomain,finalAlias];
+ const paths=["/v9/projects/"+project+"/domains/"+host,"/v4/aliases/"+host,"/v13/deployments/dpl_test","/v10/projects/"+project+"/env","/v9/projects/"+project+"/domains/"+host,"/v4/aliases/"+host];
+ const calls=[];
+ const read=async(url,opts)=>{
+  assert.equal(url.origin,"https://api.vercel.com");assert.equal(opts.method,"GET");assert.equal(opts.redirect,"error");
+  assert.equal(url.pathname,paths[calls.length]);assert.equal(url.searchParams.get("teamId"),"team_oZwyOnhX8Gfx4JNflFubUelo");
+  if(url.pathname.endsWith("/env"))assert.equal(url.searchParams.get("decrypt"),"false");
+  calls.push(url.pathname);
+  return {ok:true,json:async()=>responses.shift()};
+ };
+ return {read,calls,responses};
+}
 test("provider GET only, no redirects, metadata validated",async()=>{
- const project="prj_OnuwD1iarOsXh6FFGkSpK4A5mj80";
- const responses=[{name:host,projectId:project,verified:true,gitBranch:branch},
- {alias:host,projectId:project,deploymentId:"dpl_test"},
- {id:"dpl_test",target:null,readyState:"READY",project:{id:project},url:"test.vercel.app",meta:{githubCommitRef:branch,githubCommitSha:b,githubOrg:"alexoaraujo",githubRepo:"iam-control-center-new"}}];
- const read=async(url,opts)=>{assert.equal(url.origin,"https://api.vercel.com");assert.equal(opts.method,"GET");assert.equal(opts.redirect,"error");return {ok:true,json:async()=>responses.shift()};};
- assert.deepEqual(await inspectVercel(approved,identity,read),{sha:b,host,deployment_id:"dpl_test"});
- assert.equal(responses.length,0);
+ const p=provider();
+ assert.deepEqual(await inspectVercel(approved,identity,p.read),{sha:b,host,deployment_id:"dpl_test"});
+ assert.equal(p.responses.length,0);
+});
+test("reject missing or ambiguous effective Preview configuration",async()=>{
+ for(const inventory of [{}, {envs:envs.filter(e=>e.key!=="AUTH0_CLIENT_SECRET")}, {envs:envs.map(e=>e.key==="APP_BASE_URL"?{...e,value:"https://wrong.vercel.app"}:e)}, {envs:[...envs,envs[0]]}]){
+  const p=provider(inventory);await assert.rejects(()=>inspectVercel(approved,identity,p.read));assert.equal(p.calls.length,4);
+ }
+});
+test("reject Production-only settings without effective Preview",async()=>{
+ const p=provider({envs:envs.map(e=>e.key==="AUTH0_SECRET"?{...e,target:["production"]}:e)});
+ await assert.rejects(()=>inspectVercel(approved,identity,p.read),/Missing required Auth0 Preview setting/);
+});
+test("reject alias or domain drift after configuration read",async()=>{
+ for(const p of [provider({envs},domain,{...alias,deploymentId:"dpl_other"}),provider({envs},{...domain,gitBranch:"other"},alias)]){
+  await assert.rejects(()=>inspectVercel(approved,identity,p.read));
+ }
 });
 
 test("fresh dispatch only, no prior attempt replay",()=>{

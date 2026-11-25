@@ -1,6 +1,7 @@
 import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { approvedCallback, verifyPreviewBinding } from "../../scripts/bind-e2e-preview.mjs";
+import { checkAppVariables } from "../../scripts/sync-auth0-e2e-preview.mjs";
 
 export const REPO = "alexoaraujo/iam-control-center-new";
 export const ENV = "Preview-Vercel-Metadata";
@@ -129,6 +130,17 @@ export async function inspectVercel(e, identity, fetcher=fetch) {
   verifyPreviewBinding({PR_HEAD_REPOSITORY:REPO, PR_HEAD_BRANCH:identity.branch,
     PR_HEAD_SHA:identity.sha, E2E_CALLBACK_HOST:host, E2E_DEPLOYMENT_HOST:deployment.url},
     domain, alias, deployment);
+  // Match the legacy preflight's configuration checks, without decrypting or
+  // serializing any environment secret. Only the effective Preview is evaluated.
+  const inventory = await get("/v10/projects/"+PROJECT+"/env?decrypt=false");
+  reject(Array.isArray(inventory?.envs), "PREVIEW_ENV_METADATA_UNAVAILABLE");
+  checkAppVariables(inventory.envs, identity.branch);
+  // Ensure credential-bearing follow-up work cannot use a stale callback binding.
+  const latestDomain = await get("/v9/projects/"+PROJECT+"/domains/"+host);
+  const latestAlias = await get("/v4/aliases/"+host);
+  verifyPreviewBinding({PR_HEAD_REPOSITORY:REPO, PR_HEAD_BRANCH:identity.branch,
+    PR_HEAD_SHA:identity.sha, E2E_CALLBACK_HOST:host, E2E_DEPLOYMENT_HOST:deployment.url},
+    latestDomain, latestAlias, deployment);
   return {sha:identity.sha, host, deployment_id:deployment.id};
 }
 
