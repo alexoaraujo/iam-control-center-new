@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import sys
 import urllib.request
+import urllib.error
 import warnings
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -88,44 +89,82 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):
         return None
 
+def check_local_dependencies():
+    require(sys.platform.startswith("linux"), "LINUX_OR_WSL_REQUIRED")
+    for path, code in (("/usr/bin/git", "GIT_CLIENT_MISSING"),
+                       ("/usr/bin/psql", "PSQL_CLIENT_MISSING")):
+        require(os.path.isfile(path) and os.access(path, os.X_OK), code)
+    require(os.path.isfile(CA) and os.access(CA, os.R_OK), "SYSTEM_CA_MISSING")
+    try:
+        ssl.create_default_context(cafile=CA)
+    except (OSError, ssl.SSLError):
+        raise Blocked("SYSTEM_CA_INVALID") from None
+
 def verify_main(sha):
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect(),
       urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=CA)))
     req=urllib.request.Request(MAIN,headers={"Accept":"application/vnd.github+json",
       "User-Agent":"iam-g2-readonly-clone-proof"})
-    with opener.open(req,timeout=10) as resp:
-        require(resp.status==200,"MAIN_HTTP")
-        raw=resp.read(65537)
+    try:
+        with opener.open(req,timeout=10) as resp:
+            require(resp.status==200,"MAIN_HTTP")
+            raw=resp.read(65537)
+    except urllib.error.HTTPError as exc:
+        code = {401:"MAIN_HTTP_AUTH",403:"MAIN_HTTP_FORBIDDEN_OR_RATE_LIMIT",
+                404:"MAIN_HTTP_NOT_FOUND",429:"MAIN_HTTP_RATE_LIMIT"}.get(exc.code,"MAIN_HTTP_ERROR")
+        raise Blocked(code) from None
+    except (urllib.error.URLError, TimeoutError, OSError):
+        raise Blocked("MAIN_NETWORK_OR_TLS_FAILED") from None
     require(len(raw)<=65536,"MAIN_LIMIT")
-    obj=json.loads(raw)
+    try:
+        obj=json.loads(raw)
+    except (ValueError, UnicodeError):
+        raise Blocked("MAIN_RESPONSE_INVALID") from None
+    require(isinstance(obj,dict) and isinstance(obj.get("object"),dict), "MAIN_RESPONSE_INVALID")
     require(obj.get("ref")=="refs/heads/main" and obj.get("object",{}).get("type")=="commit"
       and obj["object"].get("sha")==sha,"MAIN_SHA_CHANGED")
 
 def verify_checkout(sha):
     require(SHA.fullmatch(sha) is not None,"APPROVED_SHA_INVALID")
     def git(*args):
-        return subprocess.run(["/usr/bin/git","-C",str(ROOT),*args],capture_output=True,
-          text=True,check=True,timeout=10).stdout.strip()
+        try:
+            return subprocess.run(["/usr/bin/git","-C",str(ROOT),*args],capture_output=True,
+              text=True,check=True,timeout=10).stdout.strip()
+        except (OSError, subprocess.SubprocessError, UnicodeError):
+            raise Blocked("GIT_CHECKOUT_QUERY_FAILED") from None
     require(Path(git("rev-parse","--show-toplevel")).resolve()==ROOT
       and git("rev-parse","HEAD")==sha and git("status","--porcelain","--untracked-files=normal")=="",
       "CHECKOUT_NOT_EXACT_CLEAN")
 
 def live(sha):
+    require(sys.platform.startswith("linux"), "LINUX_OR_WSL_REQUIRED")
     require(not os.environ.get("CI") and not os.environ.get("GITHUB_ACTIONS")
       and sys.stdin.isatty() and sys.stdout.isatty(),"PRIVATE_TTY_REQUIRED")
     check_expiry(dt.datetime.now(dt.timezone.utc))
+    check_local_dependencies()
     verify_checkout(sha)
     verify_main(sha)
     with warnings.catch_warnings():
         warnings.simplefilter("error",getpass.GetPassWarning)
-        password=getpass.getpass("Existing clone reader password (not stored): ")
+        try:
+            password=getpass.getpass("Existing clone reader password (not stored): ")
+        except (getpass.GetPassWarning, EOFError, OSError):
+            raise Blocked("PRIVATE_PASSWORD_PROMPT_FAILED") from None
     check_expiry(dt.datetime.now(dt.timezone.utc))
     with tempfile.TemporaryDirectory(prefix="g2-login-") as private_dir:
-        proc=subprocess.run(["/usr/bin/psql","-X","-w","-qAt","-v","ON_ERROR_STOP=1"],
-          input=SQL,text=True,capture_output=True,timeout=20,env=conn_env(password,private_dir))
+        try:
+            proc=subprocess.run(["/usr/bin/psql","-X","-w","-qAt","-v","ON_ERROR_STOP=1"],
+              input=SQL,text=True,capture_output=True,timeout=20,env=conn_env(password,private_dir))
+        except subprocess.TimeoutExpired:
+            raise Blocked("PSQL_TIMEOUT") from None
+        except (OSError, UnicodeError):
+            raise Blocked("PSQL_CLIENT_EXECUTION_FAILED") from None
     del password
     require(proc.returncode==0,"DIRECT_LOGIN_OR_TLS_FAILED")
-    result=validate(proc.stdout.strip())
+    try:
+        result=validate(proc.stdout.strip())
+    except (ValueError, UnicodeError):
+        raise Blocked("PSQL_OUTPUT_INVALID") from None
     verify_checkout(sha)
     verify_main(sha)
     check_expiry(dt.datetime.now(dt.timezone.utc))
