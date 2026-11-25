@@ -1,0 +1,24 @@
+name: G2 GitHub B2 custody contract fixture
+on:
+  pull_request:
+    paths:
+      - 'database/scripts/g2-github-b2-custody-contract.py'
+      - 'database/tests/test-g2-github-b2-custody-contract.py'
+      - '.github/workflows/iam-g2-github-b2-custody-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'database/scripts/g2-github-b2-custody-contract.py'
+      - 'database/tests/test-g2-github-b2-custody-contract.py'
+      - '.github/workflows/iam-g2-github-b2-custody-contract.yml'
+permissions:
+  contents: read
+jobs:
+  g2-github-b2-custody-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - run: python3 -B database/tests/test-g2-github-b2-custody-contract.py -v

@@ -641,3 +641,17 @@ test("PR192 rollback witness Preview is bound to its branch and exact SHA", () =
   assert.throws(() => verifyPreviewBinding({...e,E2E_CALLBACK_HOST:aliasHost},d,a,dep), /invalid/);
   assert.throws(() => verifyPreviewBinding(e,d,a,{...dep,meta:{...dep.meta,githubCommitSha:"b".repeat(40)}}), /exact PR SHA/);
 });
+
+
+test("PR193 G2 GitHub B2 custody Preview exact branch/SHA", () => {
+  const b="feat/peos-g2-github-b2-custody-20261125", h="iam-control-center-new-pr193-ci.vercel.app";
+  assert.equal(approvedCallback(b),h);
+  const e={...env,PR_HEAD_BRANCH:b,E2E_CALLBACK_HOST:h};
+  const d={...domain,name:h,gitBranch:b};
+  const a={...alias,alias:h};
+  const dep={...deployment,meta:{...deployment.meta,githubCommitRef:b}};
+  assert.deepEqual(verifyPreviewBinding(e,d,a,dep),{callbackHost:h,callbackBranch:b,callbackUrl:"https://"+h});
+  assert.throws(()=>verifyPreviewBinding(e,{...d,gitBranch:"other-branch"},a,dep),/not bound/);
+  assert.throws(()=>verifyPreviewBinding({...e,E2E_CALLBACK_HOST:aliasHost},d,a,dep),/invalid/);
+  assert.throws(()=>verifyPreviewBinding(e,d,a,{...dep,meta:{...dep.meta,githubCommitSha:"b".repeat(40)}}),/exact PR SHA/);
+});
