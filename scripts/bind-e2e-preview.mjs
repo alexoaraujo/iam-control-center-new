@@ -2,6 +2,7 @@ import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const branchCallbacks = new Map([
+  ["fix/peos-preview-retirement-reconcile-20261125", "iam-control-center-new-pr194-ci.vercel.app"],
   ["feat/peos-g2-rollback-witness-20261125", "iam-control-center-new-pr192-ci.vercel.app"],
   ["feat/peos-g2-single-maintainer-attestation-20261125", "iam-control-center-new-pr191-ci.vercel.app"],
   ["audit/peos-github-scope-hardening-20261117", "iam-control-center-new-pr117-ci.vercel.app"],
@@ -45,15 +46,7 @@ const branchCallbacks = new Map([
   ["security/main-postmerge-g3-exact-sha-20261121", "iam-control-center-new-pr147-ci.vercel.app"],
   ["fix/g3-postmerge-pr150-exact-main-20261121", "iam-control-center-new-pr151-ci.vercel.app"],
   ["fix/g1-b2-historical-readback-main-only-20261121", "iam-control-center-new-pr152-ci.vercel.app"],
-  ["security/g1-b2-aead-restore-offline-contract-20261121", "iam-control-center-new-pr153-ci.vercel.app"],
   ["security/g1-b2-real-isolated-restore-20261122", "iam-control-center-new-pr154-ci.vercel.app"],
-  ["fix/g1-restore-synthetic-marker-isolation-20261122", "iam-control-center-new-pr155-ci.vercel.app"],
-  ["fix/g1-main-checks-paginated-gate-20261122", "iam-control-center-new-pr156-ci.vercel.app"],
-  ["fix/g1-pg18-failed-phase-diagnostics-20261122", "iam-control-center-new-pr157-ci.vercel.app"],
-  ["fix/g1-pg18-archive-stdin-node24-20261122", "iam-control-center-new-pr158-ci.vercel.app"],
-  ["fix/g1-artifact-same-run-gh-cli-20261122", "iam-control-center-new-pr159-ci.vercel.app"],
-  ["fix/g1-pg18-restore-apply-redacted-classifier-20261122", "iam-control-center-new-pr160-ci.vercel.app"],
-  ["fix/g1-restore-custody-id-readonly-attestation-20261122", "iam-control-center-new-pr161-ci.vercel.app"],
   ["fix/peos-g1-neon-managed-default-acl-20261122", "iam-control-center-new-pr162-ci.vercel.app"],
   ["fix/peos-g1-rollback-marker-transactional-20261122", "iam-control-center-new-pr164-ci.vercel.app"],
   ["fix/peos-g1-empty-ledger-fail-closed-20261122", "iam-control-center-new-pr166-ci.vercel.app"],
@@ -64,7 +57,20 @@ const branchCallbacks = new Map([
   ["fix/g1-security-gate-on-bun-baseline-20261118", "iam-control-center-new-pr130-ci.vercel.app"],
 ]);
 
+// Historical aliases removed from the project; never fall back to a shared host.
+const retiredPreviewBranches = new Set([
+  "fix/g1-pg18-archive-stdin-node24-20261122", // PR #158
+  "security/g1-b2-aead-restore-offline-contract-20261121", // PR #153
+  "fix/g1-restore-synthetic-marker-isolation-20261122", // PR #155
+  "fix/g1-main-checks-paginated-gate-20261122", // PR #156
+  "fix/g1-pg18-failed-phase-diagnostics-20261122", // PR #157
+  "fix/g1-artifact-same-run-gh-cli-20261122", // PR #159
+  "fix/g1-pg18-restore-apply-redacted-classifier-20261122", // PR #160
+  "fix/g1-restore-custody-id-readonly-attestation-20261122", // PR #161
+]);
+
 export function approvedCallback(branch) {
+  if (retiredPreviewBranches.has(branch)) throw Error("RETIRED_PREVIEW_BRANCH: explicit reauthorization required");
   return branchCallbacks.get(branch) ?? "iam-control-center-new-ci-preview.vercel.app";
 }
 const APPROVED_PROJECT = "prj_OnuwD1iarOsXh6FFGkSpK4A5mj80";

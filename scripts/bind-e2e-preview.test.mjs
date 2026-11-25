@@ -234,21 +234,6 @@ test("PR152 callback isolated to exact PR branch and SHA", () => {
   assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
 });
 
-test("PR153 callback isolated from shared alias and stale branch/SHA", () => {
-  const b = "security/g1-b2-aead-restore-offline-contract-20261121";
-  const h = "iam-control-center-new-pr153-ci.vercel.app";
-  assert.equal(approvedCallback(b), h);
-  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
-  const d = { ...domain, name: h, gitBranch: b };
-  const a = { ...alias, alias: h };
-  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
-  assert.deepEqual(verifyPreviewBinding(e, d, a, dep), {
-    callbackHost: h, callbackBranch: b, callbackUrl: `https://${h}`,
-  });
-  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "fix/g1-b2-historical-readback-main-only-20261121" }, a, dep), /not bound/);
-  assert.throws(() => verifyPreviewBinding(e, { ...d, name: "iam-control-center-new-ci-preview.vercel.app" }, a, dep), /not bound/);
-  assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
-});
 
 test("PR154 callback exclusively bound to exact branch and deployment SHA", () => {
   const b = "security/g1-b2-real-isolated-restore-20261122";
@@ -266,37 +251,7 @@ test("PR154 callback exclusively bound to exact branch and deployment SHA", () =
   assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "c".repeat(40) } }), /exact PR SHA/);
 });
 
-test("PR155 callback scoped exclusively to synthetic marker fix branch SHA", () => {
-  const b = "fix/g1-restore-synthetic-marker-isolation-20261122";
-  const h = "iam-control-center-new-pr155-ci.vercel.app";
-  assert.equal(approvedCallback(b), h);
-  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
-  const d = { ...domain, name: h, gitBranch: b };
-  const a = { ...alias, alias: h };
-  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
-  assert.deepEqual(verifyPreviewBinding(e, d, a, dep), {
-    callbackHost: h, callbackBranch: b, callbackUrl: `https://${h}`,
-  });
-  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "security/g1-b2-real-isolated-restore-20261122" }, a, dep), /not bound/);
-  assert.throws(() => verifyPreviewBinding(e, { ...d, name: "iam-control-center-new-ci-preview.vercel.app" }, a, dep), /not bound/);
-  assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "c".repeat(40) } }), /exact PR SHA/);
-});
 
-test("PR156 pagination fix callback matches exact branch and PR SHA", () => {
-  const b = "fix/g1-main-checks-paginated-gate-20261122";
-  const h = "iam-control-center-new-pr156-ci.vercel.app";
-  assert.equal(approvedCallback(b), h);
-  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
-  const d = { ...domain, name: h, gitBranch: b };
-  const a = { ...alias, alias: h };
-  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
-  assert.deepEqual(verifyPreviewBinding(e, d, a, dep), {
-    callbackHost: h, callbackBranch: b, callbackUrl: `https://${h}`,
-  });
-  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "fix/g1-restore-synthetic-marker-isolation-20261122" }, a, dep), /not bound/);
-  assert.throws(() => verifyPreviewBinding(e, { ...d, name: "iam-control-center-new-ci-preview.vercel.app" }, a, dep), /not bound/);
-  assert.throws(() => verifyPreviewBinding(e, d, a, { ...dep, meta: { ...dep.meta, githubCommitSha: "c".repeat(40) } }), /exact PR SHA/);
-});
 
 test("PR164 callback is exclusive to its original branch and exact-SHA Preview deployment", () => {
   const prBranch = "fix/peos-g1-rollback-marker-transactional-20261122";
@@ -639,5 +594,45 @@ test("PR192 rollback witness Preview is bound to its branch and exact SHA", () =
   assert.deepEqual(verifyPreviewBinding(e,d,a,dep), {callbackHost:h,callbackBranch:b,callbackUrl:"https://"+h});
   assert.throws(() => verifyPreviewBinding(e,{...d,gitBranch:"other-branch"},a,dep), /not bound/);
   assert.throws(() => verifyPreviewBinding({...e,E2E_CALLBACK_HOST:aliasHost},d,a,dep), /invalid/);
+  assert.throws(() => verifyPreviewBinding(e,d,a,{...dep,meta:{...dep.meta,githubCommitSha:"b".repeat(40)}}), /exact PR SHA/);
+});
+
+
+test("retired Preview branches fail closed before shared or historical binding", () => {
+  const retired = [
+    ["fix/g1-pg18-archive-stdin-node24-20261122", "iam-control-center-new-pr158-ci.vercel.app"],
+    ["security/g1-b2-aead-restore-offline-contract-20261121", "iam-control-center-new-pr153-ci.vercel.app"],
+    ["fix/g1-restore-synthetic-marker-isolation-20261122", "iam-control-center-new-pr155-ci.vercel.app"],
+    ["fix/g1-main-checks-paginated-gate-20261122", "iam-control-center-new-pr156-ci.vercel.app"],
+    ["fix/g1-pg18-failed-phase-diagnostics-20261122", "iam-control-center-new-pr157-ci.vercel.app"],
+    ["fix/g1-artifact-same-run-gh-cli-20261122", "iam-control-center-new-pr159-ci.vercel.app"],
+    ["fix/g1-pg18-restore-apply-redacted-classifier-20261122", "iam-control-center-new-pr160-ci.vercel.app"],
+    ["fix/g1-restore-custody-id-readonly-attestation-20261122", "iam-control-center-new-pr161-ci.vercel.app"],
+  ];
+  for (const [prBranch, historicalHost] of retired) {
+    assert.throws(() => approvedCallback(prBranch), /RETIRED_PREVIEW_BRANCH/);
+    for (const callback of [historicalHost, aliasHost]) {
+      const e = { ...env, PR_HEAD_BRANCH: prBranch, E2E_CALLBACK_HOST: callback };
+      const d = { ...domain, name: callback, gitBranch: prBranch };
+      const a = { ...alias, alias: callback };
+      const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: prBranch } };
+      assert.throws(() => verifyPreviewBinding(e, d, a, dep), /RETIRED_PREVIEW_BRANCH/);
+    }
+  }
+  assert.equal(approvedCallback("unknown-branch"), aliasHost);
+});
+
+
+test("PR194 retirement reconciliation uses dedicated exact-SHA Preview", () => {
+  const b = "fix/peos-preview-retirement-reconcile-20261125";
+  const h = "iam-control-center-new-pr194-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const dep = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.equal(verifyPreviewBinding(e,d,a,dep).callbackHost,h);
+  assert.throws(() => verifyPreviewBinding({...e,E2E_CALLBACK_HOST:aliasHost},d,a,dep), /invalid/);
+  assert.throws(() => verifyPreviewBinding(e,{...d,gitBranch:branch},a,dep), /not bound/);
   assert.throws(() => verifyPreviewBinding(e,d,a,{...dep,meta:{...dep.meta,githubCommitSha:"b".repeat(40)}}), /exact PR SHA/);
 });

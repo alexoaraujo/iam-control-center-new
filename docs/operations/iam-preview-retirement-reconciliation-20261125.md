@@ -1,0 +1,9 @@
+# Preview domain retirement reconciliation — 2026-11-25
+
+Operator reported domain cleanup. Authenticated Vercel project inventory: 49 previously, 41 now, no new domains compared with previous inventory. Seven of the nine authorized candidates absent: PRs 153, 155, 156, 157, 159, 160, 161. PRs 117 and 143 remain verified and configured. PR 158 is also absent, outside the previously authorized list; its existing mapping is deliberately unchanged pending explicit reconciliation. Production, Preview, CI Preview and PR193 domains remain verified.
+
+This candidate retires only the seven confirmed absent authorized branch mappings, rejecting historical and shared callback reuse before API lookup. Existing exact SHA, project, branch and repository checks are unchanged. Historical commits, deployments and prior evidence are not deleted. No Auth0 or Vercel mutation by this candidate. Auth0 allowlist readback, historical deployment readback, manual workflow/lease dependency review, dedicated callback-bound E2E and security review are still required before merge. No acquisition or Production activation, no bypass. PR193 custody work remains separate.
+
+## Follow-up reconciliation
+
+Operator subsequently requested reconciliation of PRs 117, 143 and 158. PR158 merged at a29a0226cf2657a4aba6da341e300a34ee4580b7; historical head 6cfc40e6d343314bfea5445e2deebdcd93e10290 still has READY deployment iam-control-center-4y062262e-aoa4.vercel.app. Include PR158 in the fail-closed candidate; preserve the deployment and historical artifacts. PR117/143 remain configured pending dependency/allowlist/lease review. Dedicated PR194 Preview domain and four plain branch-scoped Preview settings provisioned; Auth0 administrative readback and E2E remain pending. No provider deletion or activation.
