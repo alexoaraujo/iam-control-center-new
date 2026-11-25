@@ -14,24 +14,25 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
   const show = (section: DashboardPath) => overview || path === section;
 
   return (
-    <main className="app-shell">
+    <div className="app-shell">
+      <a className="skip-link" href="#main-content">Ir para o conteúdo principal</a>
       <aside className="sidebar">
         <Link prefetch={false} className="brand" href="/" aria-label="IAM Control Center - início">
           <span className="brand-mark">I<span>A</span></span>
           <span className="brand-copy"><strong>IAM CONTROL</strong><small>CENTER</small></span>
         </Link>
         <div className="workspace-label">WORKSPACE</div>
-        <div className="workspace-switcher"><span className="workspace-avatar">IC</span><span><strong>IAM Platform</strong><small>Console de governança</small></span><span className="chevron">⌄</span></div>
+        <div className="workspace-switcher"><span className="workspace-avatar">IC</span><span><strong>IAM Platform</strong><small>Console de governança</small></span></div>
         <nav className="main-nav" aria-label="Navegação principal">
           <span className="nav-caption">GERENCIAMENTO</span>
           {navigation.slice(0, 5).map(item => (
             <Link prefetch={false} className={path === item.href ? "nav-link nav-link--active" : "nav-link"} aria-current={path === item.href ? "page" : undefined} aria-label={item.label} href={item.href} key={item.href}>
-              <span className="nav-icon">{item.icon}</span>{item.label}
+              <span className="nav-icon" aria-hidden="true">{item.icon}</span>{item.label}
             </Link>
           ))}
           <span className="nav-caption nav-caption--spaced">GOVERNANÇA</span>
           {navigation.slice(5).map((item) => (
-            <Link prefetch={false} className={path === item.href ? "nav-link nav-link--active" : "nav-link"} aria-current={path === item.href ? "page" : undefined} aria-label={item.label} href={item.href} key={item.href}><span className="nav-icon">{item.icon}</span>{item.label}</Link>
+            <Link prefetch={false} className={path === item.href ? "nav-link nav-link--active" : "nav-link"} aria-current={path === item.href ? "page" : undefined} aria-label={item.label} href={item.href} key={item.href}><span className="nav-icon" aria-hidden="true">{item.icon}</span>{item.label}</Link>
           ))}
         </nav>
         <div className="sidebar-bottom">
@@ -40,7 +41,7 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
         </div>
       </aside>
 
-      <section className="main-panel">
+      <main className="main-panel" id="main-content" tabIndex={-1}>
         <header className="topbar">
           <div className="breadcrumb">Workspace <span>/</span> <strong>{label}</strong></div>
           <div className="topbar-actions"><span className="environment-pill"><i /> AMBIENTE NÃO IDENTIFICADO</span><Link prefetch={false} className="icon-button" href="/evidence" aria-label="Central de evidências">◷</Link><a className="topbar-avatar" href="/auth/logout" aria-label="Sair">IA</a></div>
@@ -68,12 +69,12 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
 
           <div className="overview-grid">
             <section className="panel-card posture-card">
-              <div className="panel-title"><div><span className="eyebrow">SECURITY POSTURE</span><h3>Postura de segurança</h3></div><Status tone="warning">NÃO AVALIADA</Status></div>
+              <div className="panel-title"><div><span className="eyebrow">SECURITY POSTURE</span><h2>Postura de segurança</h2></div><Status tone="warning">NÃO AVALIADA</Status></div>
               <div className="posture-empty"><div className="shield-ring">⬡</div><strong>Coleta de evidências pendente</strong><p>O índice de segurança será calculado somente quando os controles tiverem fontes verificáveis, critérios e resultados vinculados a um SHA ou ambiente.</p><Link prefetch={false} href="/evidence">Entender critérios <span>→</span></Link></div>
               <div className="posture-legend"><span><i className="legend-dot legend-dot--green" /> Verificado</span><span><i className="legend-dot legend-dot--amber" /> Pendente</span><span><i className="legend-dot legend-dot--gray" /> Não verificado</span></div>
             </section>
             <section className="panel-card integrations-card">
-              <div className="panel-title"><div><span className="eyebrow">PLATFORM HEALTH</span><h3>Saúde das integrações</h3></div><Link prefetch={false} href="/integrations" className="text-link">Detalhes ↗</Link></div>
+              <div className="panel-title"><div><span className="eyebrow">PLATFORM HEALTH</span><h2>Saúde das integrações</h2></div><Link prefetch={false} href="/integrations" className="text-link">Detalhes ↗</Link></div>
               <div className="integration-row"><span className="integration-logo integration-logo--auth">A</span><div><strong>Auth0</strong><small>Identidade e sessão OIDC</small></div><Status tone="warning">A VALIDAR</Status></div>
               <div className="integration-row"><span className="integration-logo integration-logo--neon">N</span><div><strong>Neon PostgreSQL</strong><small>Persistência e isolamento RLS</small></div><Status tone="warning">A VALIDAR</Status></div>
               <div className="integration-row"><span className="integration-logo integration-logo--github">GH</span><div><strong>GitHub Actions</strong><small>CI, checks e evidências por SHA</small></div><Status tone="neutral">{github.error ? "NÃO VERIFICADO" : "FONTE CONSULTADA"}</Status></div>
@@ -82,7 +83,7 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
           </div>
 
           <section className="panel-card controls-card">
-            <div className="panel-title"><div><span className="eyebrow">CONTROL PLANE</span><h3>Domínios de governança</h3><p>Áreas funcionais previstas para operação do IAM.</p></div><span className="subtle-count">10 MÓDULOS</span></div>
+            <div className="panel-title"><div><span className="eyebrow">CONTROL PLANE</span><h2>Domínios de governança</h2><p>Áreas funcionais previstas para operação do IAM.</p></div><span className="subtle-count">10 MÓDULOS</span></div>
             <div className="module-grid">
               {[
                 ["01","Organizações","Ciclo de vida de tenants, status e configurações.","/organizations","▦"],
@@ -171,7 +172,7 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
           {(show("/integrations") || path === "/evidence") && (
           <section className="panel-card" aria-labelledby="github-release-heading">
             <div className="panel-title">
-              <div><span className="eyebrow">LIVE GITHUB SOURCE · READ ONLY</span><h3 id="github-release-heading">Evidência de integração e CI</h3><p>Coleta server-side sem token, vinculada à ponta observada da main. Não constitui aprovação de release.</p></div>
+              <div><span className="eyebrow">LIVE GITHUB SOURCE · READ ONLY</span><h2 id="github-release-heading">Evidência de integração e CI</h2><p>Coleta server-side sem token, vinculada à ponta observada da main. Não constitui aprovação de release.</p></div>
               <Status tone={github.ci === "success" ? "success" : "warning"}>{github.error ? "FONTE INDISPONÍVEL" : github.ci === "success" ? "CI SUCCESS" : github.ci === "failure" ? "CI FAILURE" : github.ci === "pending" ? "CI PENDENTE" : "CI NÃO VERIFICADO"}</Status>
             </div>
             <div className="three-column">
@@ -216,7 +217,7 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
 
           <footer className="page-footer"><span>IAM CONTROL CENTER <i>•</i> GOVERNANÇA DE IDENTIDADE E ACESSO</span><span>Console somente leitura · Autorização administrativa não comprovada</span></footer>
         </div>
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }
