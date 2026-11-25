@@ -8,6 +8,8 @@ on:
       - 'database/tests/test-g2-maintainer-acquisition-contract.py'
       - 'database/scripts/g2-maintainer-receipt-lifecycle.py'
       - 'database/tests/test-g2-maintainer-receipt-lifecycle.py'
+      - 'database/scripts/g2-maintainer-approval-contract.py'
+      - 'database/tests/test-g2-maintainer-approval-contract.py'
       - '.github/workflows/iam-g2-maintainer-observation-contract.yml'
   push:
     branches: [main]
@@ -18,6 +20,8 @@ on:
       - 'database/tests/test-g2-maintainer-acquisition-contract.py'
       - 'database/scripts/g2-maintainer-receipt-lifecycle.py'
       - 'database/tests/test-g2-maintainer-receipt-lifecycle.py'
+      - 'database/scripts/g2-maintainer-approval-contract.py'
+      - 'database/tests/test-g2-maintainer-approval-contract.py'
       - '.github/workflows/iam-g2-maintainer-observation-contract.yml'
 permissions:
   contents: read
@@ -32,3 +36,4 @@ jobs:
       - run: python3 -B database/tests/test-g2-maintainer-endpoint-readback.py -v
       - run: python3 -B database/tests/test-g2-maintainer-acquisition-contract.py -v
       - run: python3 -B database/tests/test-g2-maintainer-receipt-lifecycle.py -v
+      - run: python3 -B database/tests/test-g2-maintainer-approval-contract.py -v

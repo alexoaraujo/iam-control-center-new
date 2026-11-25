@@ -1,0 +1,36 @@
+name: G2 shared replay PG18 fixture
+on:
+  pull_request:
+    paths:
+      - 'database/review/g2-shared-replay-fixture.sql'
+      - 'database/tests/g2-shared-replay-fixture.py'
+      - '.github/workflows/iam-g2-shared-replay-fixture.yml'
+permissions:
+  contents: read
+jobs:
+  g2-shared-replay-fixture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: peos_g2_replay_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d peos_g2_replay_fixture"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      POSTGRES_TEST_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+      PEOS_G2_REPLAY_FIXTURE: LOCAL_PG18_ONLY
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - run: python3 -B database/tests/g2-shared-replay-fixture.py
