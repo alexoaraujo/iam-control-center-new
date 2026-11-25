@@ -34,7 +34,7 @@ it("does not trust unverified HTML links or unrelated check results", async () =
   vi.stubGlobal("fetch", vi.fn()
     .mockResolvedValueOnce({ ok: true, json: async () => ({ commit: { sha: "b".repeat(40) } }) })
     .mockResolvedValueOnce({ ok: true, json: async () => ({ workflow_runs: [{
-      name: "CI", status: "completed", conclusion: "success", head_sha: "b".repeat(40),
+      name: "CI", event: "push", head_branch: "main", status: "completed", conclusion: "success", head_sha: "b".repeat(40),
       html_url: "https://example.invalid/fake",
     }] }) })
     .mockResolvedValueOnce({ ok: true, json: async () => [] }));
@@ -48,4 +48,15 @@ it("does not report stale successful CI as current main evidence", async () => {
     .mockResolvedValueOnce({ ok: true, json: async () => ({ workflow_runs: [{ name: "CI", event: "push", head_branch: "main", head_sha: "d".repeat(40), status: "completed", conclusion: "success" }] }) })
     .mockResolvedValueOnce({ ok: true, json: async () => [] }));
   expect(await getReleaseSnapshot()).toMatchObject({ mainSha: "c".repeat(40), ci: "unavailable", runUrl: null, openPullRequests: 0 });
+});
+
+it("rejects non-push and non-main runs even with the observed SHA", async () => {
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ commit: { sha: "e".repeat(40) } }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ workflow_runs: [
+      { name: "CI", event: "pull_request", head_branch: "main", head_sha: "e".repeat(40), status: "completed", conclusion: "success" },
+      { name: "CI", event: "push", head_branch: "other", head_sha: "e".repeat(40), status: "completed", conclusion: "success" },
+    ] }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => [] }));
+  expect(await getReleaseSnapshot()).toMatchObject({ ci: "unavailable", runUrl: null, mainSha: "e".repeat(40) });
 });
