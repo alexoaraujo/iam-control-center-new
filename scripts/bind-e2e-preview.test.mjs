@@ -577,3 +577,20 @@ test("PR187 G2 ACL review candidate Preview binds unique branch and exact SHA", 
   assert.throws(() => verifyPreviewBinding(scoped, {...scopedDomain, gitBranch: "other-branch"}, scopedAlias, scopedDeployment), /not bound/);
   assert.throws(() => verifyPreviewBinding(scoped, scopedDomain, scopedAlias, {...scopedDeployment, meta: {...scopedDeployment.meta, githubCommitSha: "b".repeat(40)}}), /exact PR SHA/);
 });
+
+
+test("PR46 dedicated Preview callback rejects wrong branch, alias and SHA", () => {
+  const b = "chore/codeowners-security-review-20261112";
+  const h = "iam-control-center-new-pr46-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const p = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.deepEqual(verifyPreviewBinding(e, d, a, p), {
+    callbackHost: h, callbackBranch: b, callbackUrl: "https://" + h,
+  });
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "other-branch" }, a, p), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, { ...d, name: aliasHost }, a, p), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, a, { ...p, meta: { ...p.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+});
