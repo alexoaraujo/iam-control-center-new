@@ -43,10 +43,41 @@ def names(items):
         raise Blocked("DUPLICATE_NAMES")
     return result
 
+def reviewer_metadata(rules):
+    result = []
+    for rule in rules:
+        actors = rule.get("reviewers")
+        if not isinstance(actors, list) or not actors:
+            raise Blocked("REVIEWER_LIST_UNVERIFIED")
+        for actor in actors:
+            if not isinstance(actor, dict) or actor.get("type") not in {"User", "Team"}:
+                raise Blocked("REVIEWER_TYPE_UNVERIFIED")
+            obj = actor.get("reviewer")
+            if not isinstance(obj, dict) or type(obj.get("id")) is not int or obj["id"] <= 0:
+                raise Blocked("REVIEWER_ID_UNVERIFIED")
+            label = name(obj.get("login") if actor["type"] == "User" else obj.get("slug"))
+            result.append({"type": actor["type"], "id": obj["id"], "name": label})
+    if len({(a["type"], a["id"]) for a in result}) != len(result):
+        raise Blocked("DUPLICATE_REVIEWER_ID")
+    return result
+
+def custom_metadata(items):
+    result = []
+    for item in items:
+        app = item.get("app")
+        if (type(item.get("id")) is not int or item["id"] <= 0 or
+                type(item.get("enabled")) is not bool or not isinstance(app, dict) or
+                type(app.get("id")) is not int or app["id"] <= 0):
+            raise Blocked("CUSTOM_PROTECTION_UNVERIFIED")
+        result.append({"id": item["id"], "enabled": item["enabled"], "app_id": app["id"]})
+    if len({item["id"] for item in result}) != len(result):
+        raise Blocked("DUPLICATE_CUSTOM_PROTECTION")
+    return result
+
 def gh(path):
     try:
         result = subprocess.run(
-            ["gh", "api", "--method", "GET", "--paginate", "--slurp", path],
+            ["gh", "api", "--hostname", "github.com", "--method", "GET", "--paginate", "--slurp", "-H", "X-GitHub-Api-Version: 2022-11-28", path],
             capture_output=True, text=True, check=True, timeout=90,
         )
         return json.loads(result.stdout)
@@ -60,7 +91,9 @@ def audit(policy, read):
     inventory = rows(read(base + "/environments?per_page=100"), "environments")
     actual = names(inventory)
     repo_secrets = names(rows(read(base + "/actions/secrets?per_page=100"), "secrets"))
+    repo_vars = names(rows(read(base + "/actions/variables?per_page=100"), "variables"))
     report = {"repository": REPO, "mode": "READ_ONLY_NO_AUTHORIZATION",
+              "repository_variable_names": repo_vars,
               "repository_secret_names": repo_secrets, "environments": [],
               "unobserved_candidates": sorted(set(policy["environments"]) - set(actual)),
               "preview_wildcard_activation": "HOLD_PENDING_TRUSTED_EXECUTOR_MIGRATION"}
@@ -83,6 +116,13 @@ def audit(policy, read):
             raise Blocked("UNREADABLE_PROTECTIONS")
         kinds = sorted(name(rule.get("type")) for rule in rules)
         reviewers = [rule for rule in rules if rule.get("type") == "required_reviewers"]
+        actors = reviewer_metadata(reviewers)
+        custom_rules = custom_metadata(rows(
+            read(path + "/deployment_protection_rules?per_page=100"),
+            "custom_deployment_protection_rules"))
+        timers = [rule.get("wait_timer") for rule in rules if rule.get("type") == "wait_timer"]
+        if any(type(timer) is not int or not 0 <= timer <= 43200 for timer in timers):
+            raise Blocked("WAIT_TIMER_UNVERIFIED")
         branch = meta.get("deployment_branch_policy")
         custom = isinstance(branch, dict) and branch.get("custom_branch_policies") is True and branch.get("protected_branches") is False
         policies = rows(read(path + "/deployment-branch-policies?per_page=100"), "branch_policies") if custom else []
@@ -102,6 +142,12 @@ def audit(policy, read):
             findings.append("BRANCH_POLICY_DRIFT")
         if any(k not in {"branch_policy", "required_reviewers", "wait_timer"} for k in kinds):
             findings.append("UNREVIEWED_PROTECTION")
+        if custom_rules:
+            findings.append("CUSTOM_PROTECTION_REVIEW_REQUIRED")
+        if any(timer > 0 for timer in timers):
+            findings.append("ACTIVE_WAIT_TIMER_REVIEW_REQUIRED")
+        if len(kinds) != len(set(kinds)):
+            findings.append("DUPLICATE_PROTECTION_TYPE")
         if len(reviewers) != 1 or reviewers[0].get("prevent_self_review") is not True:
             if env != "Preview":
                 findings.append("INDEPENDENT_APPROVAL_NOT_ATTESTED")
@@ -113,6 +159,8 @@ def audit(policy, read):
             findings.append("PREVIEW_WILDCARD_ACTIVATION_HOLD")
         report["environments"].append({
             "name": env, "id": env_id, "protection_types": kinds,
+            "reviewers": actors, "wait_timers_minutes": timers,
+            "custom_protections": custom_rules,
             "admin_bypass_disabled": meta.get("can_admins_bypass") is False,
             "prevent_self_review": len(reviewers) == 1 and reviewers[0].get("prevent_self_review") is True,
             "branch_policies": sorted(refs), "secret_names": secret_names,

@@ -20,3 +20,6 @@ Treat the manifest as an inventory candidate, not a declaration of actual enviro
 5. Validate new PR, exact-SHA Preview and Auth0 E2E, security gate and negative cases. Keep Production HOLD.
 
 No merge or privileged execution is authorized by the inventory, and no operation may treat single-maintainer approval as independent review.
+
+## Phase 1 review extension
+The inventory also reads repository variable names, configured reviewer identity (not proof of independence), wait timers and custom deployment protection IDs. All results remain observational. The initial PR had 10/10 offline tests passing; its general security gate blocked on AUTH0_E2E_NOT_SUCCESS. A dedicated verified Preview callback and safe credential segregation are still prerequisites; do not bypass the gate or grant privileges to PR code.

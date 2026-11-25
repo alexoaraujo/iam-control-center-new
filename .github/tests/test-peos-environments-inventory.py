@@ -20,6 +20,8 @@ class InventoryTest(unittest.TestCase):
         self.responses = {
             b + "/environments?per_page=100": page("environments", [{"name":"Preview","id":7}]),
             b + "/actions/secrets?per_page=100": page("secrets", []),
+            b + "/actions/variables?per_page=100": page("variables", [{"name":"REPO_VAR","value":"NEVER_PRINT_ME"}]),
+            p + "/deployment_protection_rules?per_page=100": page("custom_deployment_protection_rules", []),
             p: [{"name":"Preview","id":7,"can_admins_bypass":False,
                  "deployment_branch_policy":{"custom_branch_policies":True,"protected_branches":False},
                  "protection_rules":[{"type":"branch_policy"}]}],
@@ -68,6 +70,29 @@ class InventoryTest(unittest.TestCase):
             raise M.Blocked("GITHUB_READ_FAILED")
         with self.assertRaises(M.Blocked):
             M.audit(self.policy, unavailable)
+    def test_reviewer_identity(self):
+        self.responses[self.path][0]["protection_rules"].append({"type":"required_reviewers",
+            "prevent_self_review":True,"reviewers":[{"type":"User","reviewer":{"id":9,"login":"reviewer"}}]})
+        self.assertEqual(self.audit()["environments"][0]["reviewers"],
+                         [{"type":"User","id":9,"name":"reviewer"}])
+    def test_empty_reviewer_list_rejected(self):
+        self.responses[self.path][0]["protection_rules"].append({"type":"required_reviewers","reviewers":[]})
+        with self.assertRaises(M.Blocked):
+            self.audit()
+    def test_custom_protection_reported(self):
+        self.responses[self.path + "/deployment_protection_rules?per_page=100"] = page(
+            "custom_deployment_protection_rules", [{"id":1,"enabled":True,"app":{"id":2,"secret":"NEVER_PRINT_ME"}}])
+        env = self.audit()["environments"][0]
+        self.assertEqual(env["custom_protections"], [{"id":1,"enabled":True,"app_id":2}])
+        self.assertIn("CUSTOM_PROTECTION_REVIEW_REQUIRED", env["findings"])
+        self.assertNotIn("NEVER_PRINT_ME", json.dumps(env))
+    def test_custom_protection_partial_read(self):
+        self.responses[self.path + "/deployment_protection_rules?per_page=100"] = [{"total_count":1,"custom_deployment_protection_rules":[]}]
+        with self.assertRaises(M.Blocked):
+            self.audit()
+    def test_active_wait_timer(self):
+        self.responses[self.path][0]["protection_rules"].append({"type":"wait_timer","wait_timer":10})
+        self.assertIn("ACTIVE_WAIT_TIMER_REVIEW_REQUIRED", self.audit()["environments"][0]["findings"])
     def test_unknown_environment_candidate_not_created(self):
         self.assertIn("Production", self.audit()["unobserved_candidates"])
         self.assertEqual(len(self.audit()["environments"]), 1)
