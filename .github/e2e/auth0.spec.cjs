@@ -315,7 +315,7 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
 
   // PR195 console: exercise the actual authenticated routes, not just the
   // protected session probe. Reuse the reviewed session without extra logins.
-  if (process.env.E2E_CALLBACK_BRANCH === "feat/peos-dashboard-documentation-20261125") {
+  if (["feat/peos-dashboard-documentation-20261125", "feat/peos-p1-console-accessibility-20261125"].includes(process.env.E2E_CALLBACK_BRANCH)) {
     const modules = [
       ["/", "Centro de controle", "Visão geral"],
       ["/organizations", "Organizações", "Organizações"],
@@ -353,6 +353,17 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
     await expect(page).toHaveURL(url => url.pathname === "/");
     await expect(page.getByRole("heading", { name: "Centro de controle", level: 1 })).toBeVisible();
     console.log("PASS_PR195_AUTHENTICATED_CONSOLE_11_ROUTES_AND_NAVIGATION");
+    if (process.env.E2E_CALLBACK_BRANCH === "feat/peos-p1-console-accessibility-20261125") {
+      await page.setViewportSize({ width: 320, height: 800 });
+      const nav = page.getByRole("navigation", { name: "Navegação principal" });
+      await expect(nav.getByRole("link", { name: "Organizações", exact: true })).toBeVisible();
+      expect(await nav.getByRole("link", { name: "Organizações", exact: true }).evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.getByRole("link", { name: "Ir para o conteúdo principal" }).focus();
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#main-content")).toBeFocused();
+      console.log("PASS_P1_MOBILE_REFLOW_KEYBOARD_NAVIGATION");
+    }
   }
 
   // Logout returns to the app root, which is immediately redirected to
