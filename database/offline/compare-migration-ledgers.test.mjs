@@ -9,6 +9,18 @@ test('observed origin 1 migration vs NEW empty ledger must block',()=>{
  assert.equal(result.verdict,'BLOCKED');
  assert.deepEqual(result.differences,[{migration_id:row.migration_id,reason:'missing_target_row'}]);
 });
+test('both empty ledgers fail closed: schema parity cannot attest lineage',()=>{
+ const result=compareLedgers(
+   ledger('br-ancient-term-b6mmx5ol',[]),
+   ledger('br-floral-glitter-b6zvytjp',[])
+ );
+ assert.equal(result.verdict,'BLOCKED');
+ assert.equal(result.source_count,0);
+ assert.equal(result.target_count,0);
+ assert.deepEqual(result.differences,[{migration_id:'ledger',reason:'both_ledgers_empty'}]);
+ assert.match(printResult(result),/both_ledgers_empty/);
+});
+
 test('matching immutable fields are metadata parity ONLY, never authorization',()=>{
  const b={...row,applied_at:'2026-11-12T04:00:00Z'};
  assert.equal(compareLedgers(ledger('br-a',[row]),ledger('br-b',[b])).verdict,'METADATA_MATCH_ONLY');

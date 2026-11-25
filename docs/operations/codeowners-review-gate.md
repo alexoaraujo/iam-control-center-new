@@ -1,16 +1,13 @@
-# CODEOWNERS and review gate — PEOS proposal
+# CODEOWNERS and review routing — PEOS
 
-Status: **DRAFT / not enforced**. The branch `chore/codeowners-security-review-20261112` adds GitHub ownership routing; it does **not** change Neon, Auth0, Vercel, `main` rulesets or Production.
+Status: PROPOSED / routing only, not a change to rulesets or operational authorization.
 
-The `@alexoaraujo83` account has **write** permission on `alexoaraujo/iam-control-center-new` (verified read-only 2026-11-12). Critical folders and IAM Auth0/RBAC code paths require this independent reviewer in the proposed `.github/CODEOWNERS`. The repository owner remains a general owner on other paths.
+Historical proposal: PR #46, HEAD 44b2b164a10b4f7c2061c6f07d065f06c4040c73. On 2026-11-25 the repository collaborator readback confirmed @alexoaraujo=admin and @alexoaraujo83=write. The proposed CODEOWNERS routes sensitive files to the latter account; it does not establish independent human identity or mandatory review.
 
-**Important:** The existing ruleset `protect-main` (26988310) requires 1 approval and dismisses stale approvals, but **`require_code_owner_review=false`** and the only named required check is `quality`. CODEOWNERS routing alone does **not** make code owner approval mandatory. Do not mark this task PASS until a separate authorized ruleset change and negative tests verify that:
+## Current baseline
 
-1. Sensitive file change without an independent CODEOWNER review cannot merge.
-2. A new commit invalidates stale approvals; unresolved review threads deny merge.
-3. A failed `quality` check blocks merge; applicable Auth0 E2E and PostgreSQL18 gates are enforced for protected code changes, with SKIPPED never silently treated as PASS.
-4. Workflows run only with least privilege, protected environment approvals and no production secrets accessible from untrusted PR code.
+At main 19c265139404939814ffc59efb9c3f28016eab88, the active protect-main ruleset #27506312 requires PRs, resolved threads, strict quality and security-gate checks, stale-review dismissal and protection from deletion/non-fast-forward updates. It has zero required human approvals, require_code_owner_review=false, and no bypass actors. The disabled hardened ruleset #27234161 is not to be activated by this proposal. See [single-maintainer governance](peos-single-maintainer-governance.md).
 
-This proposal must itself pass `quality`, independent reviewer approval on its exact HEAD, and must remain Draft until those acceptance criteria are satisfied. It does not authorize any Neon DDL, migration runner or Production cutover.
+CODEOWNERS is review routing, not an exception to mandatory CI. Changes to ownership files remain security-sensitive and require the current exact-SHA Preview/Auth0 and PG18 contracts when applicable. Do not reclassify them as documentation to obtain a pass. Preserve reviews and leases as historical evidence; new SHA requires new validation.
 
-Related: [issue #11](https://github.com/alexoaraujo/iam-control-center-new/issues/11), [ruleset](https://github.com/alexoaraujo/iam-control-center-new/rules/26988310).
+No change to rulesets, Environment protection, credentials, Neon, Auth0, Vercel or Production is authorized. Any separate decision to enforce mandatory CODEOWNER reviews must be reviewed against current governance and tested without a protection gap. Related: #11 and #34.

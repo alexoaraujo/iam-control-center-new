@@ -1,0 +1,12 @@
+{
+  "format": "iam-development-evidence-collection-policy/v1",
+  "activation_authorized": false,
+  "target": {
+    "project_id": "tiny-rice-70320263",
+    "branch_id": "br-ancient-term-b6mmx5ol",
+    "endpoint_id": "ep-winter-leaf-b6cp8d2c",
+    "host": "ep-winter-leaf-b6cp8d2c.c-2.sa-east-1.aws.neon.tech",
+    "database": "iam_database",
+    "role": "iam_schema_export_reader"
+  }
+}
