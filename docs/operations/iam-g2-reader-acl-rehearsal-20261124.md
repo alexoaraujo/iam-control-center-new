@@ -1,0 +1,10 @@
+# G2 — reader ACL rehearsal (staged; 2026-11-24 BRT)
+Depends on #182; no live migration or authorization.
+
+Read-only Development observations: PG18, expected branch/endpoint, reader LOGIN NOINHERIT NOBYPASSRLS, no memberships, no schema CREATE, no sequence or other relation grants. iam schema USAGE and ledger SELECT absent. iam.schema_migrations exists but has zero rows. No historical provenance can be inferred.
+
+iam.clear_tenant_context() is SECURITY DEFINER owned by iam_owner, PUBLIC EXECUTE. Reader currently lacks schema USAGE; granting USAGE first would expose the routine. Runtime group and worker have explicit EXECUTE; runtime login inherits runtime; migrator currently has effective EXECUTE but no direct grant or inherited owner/runtime/worker rights. neondb_owner inherits owner. Do not revoke PUBLIC until inventory of all authorized callers and migrator policy is reviewed. Do not grant migrator new privileges merely because the fixture models preserving its present access.
+
+The extended existing local PG18 fixture reproduces this combined state, tests a candidate explicit caller grant before PUBLIC revocation and reader USAGE/ledger SELECT, negative ledger write/business read/definer invocation, runtime/worker/migrator synthetic calls, savepoint rollback and zero residue. Existing authenticated reader tests and PG18/RLS remain required. Fixture uses a harmless synthetic routine, not the real function body. SET ROLE is not independent login proof. No new live workflow, policy activation, credentials, or Neon DDL.
+
+Next: independently approve exact caller allowlist, including platform-managed roles and actual function behavior; inventory schema/ledger ACL and provenance; rehearse on a new explicitly approved Development clone with TTL and direct TLS verify-full, restore exact ACL on rollback, then assess authenticated reader guard. Empty ledger remains a separate canonical baseline blocker; never insert fictional migration history. All controls remain fail closed; G3 and Production HOLD.
