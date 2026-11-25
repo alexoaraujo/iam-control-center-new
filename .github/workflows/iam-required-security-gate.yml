@@ -60,6 +60,7 @@ jobs:
               bash database/tests/restore-source-schema.sh
               bash database/tests/run-ci-runtime-login.sh
               psql -X -w "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/runtime-rls-contract.sql
+              psql -X -w "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/tenant-directory-read-contract.sql
               psql -X -w "$DATABASE_URL" -v ON_ERROR_STOP=1 -f database/tests/iam-required-security-gate-assert.sql
             '
           echo "PASS_IAM_SECURITY_GATE_LOCAL_PG18_SIGNED_RLS_A_B_ROLLBACK"

@@ -355,6 +355,15 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
     console.log("PASS_PR195_AUTHENTICATED_CONSOLE_11_ROUTES_AND_NAVIGATION");
   }
 
+  if (process.env.E2E_CALLBACK_BRANCH === "feat/peos-p2-tenant-directory-20261125") {
+    const denied = await page.evaluate(async () => {
+      const response = await fetch("/api/directory/read", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: "11111111-1111-4111-8111-111111111111", identityId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", kind: "identities", cursor: null }) });
+      return { status: response.status, body: await response.json(), cache: response.headers.get("cache-control") };
+    });
+    expect(denied).toEqual({ status: 403, body: { error: "forbidden" }, cache: "no-store" });
+    console.log("PASS_P2_DIRECTORY_DISABLED_REAL_AUTH0_SESSION");
+  }
   // Logout returns to the app root, which is immediately redirected to
   // Auth0 by the Next.js proxy. Verify the login screen, not a transient URL.
   await page.goto("/auth/logout");
