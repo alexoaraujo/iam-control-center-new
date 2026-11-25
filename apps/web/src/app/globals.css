@@ -96,7 +96,7 @@ h1,h2,h3,p { margin-top: 0; }
 .overview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .panel-card { padding: 20px; min-width: 0; }
 .panel-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.panel-title h3 { font: 700 14px system-ui,sans-serif; margin: 5px 0 0; letter-spacing: -.2px; }
+.panel-title h2 { font: 700 14px system-ui,sans-serif; margin: 5px 0 0; letter-spacing: -.2px; }
 .panel-title > div > p { color: #8994a2; font-size: 10px; margin: 6px 0 0; }
 .posture-card { min-height: 265px; display: flex; flex-direction: column; }
 .posture-empty { text-align: center; padding: 17px 22px 14px; display: flex; flex-direction: column; align-items: center; }
@@ -209,6 +209,50 @@ a:focus-visible { outline: 3px solid #3868e8; outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* P1: readable type, semantic landmarks and reflow without an icon-only menu. */
+:root { --muted: #475569; --nav-muted: #c0cddd; }
+body { font-size: 16px; line-height: 1.5; }
+.skip-link { position: fixed; top: 8px; left: 8px; z-index: 100; padding: 12px 16px; background: #fff; color: #17212f; border-radius: 8px; transform: translateY(-150%); }
+.skip-link:focus { transform: translateY(0); }
+.main-panel:focus { outline: none; }
+.nav-link { font-size: .875rem; }
+.sidebar .nav-caption, .sidebar .workspace-label { color: #c0cddd; font-size: .75rem; }
+.workspace-switcher strong,.sidebar-user strong,.support-card strong { font-size: .875rem; }
+.workspace-switcher small,.sidebar-user small,.support-card p,.support-card a { font-size: .75rem; color: #c0cddd; }
+.eyebrow,.breadcrumb,.welcome-row p,.read-only-label,.notice p,.metric-foot,.metric-foot span:last-child,.panel-title > div > p,.posture-empty p,.posture-legend,.integration-row small,.module-card p,.section-heading > p,.empty-state p,.info-strip p,.mini-control span,.mini-control p,.section-status,.policy-row p,.risk-list p,.integration-detail-grid small,.integration-detail-grid span,.environment-grid p,.operation-grid p,.evidence-schema span,.page-footer,.subtle-count { color: #475569; font-size: .8125rem; }
+.notice strong,.metric-top,.posture-empty strong,.integration-row strong,.module-card strong,.empty-state strong,.info-strip strong,.mini-control strong,.policy-row strong,.risk-list strong,.environment-grid strong,.operation-grid strong,.evidence-schema strong { font-size: .875rem; }
+.status { font-size: .75rem; white-space: normal; overflow-wrap: anywhere; color: #475569; }
+.status--warning { color: #794a0a; }.status--success { color: #126044; }.status--danger { color: #8c3333; }
+.environment-pill { color: #794a0a; font-size: .75rem; }
+.button,.text-link,.posture-empty a { font-size: .875rem; }
+.button,.icon-button,.topbar-avatar { min-height: 44px; }
+.icon-button,.topbar-avatar { min-width: 44px; }
+.panel-title h2,.section-heading h2 { font-size: 1.125rem; }
+.module-card { min-height: 154px; padding-bottom: 30px; }
+.module-number,.risk-code,.metric-value { color: #475569; }
+.notice > div { min-width: 0; }
+@media (max-width: 900px) {
+  .sidebar { position: static; width: auto; padding: 14px; align-items: stretch; }
+  .brand { padding: 0 0 12px; }.brand-copy { display: flex; }
+  .workspace-switcher,.workspace-label,.sidebar-bottom { display: none; }
+  .main-nav { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 4px; }
+  .nav-caption { display: block; grid-column: 1 / -1; padding: 8px 4px 0; }
+  .nav-caption--spaced { margin-top: 4px; }
+  .nav-link { width: auto; justify-content: flex-start; padding: 6px 8px; font-size: .875rem; }
+  .nav-icon { flex-shrink: 0; }
+  .main-panel { margin-left: 0; }
+  .topbar { position: static; height: auto; min-height: 66px; padding-top: 8px; padding-bottom: 8px; flex-wrap: wrap; }
+  .topbar-actions { justify-content: flex-start; }
+}
+@media (max-width: 480px) {
+  .metric-grid,.module-grid { grid-template-columns: 1fr; }
+  .panel-title,.policy-row { flex-wrap: wrap; }
+  .notice > .status { margin-left: 0; }
+  .posture-legend { flex-wrap: wrap; }
+  .welcome-actions { justify-content: flex-start; }
+  .content { overflow-wrap: anywhere; }
 }
 
 .directory-panel { overflow-wrap: anywhere; }

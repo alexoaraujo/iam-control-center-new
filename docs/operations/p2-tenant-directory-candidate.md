@@ -27,3 +27,9 @@ Operational sequence, only after reviewed exact-SHA CI and Auth0 callback:
 6. Keep Production HOLD; integrate only after reviewed gates. Never pass a synthetic plan as real HTTP evidence.
 
 The earlier PG18 evidence remains historical. This document is a plan, not an approved operational lease.
+
+## P1 integration and isolated reservation
+
+PR #196 merged as e79f1ce9887bd48e790a5c99c0b52dc92d145b00, exact-SHA Auth0 and security gate passed. Previous P2 SHA dd63f471a0eec2ecc0c7805baa11ac70b592f874 passed the disabled-directory real Auth0 test and security gate (run 45644535066); these results remain historical after reconciliation.
+
+Neon branch br-lively-rain-b6dc51f7, parent br-muddy-bar-b63ksdy7, expires 2026-11-26T14:30:00Z, initially no compute, no credentials and feature disabled. Parent read-only counts: two test-marked tenants, two .invalid issuer identities, zero email, sessions, API keys, service accounts, audit events and ledger rows, one named synthetic context key, 16 permissions. Existing baseline rows are not P2 residue. Provider reservation is not the two-hour approved runtime lease. Revalidate TTL and exact SHA; trusted main-only executor and segregated credentials required before operational activation.

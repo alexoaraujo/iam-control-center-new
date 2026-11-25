@@ -19,7 +19,7 @@ export function isDashboardPath(path: string): path is DashboardPath {
 }
 
 export function Status({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "warning" | "success" | "danger" }) {
-  return <span className={`status status--${tone}`}><span className="status__dot" />{children}</span>;
+  return <span className={`status status--${tone}`}><span className="status__dot" aria-hidden="true" />{children}</span>;
 }
 
 export function SectionHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
