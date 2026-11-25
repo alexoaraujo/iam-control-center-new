@@ -153,6 +153,7 @@
     "Preview-Auth0-Control",
     "Preview-Authenticated-E2E",
     "IAM-G3-Disposable-RBAC",
-    "IAM-P2-Disposable-RBAC"
+    "IAM-P2-Disposable-RBAC",
+    "Preview-Vercel-Metadata"
   ]
 }

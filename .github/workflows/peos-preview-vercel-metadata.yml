@@ -1,0 +1,69 @@
+name: PEOS trusted Preview Vercel metadata
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        required: true
+        type: string
+      pr_sha:
+        required: true
+        type: string
+      main_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+concurrency:
+  group: peos-preview-vercel-metadata
+  cancel-in-progress: false
+env:
+  PR_NUMBER: ${{ inputs.pr_number }}
+  EXPECTED_PR_SHA: ${{ inputs.pr_sha }}
+  EXPECTED_MAIN_SHA: ${{ inputs.main_sha }}
+jobs:
+  preflight:
+    if: github.repository == 'alexoaraujo/iam-control-center-new' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      eligible: ${{ steps.preflight.outputs.eligible }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          export CHECKOUT_SHA="$(git rev-parse HEAD)"
+          node .github/trusted/peos-preview-vercel-metadata.mjs preflight
+  metadata:
+    needs: preflight
+    if: github.ref == 'refs/heads/main' && needs.preflight.outputs.eligible == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment:
+      name: Preview-Vercel-Metadata
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate effective policy and approved SHA, read Preview metadata only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVED_PR_SHA: ${{ vars.IAM_PREVIEW_METADATA_APPROVED_PR_SHA }}
+          APPROVED_MAIN_SHA: ${{ vars.IAM_PREVIEW_METADATA_APPROVED_MAIN_SHA }}
+          APPROVED_PR_NUMBER: ${{ vars.IAM_PREVIEW_METADATA_APPROVED_PR_NUMBER }}
+          APPROVED_CALLBACK_HOST: ${{ vars.IAM_PREVIEW_METADATA_APPROVED_CALLBACK_HOST }}
+          OPERATOR_APPROVAL: ${{ vars.IAM_PREVIEW_METADATA_OPERATOR_APPROVAL }}
+          TOKEN_SCOPE_ATTESTATION: ${{ vars.IAM_PREVIEW_METADATA_TOKEN_SCOPE_ATTESTATION }}
+          PREVIEW_VERCEL_READ_TOKEN: ${{ secrets.IAM_PREVIEW_METADATA_VERCEL_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          export CHECKOUT_SHA="$(git rev-parse HEAD)"
+          node .github/trusted/peos-preview-vercel-metadata.mjs metadata

@@ -8,6 +8,9 @@ on:
       - '.github/scripts/peos-pr-workflow-exposure.rb'
       - '.github/tests/test-peos-pr-workflow-exposure.rb'
       - '.github/workflows/peos-environments-governance.yml'
+      - '.github/workflows/peos-preview-vercel-metadata.yml'
+      - '.github/trusted/peos-preview-vercel-metadata.mjs'
+      - '.github/tests/peos-preview-vercel-metadata.test.mjs'
   push:
     branches: [main]
     paths:
@@ -17,6 +20,9 @@ on:
       - '.github/scripts/peos-pr-workflow-exposure.rb'
       - '.github/tests/test-peos-pr-workflow-exposure.rb'
       - '.github/workflows/peos-environments-governance.yml'
+      - '.github/workflows/peos-preview-vercel-metadata.yml'
+      - '.github/trusted/peos-preview-vercel-metadata.mjs'
+      - '.github/tests/peos-preview-vercel-metadata.test.mjs'
 permissions:
   contents: read
 jobs:
@@ -32,3 +38,5 @@ jobs:
         run: ruby .github/tests/test-peos-pr-workflow-exposure.rb
       - name: Report PR workflow exposure without authorizing execution
         run: ruby .github/scripts/peos-pr-workflow-exposure.rb --report-only
+      - name: Test trusted Preview metadata executor without secrets
+        run: node --test .github/tests/peos-preview-vercel-metadata.test.mjs
