@@ -47,7 +47,6 @@ const branchCallbacks = new Map([
   ["fix/g3-postmerge-pr150-exact-main-20261121", "iam-control-center-new-pr151-ci.vercel.app"],
   ["fix/g1-b2-historical-readback-main-only-20261121", "iam-control-center-new-pr152-ci.vercel.app"],
   ["security/g1-b2-real-isolated-restore-20261122", "iam-control-center-new-pr154-ci.vercel.app"],
-  ["fix/g1-pg18-archive-stdin-node24-20261122", "iam-control-center-new-pr158-ci.vercel.app"],
   ["fix/peos-g1-neon-managed-default-acl-20261122", "iam-control-center-new-pr162-ci.vercel.app"],
   ["fix/peos-g1-rollback-marker-transactional-20261122", "iam-control-center-new-pr164-ci.vercel.app"],
   ["fix/peos-g1-empty-ledger-fail-closed-20261122", "iam-control-center-new-pr166-ci.vercel.app"],
@@ -60,6 +59,7 @@ const branchCallbacks = new Map([
 
 // Historical aliases removed from the project; never fall back to a shared host.
 const retiredPreviewBranches = new Set([
+  "fix/g1-pg18-archive-stdin-node24-20261122", // PR #158
   "security/g1-b2-aead-restore-offline-contract-20261121", // PR #153
   "fix/g1-restore-synthetic-marker-isolation-20261122", // PR #155
   "fix/g1-main-checks-paginated-gate-20261122", // PR #156
