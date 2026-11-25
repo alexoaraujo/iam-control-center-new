@@ -1,9 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {TARGET,validateExecution} from "./p2-protected-preflight.mjs";
+import {TARGET,validateExecution,validateEnvironmentPolicy} from "./p2-protected-preflight.mjs";
 const now=Date.parse("2026-11-25T16:00:00Z"),sha="a".repeat(40),head="b".repeat(40);
 const env={GITHUB_REPOSITORY:TARGET.repository,GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"alexoaraujo",GITHUB_SHA:sha,P2_TRUSTED_MAIN_SHA:sha,P2_HEAD_SHA:head,P2_APPROVED_SHA:head,P2_APPROVED_MAIN_SHA:sha,P2_BRANCH_ID:TARGET.branch,P2_ENDPOINT_ID:TARGET.endpoint,P2_OPERATOR_APPROVAL:"APPROVED_DISPOSABLE_P2_ONLY",P2_ENVIRONMENT_READBACK:"MAIN_ONLY_REVIEWER_NO_BYPASS_VERIFIED",P2_LEASE_START_AT:"2026-11-25T15:55:00Z",P2_LEASE_EXPIRES_AT:"2026-11-25T17:00:00Z",P2_OWNER_DATABASE_URL:"postgresql://neondb_owner:synthetic@"+TARGET.host+"/iam_database?sslmode=verify-full&sslrootcert=system",P2_CONTEXT_KEY_HEX:"42".repeat(32)};
 test("bounded approved fixture plan",()=>assert.equal(validateExecution(env,now).end,Date.parse(env.P2_LEASE_EXPIRES_AT)));
 for(const [key,value] of Object.entries({GITHUB_REF:"refs/heads/feature",GITHUB_ACTOR:"other",GITHUB_EVENT_NAME:"pull_request_target",P2_TRUSTED_MAIN_SHA:"c".repeat(40),P2_APPROVED_SHA:"c".repeat(40),P2_APPROVED_MAIN_SHA:"c".repeat(40),P2_BRANCH_ID:"br-ancient-term-b6mmx5ol",P2_ENDPOINT_ID:"ep-wrong",P2_ENVIRONMENT_READBACK:"",P2_LEASE_START_AT:"2026-11-25T16:10:00Z",P2_LEASE_EXPIRES_AT:"2026-11-25T18:30:00Z",P2_OWNER_DATABASE_URL:"postgresql://neondb_owner:synthetic@"+TARGET.host+"/iam_database?sslmode=require",P2_CONTEXT_KEY_HEX:"bad"}))test("reject "+key,()=>assert.throws(()=>validateExecution({...env,[key]:value},now)));
 test("expired write denies, narrowly scoped compensatory cleanup remains eligible",()=>{const expired=Date.parse("2026-11-25T17:01:00Z");assert.throws(()=>validateExecution(env,expired));assert.doesNotThrow(()=>validateExecution(env,expired,true));});
 test("cleanup refuses after provider lease",()=>assert.throws(()=>validateExecution(env,Date.parse(TARGET.providerExpiry),true)));
+
+const policy={name:TARGET.environment,can_admins_bypass:false,deployment_branch_policy:{custom_branch_policies:true,protected_branches:false},protection_rules:[{type:"required_reviewers",reviewers:[{type:"User",reviewer:{login:"alexoaraujo"}}]}]};
+const branches={total_count:1,branch_policies:[{name:"main",type:"branch"}]};
+test("requires real main-only reviewer/no-bypass policy",()=>assert.doesNotThrow(()=>validateEnvironmentPolicy(policy,branches)));
+test("rejects absent reviewers, admin bypass and wildcard policy",()=>{
+  for(const x of [{...policy,can_admins_bypass:true},{...policy,protection_rules:[]},{...policy,deployment_branch_policy:null}]) assert.throws(()=>validateEnvironmentPolicy(x,branches));
+  assert.throws(()=>validateEnvironmentPolicy(policy,{total_count:1,branch_policies:[{name:"*",type:"branch"}]}));
+  assert.throws(()=>validateEnvironmentPolicy(policy,{total_count:2,branch_policies:branches.branch_policies}));
+});

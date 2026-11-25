@@ -80,6 +80,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           P2_NEON_READ_TOKEN: ${{ secrets.IAM_P2_NEON_ENDPOINT_READ_TOKEN }}
+          P2_GITHUB_ENVIRONMENT_READ_TOKEN: ${{ secrets.IAM_P2_GITHUB_ENVIRONMENT_READ_TOKEN }}
           P2_OWNER_DATABASE_URL: ${{ secrets.IAM_P2_OWNER_DATABASE_URL }}
           P2_CONTEXT_KEY_HEX: ${{ secrets.IAM_P2_CONTEXT_KEY_HEX }}
         run: node scripts/p2-protected-preflight.mjs protected
@@ -99,6 +100,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           P2_NEON_READ_TOKEN: ${{ secrets.IAM_P2_NEON_ENDPOINT_READ_TOKEN }}
+          P2_GITHUB_ENVIRONMENT_READ_TOKEN: ${{ secrets.IAM_P2_GITHUB_ENVIRONMENT_READ_TOKEN }}
           P2_OWNER_DATABASE_URL: ${{ secrets.IAM_P2_OWNER_DATABASE_URL }}
           P2_CONTEXT_KEY_HEX: ${{ secrets.IAM_P2_CONTEXT_KEY_HEX }}
           AUTH0_E2E_USERNAME: ${{ secrets.IAM_P2_AUTH0_E2E_USERNAME }}

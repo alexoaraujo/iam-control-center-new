@@ -65,11 +65,28 @@ export async function verifyGitHub(env) {
     const match=url.match(/\/actions\/runs\/(\d+)\/job\/(\d+)/);
     requireP2(Boolean(match),"RUN_IDENTITY");
     const run=await get("/actions/runs/"+match[1]);
-    const expected=name==="pg18-security-contracts"?"iam-required-security-gate.yml":name==="deployment-config"?"deployment-config.yml":"quality.yml";
+    const expected=name==="pg18-security-contracts"?"iam-required-security-gate.yml":name==="deployment-config"?"vercel-deployment-guard.yml":"quality.yml";
     requireP2(run.head_sha===env.P2_HEAD_SHA && run.event==="pull_request" && run.path?.split("@")[0]===".github/workflows/"+expected &&
       run.head_repository?.full_name===TARGET.repository && run.conclusion==="success","WORKFLOW_IDENTITY_"+name);
   }
   console.log("PASS_P2_TRUSTED_MAIN_EXACT_PR_AND_CHECKS");
+}
+export function validateEnvironmentPolicy(environment, policies) {
+  requireP2(environment?.name===TARGET.environment && environment.can_admins_bypass===false &&
+    environment.deployment_branch_policy?.custom_branch_policies===true &&
+    environment.deployment_branch_policy?.protected_branches===false &&
+    Array.isArray(environment.protection_rules) &&
+    environment.protection_rules.some(x=>x.type==="required_reviewers" && Array.isArray(x.reviewers) && x.reviewers.length>0),
+    "ENVIRONMENT_PROTECTION");
+  requireP2(policies?.total_count===1 && policies.branch_policies?.length===1 &&
+    policies.branch_policies[0].name==="main" && policies.branch_policies[0].type==="branch", "ENVIRONMENT_BRANCH_POLICY");
+}
+export async function verifyEnvironment(env) {
+  const root="/repos/"+TARGET.repository+"/environments/"+TARGET.environment;
+  const get=p=>api(root+p,env.P2_GITHUB_ENVIRONMENT_READ_TOKEN,"https://api.github.com");
+  const [environment,policies]=await Promise.all([get(""),get("/deployment-branch-policies?per_page=100")]);
+  validateEnvironmentPolicy(environment,policies);
+  console.log("PASS_P2_AUTHENTICATED_ENVIRONMENT_MAIN_REVIEWER_NO_ADMIN_BYPASS");
 }
 export async function verifyProvider(env) {
   validateExecution(env);
@@ -88,6 +105,6 @@ export async function verifyProvider(env) {
 if (process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
   try {
     await verifyGitHub(process.env);
-    if(process.argv[2]==="protected") await verifyProvider(process.env);
+    if(process.argv[2]==="protected") { await verifyEnvironment(process.env); await verifyProvider(process.env); }
   } catch(e) { console.error(/^BLOCKED_P2_[A-Za-z0-9_-]+$/.test(e.message)?e.message:"BLOCKED_P2_PREFLIGHT"); process.exitCode=1; }
 }

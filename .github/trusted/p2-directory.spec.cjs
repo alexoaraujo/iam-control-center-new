@@ -38,6 +38,7 @@ async function owner(sql,guard,fn,cleanup=false){
   guard.validateExecution(process.env,Date.now(),cleanup);
   return sql.begin(async tx=>{
     await identity(tx,guard.TARGET);
+    check((await first(tx,"SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype=\'advisory\' AND pid=pg_backend_pid() AND classid=197 AND objid=20261125 AND objsubid=2 AND granted) locked")).locked,"EXCLUSIVE_SESSION_LOCK");
     await tx.unsafe("SET LOCAL ROLE iam_owner");
     check((await first(tx,"SELECT current_user AS role")).role==="iam_owner","OWNER_ROLE");
     return fn(tx);
@@ -58,16 +59,18 @@ test("P2 real Auth0 same-session directory grant, cross-tenant deny, revoke and 
   const guard=await import("../../scripts/p2-protected-preflight.mjs");
   guard.validateExecution(process.env);
   await guard.verifyGitHub(process.env);
+  await guard.verifyEnvironment(process.env);
   await guard.verifyProvider(process.env);
   const {verifyPreviewAliases}=await import("../../scripts/verify-preview-alias.mjs");
   const immutable=await verifyPreviewAliases(process.env);
   const token=process.env.VERCEL_TRUSTED_OIDC_TOKEN;
   check(token&&process.env.AUTH0_E2E_USERNAME&&process.env.AUTH0_E2E_PASSWORD,"BROWSER_CREDENTIALS");
-  const sql=postgres(process.env.P2_OWNER_DATABASE_URL,{max:1,connect_timeout:10,idle_timeout:5,prepare:false});
+  const sql=postgres(process.env.P2_OWNER_DATABASE_URL,{max:1,connect_timeout:10,idle_timeout:0,max_lifetime:0,prepare:false});
   let baseline,started=false,cdp,callback=false,failed=false,cleanupFailed=false;
   try{
     await identity(sql,guard.TARGET);
     check((await first(sql,"SELECT pg_try_advisory_lock(197,20261125) locked")).locked,"EXCLUSIVE_LOCK");
+    // All writes also require the session advisory lock, not just the workflow concurrency group.
     baseline=await owner(sql,guard,snapshot);
     check(baseline.tenants===2&&baseline.identities===2&&baseline.memberships===2&&baseline.roles===1&&baseline.role_permissions===1&&baseline.membership_roles===0&&baseline.keys===1&&baseline.ledger===0&&baseline.audit_events===0&&baseline.audit_outbox===0&&baseline.permissions===16&&baseline.residue===0&&baseline.temporary_key===0&&typeof baseline.baseline_key==="string","BASELINE");
     check((await first(sql,"SELECT count(*)::int n FROM iam.permissions WHERE permission_key IN ('iam.tenant.read','iam.identity.read')")).n===2,"PERMISSIONS");
