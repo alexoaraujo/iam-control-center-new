@@ -1,17 +1,16 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hasBuildRelevantChanges, shouldBuild } from "./vercel-ignore-build.mjs";
+import { hasBuildRelevantChanges, shouldBuild, requiresAuthenticatedPreview } from "./vercel-ignore-build.mjs";
 import { decideSecurityGate } from "./release-security-gate.mjs";
 
-test("skips Preview for documentation-only changes", () => {
+test("docs-only changes skip authenticated E2E, not the deployment", () => {
   assert.equal(
-    shouldBuild({
-      environment: "preview",
+    requiresAuthenticatedPreview({
       previousSha: "base",
       currentSha: "head",
       changedFiles: ["README.md", "docs/architecture/overview.md"],
@@ -36,8 +35,7 @@ test("builds Preview when the Auth0 CI workflow changes", () => {
 
 test("builds Preview when web application code changes", () => {
   assert.equal(
-    shouldBuild({
-      environment: "preview",
+    requiresAuthenticatedPreview({
       previousSha: "base",
       currentSha: "head",
       changedFiles: ["apps/web/src/app/page.tsx"],
@@ -86,20 +84,19 @@ test("permits Production only for an exact reviewed 40-hex SHA on main", () => {
   }
 });
 
-test("release approval does not bypass Preview impact detection", () => {
+test("release approval does not bypass authenticated Preview classification", () => {
   const sha = "a".repeat(40);
-  assert.equal(shouldBuild({ environment: "preview", previousSha: "old",
+  assert.equal(requiresAuthenticatedPreview({ previousSha: "old",
     currentSha: sha, approvedProductionSha: sha, gitRef: "main",
     changedFiles: ["docs/only.md"] }), false);
-  assert.equal(shouldBuild({ environment: "preview", previousSha: "old",
+  assert.equal(requiresAuthenticatedPreview({ previousSha: "old",
     currentSha: sha, approvedProductionSha: sha, gitRef: "main",
     changedFiles: ["apps/web/src/app/page.tsx"] }), true);
 });
 
 test("fails closed when commit metadata is missing", () => {
   assert.equal(
-    shouldBuild({
-      environment: "preview",
+    requiresAuthenticatedPreview({
       previousSha: "",
       currentSha: "head",
       changedFiles: ["docs/only.md"],
@@ -114,8 +111,7 @@ test("builds Preview when integration validation scripts change", () => {
 
 test("builds an exact-SHA Preview for a main-sync merge carrying PR application changes", () => {
   assert.equal(
-    shouldBuild({
-      environment: "preview",
+    requiresAuthenticatedPreview({
       previousSha: "previous-feature",
       currentSha: "merged-feature",
       // A Vercel incremental diff sees only the merged main's database changes.
@@ -129,8 +125,7 @@ test("builds an exact-SHA Preview for a main-sync merge carrying PR application 
 
 test("SQL inherited through a main-sync merge must trigger exact-SHA Preview", () => {
   assert.equal(
-    shouldBuild({
-      environment: "preview",
+    requiresAuthenticatedPreview({
       previousSha: "previous-feature",
       currentSha: "merged-feature",
       changedFiles: ["database/scripts/schema-manifest.sql"],
@@ -140,10 +135,9 @@ test("SQL inherited through a main-sync merge must trigger exact-SHA Preview", (
   );
 });
 
-test("documentation-only main-sync merges still omit unneeded Preview", () => {
+test("documentation-only main-sync merges omit authenticated E2E only", () => {
   assert.equal(
-    shouldBuild({
-      environment: "preview",
+    requiresAuthenticatedPreview({
       previousSha: "previous-feature",
       currentSha: "merged-feature",
       changedFiles: ["docs/operations/runbook.md"],
@@ -155,8 +149,7 @@ test("documentation-only main-sync merges still omit unneeded Preview", () => {
 
 test("redeploying the same Preview SHA never ignores updated environment settings", () => {
   assert.equal(
-    shouldBuild({
-      environment: "preview",
+    requiresAuthenticatedPreview({
       previousSha: "35dd97edd08a92bb4dbc1b1a9c02e5a3c11627d4",
       currentSha: "35dd97edd08a92bb4dbc1b1a9c02e5a3c11627d4",
       changedFiles: [],
@@ -180,8 +173,7 @@ test("Preview impact classification and security-gate agree for SQL, workflows a
     "new-security-policy.json",
   ];
   for (const file of nonDocs) {
-    const preview = shouldBuild({
-      environment: "preview", previousSha: "before", currentSha: "after",
+    const preview = requiresAuthenticatedPreview({ previousSha: "before", currentSha: "after",
       changedFiles: [file],
     });
     assert.equal(preview, true, file);
@@ -201,8 +193,7 @@ test("Preview impact classification and security-gate agree for SQL, workflows a
 
 test("docs-only scopes require trusted docs Preview evidence, not Auth0 E2E", () => {
   for (const file of ["README.md", "SECURITY.md", "docs/operations/runbook.md"]) {
-    const preview = shouldBuild({
-      environment: "preview", previousSha: "before", currentSha: "after",
+    const preview = requiresAuthenticatedPreview({ previousSha: "before", currentSha: "after",
       changedFiles: [file],
     });
     assert.equal(preview, false, file);
@@ -219,8 +210,7 @@ test("docs-only scopes require trusted docs Preview evidence, not Auth0 E2E", ()
 });
 
 test("no/invalid diff cannot suppress a required Preview", () => {
-  assert.equal(shouldBuild({
-    environment: "preview", previousSha: "before", currentSha: "after",
+  assert.equal(requiresAuthenticatedPreview({ previousSha: "before", currentSha: "after",
     changedFiles: [], mergeParentChangedFiles: [],
   }), true);
   assert.equal(hasBuildRelevantChanges([""]), true);
@@ -229,14 +219,12 @@ test("no/invalid diff cannot suppress a required Preview", () => {
 
 test("unknown Git diff metadata builds Preview instead of suppressing evidence", () => {
   for (const changedFiles of [undefined, null, "docs/only.md", { "0": "docs/only.md" }]) {
-    assert.equal(shouldBuild({
-      environment: "preview", previousSha: "base", currentSha: "head",
+    assert.equal(requiresAuthenticatedPreview({ previousSha: "base", currentSha: "head",
       changedFiles,
     }), true);
   }
   for (const mergeParentChangedFiles of [null, "docs/only.md", { "0": "docs/only.md" }]) {
-    assert.equal(shouldBuild({
-      environment: "preview", previousSha: "base", currentSha: "head",
+    assert.equal(requiresAuthenticatedPreview({ previousSha: "base", currentSha: "head",
       changedFiles: ["docs/only.md"], mergeParentChangedFiles,
     }), true);
   }
@@ -280,4 +268,67 @@ test("Preview preserves deleted source paths across code-to-doc renames", (t) =>
     stdio: ["ignore", "pipe", "pipe"],
   });
   assert.match(readFileSync(output, "utf8"), /^preview_required=true\n$/);
+});
+
+test("every Preview deployment builds, including docs-only main-sync and missing metadata", () => {
+  for (const options of [
+    { changedFiles: ["docs/operations/runbook.md"] },
+    { changedFiles: ["README.md"], mergeParentChangedFiles: ["SECURITY.md"] },
+    { changedFiles: [] },
+    { changedFiles: null },
+    {},
+  ]) {
+    assert.equal(shouldBuild({ environment: "preview", ...options }), true);
+  }
+});
+
+test("Vercel CLI exit codes preserve exact-SHA Production authorization and build Preview", () => {
+  const script = fileURLToPath(new URL("./vercel-ignore-build.mjs", import.meta.url));
+  const sha = "a".repeat(40);
+  const cases = [
+    { environment: "preview", ref: "fix/docs", approved: "", expected: 1 },
+    { environment: "production", ref: "main", approved: "", expected: 0 },
+    { environment: "production", ref: "main", approved: "b".repeat(40), expected: 0 },
+    { environment: "production", ref: "feature", approved: sha, expected: 0 },
+    { environment: "production", ref: "main", approved: sha, expected: 1 },
+  ];
+  for (const { environment, ref, approved, expected } of cases) {
+    const result = spawnSync(process.execPath, [script], {
+      encoding: "utf8",
+      env: { ...process.env, VERCEL_ENV: environment, VERCEL_GIT_COMMIT_REF: ref,
+        VERCEL_GIT_COMMIT_SHA: sha, VERCEL_GIT_PREVIOUS_SHA: "b".repeat(40),
+        IAM_APPROVED_PRODUCTION_SHA: approved },
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, expected, result.stderr);
+  }
+});
+
+test("real docs-only Git diff requires a deployment but not authenticated E2E", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "iam-docs-ready-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const git = (...args) => execFileSync("git", ["-C", root, ...args], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  git("init", "-q");
+  git("config", "user.name", "PEOS Synthetic Runner");
+  git("config", "user.email", "peos-synthetic@example.invalid");
+  writeFileSync(join(root, "README.md"), "before");
+  git("add", "-A");
+  git("commit", "-q", "-m", "initial docs");
+  const before = git("rev-parse", "HEAD");
+  writeFileSync(join(root, "README.md"), "after");
+  git("add", "-A");
+  git("commit", "-q", "-m", "docs-only change");
+  const after = git("rev-parse", "HEAD");
+  const script = fileURLToPath(new URL("./vercel-ignore-build.mjs", import.meta.url));
+  const output = join(root, "github-output");
+  writeFileSync(output, "");
+  const env = { ...process.env, BASE_SHA: before, HEAD_SHA: after, GITHUB_OUTPUT: output,
+    VERCEL_ENV: "preview", VERCEL_GIT_PREVIOUS_SHA: before, VERCEL_GIT_COMMIT_SHA: after };
+  execFileSync(process.execPath, [script, "--github-output"], { cwd: root, env });
+  assert.equal(readFileSync(output, "utf8"), "preview_required=false\n");
+  const build = spawnSync(process.execPath, [script], { cwd: root, env, encoding: "utf8" });
+  assert.equal(build.error, undefined);
+  assert.equal(build.status, 1, build.stderr);
 });
