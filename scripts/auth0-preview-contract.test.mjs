@@ -18,7 +18,7 @@ test("Auth0 Preview callback is resolved from live Vercel binding for every PR",
   assert.equal(approvedCallback("feat/g1-b2-encrypted-full-backup-writer-20261119"), "iam-control-center-new-g1-backup-writer-ci.vercel.app");
   assert.equal(approvedCallback("fix/g1-b2-four-environments-readonly-preflight-20261119"), "iam-control-center-new-pr141-ci.vercel.app");
   assert.throws(() => approvedCallback("fix/g1-pg18-failed-phase-diagnostics-20261122"), /RETIRED_PREVIEW_BRANCH/);
-  assert.equal(approvedCallback("fix/g1-pg18-archive-stdin-node24-20261122"), "iam-control-center-new-pr158-ci.vercel.app");
+  assert.throws(() => approvedCallback("fix/g1-pg18-archive-stdin-node24-20261122"), /RETIRED_PREVIEW_BRANCH/);
   assert.throws(() => approvedCallback("fix/g1-artifact-same-run-gh-cli-20261122"), /RETIRED_PREVIEW_BRANCH/);
   assert.throws(() => approvedCallback("fix/g1-pg18-restore-apply-redacted-classifier-20261122"), /RETIRED_PREVIEW_BRANCH/);
   assert.throws(() => approvedCallback("fix/g1-restore-custody-id-readonly-attestation-20261122"), /RETIRED_PREVIEW_BRANCH/);
