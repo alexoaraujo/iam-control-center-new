@@ -600,6 +600,7 @@ test("PR192 rollback witness Preview is bound to its branch and exact SHA", () =
 
 test("retired Preview branches fail closed before shared or historical binding", () => {
   const retired = [
+    ["fix/g1-pg18-archive-stdin-node24-20261122", "iam-control-center-new-pr158-ci.vercel.app"],
     ["security/g1-b2-aead-restore-offline-contract-20261121", "iam-control-center-new-pr153-ci.vercel.app"],
     ["fix/g1-restore-synthetic-marker-isolation-20261122", "iam-control-center-new-pr155-ci.vercel.app"],
     ["fix/g1-main-checks-paginated-gate-20261122", "iam-control-center-new-pr156-ci.vercel.app"],
