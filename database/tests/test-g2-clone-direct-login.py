@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 path=Path(__file__).resolve().parents[1]/"scripts/g2-clone-direct-login.py"
 spec=importlib.util.spec_from_file_location("probe",path)
@@ -42,4 +43,23 @@ class Contract(unittest.TestCase):
         self.assertIn("ROLLBACK",p.SQL)
         for word in ("GRANT ","REVOKE ","INSERT ","UPDATE ","DELETE ","SET ROLE"):
             self.assertNotIn(word,p.SQL)
+    def test_platform_block(self):
+        with patch.object(p.sys,"platform","win32"):
+            with self.assertRaisesRegex(p.Blocked,"LINUX_OR_WSL_REQUIRED"):
+                p.live("a"*40)
+    def test_missing_clients(self):
+        with patch.object(p.sys,"platform","linux"), patch.object(p.os.path,"isfile",return_value=False):
+            with self.assertRaisesRegex(p.Blocked,"GIT_CLIENT_MISSING"):
+                p.check_local_dependencies()
+        with patch.object(p.sys,"platform","linux"), patch.object(p.os.path,"isfile",side_effect=[True,False]), patch.object(p.os,"access",return_value=True):
+            with self.assertRaisesRegex(p.Blocked,"PSQL_CLIENT_MISSING"):
+                p.check_local_dependencies()
+    def test_missing_ca(self):
+        with patch.object(p.sys,"platform","linux"), patch.object(p.os.path,"isfile",side_effect=[True,True,False]), patch.object(p.os,"access",return_value=True):
+            with self.assertRaisesRegex(p.Blocked,"SYSTEM_CA_MISSING"):
+                p.check_local_dependencies()
+    def test_git_query_error_redacted(self):
+        with patch.object(p.subprocess,"run",side_effect=FileNotFoundError("synthetic-sensitive")):
+            with self.assertRaisesRegex(p.Blocked,"^GIT_CHECKOUT_QUERY_FAILED$"):
+                p.verify_checkout("a"*40)
 if __name__=="__main__": unittest.main()

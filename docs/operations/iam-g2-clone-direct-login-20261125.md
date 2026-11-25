@@ -27,3 +27,6 @@ must explicitly cover a short committed ACL window in an isolated clone,
 full before-image/rollback plan, independent login credentials, exact SHA,
 reviewed callers, cleanup and postflight; no such change is implemented here.
 No migration, no acquisition, no ledger backfill, no G3 or Production.
+
+## Diagnóstico local sem segredos
+Use Linux/WSL com Python 3, git, psql e ca-certificates. Python nativo Windows/Git Bash não é suportado. Não exporte PGPASSWORD nem altere as constantes de TLS, branch ou TTL. O executor verifica dependências antes do prompt privado e emite códigos fixos (LINUX_OR_WSL_REQUIRED, GIT_CLIENT_MISSING, PSQL_CLIENT_MISSING, SYSTEM_CA_MISSING, SYSTEM_CA_INVALID, GIT_CHECKOUT_QUERY_FAILED, MAIN_HTTP_*, MAIN_NETWORK_OR_TLS_FAILED, PRIVATE_PASSWORD_PROMPT_FAILED, PSQL_TIMEOUT, PSQL_CLIENT_EXECUTION_FAILED, PSQL_OUTPUT_INVALID). DIRECT_LOGIN_OR_TLS_FAILED permanece genérico para stderr do servidor. Nenhum erro imprime credenciais, URLs de conexão ou stderr bruto. O resultado ainda é apenas baseline read-only. Use SHA main exato após aprovação e merge; não executar versão de PR como prova operacional.
