@@ -1,0 +1,24 @@
+name: G2 single-maintainer metadata observation contract
+on:
+  pull_request:
+    paths:
+      - 'database/scripts/g2-maintainer-endpoint-readback.py'
+      - 'database/tests/test-g2-maintainer-endpoint-readback.py'
+      - '.github/workflows/iam-g2-maintainer-observation-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'database/scripts/g2-maintainer-endpoint-readback.py'
+      - 'database/tests/test-g2-maintainer-endpoint-readback.py'
+      - '.github/workflows/iam-g2-maintainer-observation-contract.yml'
+permissions:
+  contents: read
+jobs:
+  g2-maintainer-observation-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - run: python3 -B database/tests/test-g2-maintainer-endpoint-readback.py -v
