@@ -149,6 +149,88 @@ run acl_reconciled
 [[ "$(admin -c 'SET ROLE iam_app_runtime_login; SELECT iam.clear_tenant_context_fixture(); RESET ROLE;')" == 1 ]]
 admin -c 'DROP FUNCTION iam.clear_tenant_context_fixture(); REVOKE USAGE ON SCHEMA iam FROM iam_app_runtime'
 check_preflight 0 0 0
+# Reproduce the live missing USAGE/SELECT and projected PUBLIC EXECUTE together.
+# All DDL is confined to the already guarded disposable local PG18 fixture.
+admin <<'SQL'
+BEGIN;
+REVOKE USAGE ON SCHEMA iam FROM iam_schema_export_reader;
+REVOKE SELECT ON iam.schema_migrations FROM iam_schema_export_reader;
+CREATE FUNCTION iam.clear_tenant_context_rehearsal() RETURNS integer
+LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS 'SELECT 1';
+ALTER FUNCTION iam.clear_tenant_context_rehearsal() OWNER TO iam_owner;
+GRANT EXECUTE ON FUNCTION iam.clear_tenant_context_rehearsal() TO PUBLIC, iam_app_runtime, iam_worker;
+GRANT USAGE ON SCHEMA iam TO iam_app_runtime, iam_worker, iam_migrator;
+DO $assert$
+BEGIN
+  IF has_schema_privilege('iam_schema_export_reader','iam','USAGE')
+    OR has_table_privilege('iam_schema_export_reader','iam.schema_migrations','SELECT')
+    OR NOT has_function_privilege('iam_schema_export_reader','iam.clear_tenant_context_rehearsal()','EXECUTE')
+    OR NOT has_function_privilege('iam_migrator','iam.clear_tenant_context_rehearsal()','EXECUTE')
+  THEN RAISE EXCEPTION 'PEOS_G2_ACL_BASELINE'; END IF;
+END $assert$;
+SAVEPOINT before_candidate;
+-- Candidate only: preserve the modeled migrator path explicitly; real grant
+-- requires a separate reviewed authorization decision and inventory.
+GRANT EXECUTE ON FUNCTION iam.clear_tenant_context_rehearsal() TO iam_migrator;
+REVOKE EXECUTE ON FUNCTION iam.clear_tenant_context_rehearsal() FROM PUBLIC;
+GRANT USAGE ON SCHEMA iam TO iam_schema_export_reader;
+GRANT SELECT ON iam.schema_migrations TO iam_schema_export_reader;
+DO $assert$
+BEGIN
+  IF NOT has_schema_privilege('iam_schema_export_reader','iam','USAGE')
+    OR NOT has_table_privilege('iam_schema_export_reader','iam.schema_migrations','SELECT')
+    OR has_function_privilege('iam_schema_export_reader','iam.clear_tenant_context_rehearsal()','EXECUTE')
+    OR NOT has_function_privilege('iam_app_runtime_login','iam.clear_tenant_context_rehearsal()','EXECUTE')
+    OR NOT has_function_privilege('iam_worker','iam.clear_tenant_context_rehearsal()','EXECUTE')
+    OR NOT has_function_privilege('iam_migrator','iam.clear_tenant_context_rehearsal()','EXECUTE')
+  THEN RAISE EXCEPTION 'PEOS_G2_ACL_POSTCONDITION'; END IF;
+END $assert$;
+SET LOCAL ROLE iam_schema_export_reader;
+DO $negative$
+BEGIN
+  PERFORM count(*) FROM iam.schema_migrations;
+  BEGIN
+    UPDATE iam.schema_migrations SET migration_id=migration_id WHERE false;
+    RAISE EXCEPTION 'PEOS_G2_LEDGER_WRITE_ALLOWED';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    PERFORM 1 FROM iam.private_business_fixture;
+    RAISE EXCEPTION 'PEOS_G2_PRIVATE_READ_ALLOWED';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    PERFORM iam.clear_tenant_context_rehearsal();
+    RAISE EXCEPTION 'PEOS_G2_DEFINER_ALLOWED';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $negative$;
+RESET ROLE;
+SET LOCAL ROLE iam_app_runtime_login;
+SELECT iam.clear_tenant_context_rehearsal();
+RESET ROLE;
+SET LOCAL ROLE iam_worker;
+SELECT iam.clear_tenant_context_rehearsal();
+RESET ROLE;
+SET LOCAL ROLE iam_migrator;
+SELECT iam.clear_tenant_context_rehearsal();
+RESET ROLE;
+ROLLBACK TO SAVEPOINT before_candidate;
+DO $assert$
+BEGIN
+  IF has_schema_privilege('iam_schema_export_reader','iam','USAGE')
+    OR has_table_privilege('iam_schema_export_reader','iam.schema_migrations','SELECT')
+    OR NOT has_function_privilege('iam_schema_export_reader','iam.clear_tenant_context_rehearsal()','EXECUTE')
+  THEN RAISE EXCEPTION 'PEOS_G2_ACL_ROLLBACK'; END IF;
+END $assert$;
+ROLLBACK;
+DO $assert$
+BEGIN
+  IF to_regprocedure('iam.clear_tenant_context_rehearsal()') IS NOT NULL
+    OR NOT has_schema_privilege('iam_schema_export_reader','iam','USAGE')
+    OR NOT has_table_privilege('iam_schema_export_reader','iam.schema_migrations','SELECT')
+  THEN RAISE EXCEPTION 'PEOS_G2_ACL_RESIDUE'; END IF;
+END $assert$;
+SQL
+check_preflight 0 0 0
+echo 'PASS_G2_READER_ACL_SYNTHETIC_TRANSACTION_ROLLBACK'
 admin <<'SQL'
 CREATE FUNCTION iam.collector_guard_probe() RETURNS integer
 LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS 'SELECT 1';
