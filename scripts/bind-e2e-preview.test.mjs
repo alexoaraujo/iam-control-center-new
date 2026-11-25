@@ -363,6 +363,22 @@ test("PR171 dedicated callback rejects stale branch, wrong alias and SHA", () =>
     {...deploymentNew, meta: {...deploymentNew.meta, githubCommitSha: "f".repeat(40)}}), /exact PR SHA/);
 });
 
+test("PR117 security workflow change requires its dedicated branch-bound callback", () => {
+  const b = "audit/peos-github-scope-hardening-20261117";
+  const h = "iam-control-center-new-pr117-ci.vercel.app";
+  assert.equal(approvedCallback(b), h);
+  const e = { ...env, PR_HEAD_BRANCH: b, E2E_CALLBACK_HOST: h };
+  const d = { ...domain, name: h, gitBranch: b };
+  const a = { ...alias, alias: h };
+  const p = { ...deployment, meta: { ...deployment.meta, githubCommitRef: b } };
+  assert.deepEqual(verifyPreviewBinding(e, d, a, p), {
+    callbackHost: h, callbackBranch: b, callbackUrl: "https://" + h,
+  });
+  assert.throws(() => verifyPreviewBinding(e, { ...d, gitBranch: "integration/peos-g1-g2-canonical-bun-20261118" }, a, p), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, { ...d, name: aliasHost }, a, p), /not bound/);
+  assert.throws(() => verifyPreviewBinding(e, d, a, { ...p, meta: { ...p.meta, githubCommitSha: "b".repeat(40) } }), /exact PR SHA/);
+});
+
 test("PR173 canonical reconciliation callback is branch-bound and exact-SHA only", () => {
   const prBranch = "feat/peos-canonical-reconciliation-readonly-20261123";
   const host = "iam-control-center-new-pr173-ci.vercel.app";
