@@ -20,8 +20,8 @@ O arquivo aprovado corresponde à Development do projeto Neon tiny-rice-70320263
 - Branch: validation/iam-g1-full-restore-20261122, ID br-floral-glitter-b6zvytjp.
 - Parent: development / br-ancient-term-b6mmx5ol.
 - Host direto: ep-young-wind-b66dzic2.c-2.sa-east-1.aws.neon.tech.
-- Database exclusiva: iam_g1_restore_validation, owner neondb_owner; criada e confirmada vazia: 0 tabelas, 0 policies, 0 schemas IAM.
-- Expira automaticamente em 2026-11-24T12:00:00Z; exigir janela remanescente de pelo menos 24 horas.
+- Database exclusiva reservada: `iam_g1_restore_validation` (owner `neondb_owner`); **não existe após a limpeza de teste anterior**. Antes de restaurar, recriá-la somente na branch descartável exata, confirmando 0 tabelas/0 policies/0 schemas IAM.
+- Lease Neon revalidado em 22/11: expiração **2026-11-27T12:00:00Z**. Conferir novamente a cada execução e exigir margem residual mínima de 24 horas.
 - Database herdada iam_database NUNCA é destino de restauração. Somente SELECTs de catálogo/contagens podem usá-la para a auditoria da cópia canônica.
 - Neon Free: o projeto tinha 9 branches e agora tem 10. Nenhum 11º branch ou recurso pago deve ser criado.
 
@@ -38,7 +38,7 @@ O artifact é exclusivamente ciphertext já armazenado no B2, não plaintext, e 
 
 ## Custódia para liberar operação — pendências
 
-O Environment IAM-G1-Full-Restore-Custody foi criado administrativamente no GitHub e verificado: APENAS main, 0 tags, bypass desabilitado, nenhum reviewer obrigatório (mantenedor único). Atualmente não possui secrets nem vars, por projeto.
+O Environment `IAM-G1-Full-Restore-Custody` é distinto do Environment de Backup. O preflight do [run 45042697416](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/45042697416), em SHA `4e8add351a1e984f5db8bc14af882d556e846254`, comprovou `PASS_G1_RESTORE_PROTECTED_ENVIRONMENT_MAIN_ONLY`, **não** o conteúdo de vars/secrets. A auditoria read-only `.github/scripts/iam-g1-environment-readonly-attestation.py` deve consultar os **cinco** Environments G1 por nome, validar as identidades, IDs REST distintos e proteção, e registrar URLs administrativas resultantes. Nunca substituir o ID do Restore por um ID antigo de Backup.
 
 Provisionar diretamente em GitHub Environments, a partir das respectivas fontes seguras:
 
@@ -62,6 +62,6 @@ Nunca copiar esses secrets via conversa, Issues, browser remoto ou log. Nunca in
 
 ## Production independente
 
-A Production efetiva Vercel corresponde ao projeto Neon legacy twilight-fire-88497009, branch br-little-fire-b6adup9f. O arquivo G1 é da Development do projeto novo: NÃO serve como backup de Production. A Production exige backup integral próprio, readback independente, restauração/rollback isolados, ledger e roles reconciliados e chave exclusiva de Production.
+A variável declarativa do Vercel Production `IAM_PRODUCTION_EXPECTED_NEON_BRANCH_ID` está configurada para **`br-muddy-snow-b63cepcv`** no projeto Neon `tiny-rice-70320263` (read-only, 22/11). Isso **não atesta a conexão efetiva do deployment**; confirmar fingerprint em runtime e alias ativa antes de qualquer promoção. O G1 deriva da Development, não é um backup Production. A Production requer backup próprio, readback, restore/rollback isolados, ledger, roles e chave exclusivos.
 
-Estados: G1_FULL_CIPHERTEXT_READBACK=PASS; G1_REAL_RESTORE=NOT_ATTESTED até workflow real; PRODUCTION_CUTOVER=HOLD. Nenhum upgrade pago.
+Estados (22/11/2026): `G1_FULL_CIPHERTEXT_READBACK=PASS`; `G1_PREFLIGHT_MAIN_SHA_4e8add351=PASS` (run 45042697416, sem DDL/secrets); `G1_REAL_RESTORE=NOT_ATTESTED` — [run 45025096069](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/45025096069) falhou durante SQL em SHA anterior e limpou o destino; `PRODUCTION_CUTOVER=HOLD`. Nenhum upgrade pago.

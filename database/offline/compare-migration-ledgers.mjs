@@ -35,6 +35,10 @@ export function compareLedgers(source,target) {
     else if(from.execution_role!==to.execution_role) differences.push({migration_id:id,reason:'execution_role_mismatch'});
     // applied_at differs legitimately across separately replayed environments.
   }
+  // Equality of two empty ledgers is not evidence that the historical
+  // migration chain or its baseline was applied. Fail closed until provenance
+  // is independently reconciled; do not synthesize ledger rows or infer DDL.
+  if(a.size===0&&b.size===0) differences.push({migration_id:'ledger',reason:'both_ledgers_empty'});
   return {verdict:differences.length?'BLOCKED':'METADATA_MATCH_ONLY',differences,source_count:a.size,target_count:b.size};
 }
 export function printResult(result) {

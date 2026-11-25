@@ -18,6 +18,7 @@ spec.loader.exec_module(target)
 def env(name):
     return {
         "name": name,
+        "id": 100 + list(target.ENVS).index(name),
         "can_admins_bypass": False,
         "deployment_branch_policy": {
             "protected_branches": False,
@@ -42,13 +43,14 @@ def custom():
 
 
 class Contracts(TestCase):
-    def test_expected_four_environments(self):
+    def test_expected_five_environments(self):
         self.assertEqual(
             {
                 "IAM-G1-Disposable-Lease-Revocation": "main",
                 "IAM-G1-Disposable-Lease-Probe": "audit/iam-g1-lease-schema-probe-20261115",
                 "IAM-G1-Full-Backup-Custody": "main",
                 "IAM-G1-B2-Full-Readback-Custody": "main",
+                "IAM-G1-Full-Restore-Custody": "main",
             },
             target.ENVS,
         )
@@ -177,7 +179,7 @@ class Contracts(TestCase):
                 target.verify_configuration(name, data, policies(name), custom())
 
     def test_effective_disabled_branch_mode_is_reported_before_404_endpoint(self):
-        custody = set(list(target.ENVS)[-2:])
+        custody = {"IAM-G1-Full-Backup-Custody", "IAM-G1-B2-Full-Readback-Custody"}
         seen = []
 
         def mock_get_json(path, token):
@@ -205,12 +207,12 @@ class Contracts(TestCase):
         for name in custody:
             self.assertIn(name + ": BRANCH_SELECTION_NOT_EXCLUSIVE_CUSTOM", errors.getvalue())
             self.assertNotIn("/" + name + "/deployment-branch-policies", seen)
-        self.assertEqual(output.getvalue().count("PASS_G1_LIVE_ENV_METADATA_READONLY "), 2)
-        self.assertNotIn("PASS_G1_LIVE_ENV_METADATA_FOUR_READONLY_NO_SECRETS", output.getvalue())
+        self.assertEqual(output.getvalue().count("PASS_G1_LIVE_ENV_METADATA_READONLY "), 3)
+        self.assertNotIn("PASS_G1_LIVE_ENV_METADATA_FIVE_READONLY_NO_SECRETS", output.getvalue())
 
     def test_live_audit_reports_both_custody_failures_and_blocks_total_pass(self):
         names = list(target.ENVS)
-        backup, readback = names[-2:]
+        backup, readback = "IAM-G1-Full-Backup-Custody", "IAM-G1-B2-Full-Readback-Custody"
 
         def mock_get_json(path, token):
             self.assertEqual(token, "fake-token-not-a-real-credential")
@@ -233,13 +235,13 @@ class Contracts(TestCase):
             with self.assertRaisesRegex(target.GateBlocked, "TOTAL_BLOCKED_ENVIRONMENTS=2"):
                 target.live_attest()
 
-        self.assertEqual(output.getvalue().count("PASS_G1_LIVE_ENV_METADATA_READONLY "), 2)
-        self.assertNotIn("PASS_G1_LIVE_ENV_METADATA_FOUR_READONLY_NO_SECRETS", output.getvalue())
+        self.assertEqual(output.getvalue().count("PASS_G1_LIVE_ENV_METADATA_READONLY "), 3)
+        self.assertNotIn("PASS_G1_LIVE_ENV_METADATA_FIVE_READONLY_NO_SECRETS", output.getvalue())
         self.assertIn(backup + ": GITHUB_ENVIRONMENT_API_BRANCH_POLICIES_NOT_FOUND_OR_INACCESSIBLE", errors.getvalue())
         self.assertIn(readback + ": GITHUB_ENVIRONMENT_API_ENVIRONMENT_NOT_FOUND_OR_INACCESSIBLE", errors.getvalue())
         self.assertNotIn("fake-token-not-a-real-credential", errors.getvalue())
 
-    def test_live_audit_emits_four_pass_only_with_all_valid_metadata(self):
+    def test_live_audit_emits_five_pass_only_with_all_valid_metadata(self):
         def mock_get_json(path, token):
             name = path.split("/")[1].split("?")[0]
             if "/deployment-branch-policies" in path:
@@ -254,8 +256,48 @@ class Contracts(TestCase):
               patch.object(target, "get_json", side_effect=mock_get_json),
               redirect_stdout(output)):
             target.live_attest()
-        self.assertEqual(output.getvalue().count("PASS_G1_LIVE_ENV_METADATA_READONLY "), 4)
-        self.assertIn("PASS_G1_LIVE_ENV_METADATA_FOUR_READONLY_NO_SECRETS", output.getvalue())
+        self.assertEqual(output.getvalue().count("PASS_G1_LIVE_ENV_METADATA_READONLY "), 5)
+        self.assertIn("PASS_G1_LIVE_ENV_METADATA_FIVE_READONLY_NO_SECRETS", output.getvalue())
+        self.assertIn("IAM-G1-Full-Restore-Custody environment_id=104", output.getvalue())
+        self.assertIn("/settings/environments/104", output.getvalue())
+
+
+    def test_live_audit_blocks_restore_id_collision_missing_id_or_alias(self):
+        restore = "IAM-G1-Full-Restore-Custody"
+        for fault, code in (
+            ("alias", "ENV_NAME_MISMATCH"),
+            ("missing", "ENVIRONMENT_ID_MISSING_OR_INVALID"),
+            ("boolean", "ENVIRONMENT_ID_MISSING_OR_INVALID"),
+            ("duplicate", "ENVIRONMENT_ID_COLLISION"),
+        ):
+            def mock_get_json(path, token):
+                name = path.split("/")[1].split("?")[0]
+                if "/deployment-branch-policies" in path:
+                    return policies(name)
+                if "/deployment_protection_rules" in path:
+                    return custom()
+                data = env(name)
+                if name == restore:
+                    if fault == "alias":
+                        data["name"] = "IAM-G1-Full-Backup-Custody"
+                    elif fault == "missing":
+                        data.pop("id")
+                    elif fault == "boolean":
+                        data["id"] = True
+                    elif fault == "duplicate":
+                        data["id"] = env("IAM-G1-Full-Backup-Custody")["id"]
+                return data
+
+            output, errors = StringIO(), StringIO()
+            with (patch.dict(os.environ, {"GITHUB_REPOSITORY": target.REPO,
+                                         "GITHUB_TOKEN": "fake-token-not-a-real-credential"}),
+                  patch.object(target, "get_json", side_effect=mock_get_json),
+                  redirect_stdout(output), redirect_stderr(errors)):
+                with self.assertRaisesRegex(target.GateBlocked, "TOTAL_BLOCKED_ENVIRONMENTS=1"):
+                    target.live_attest()
+            self.assertIn(restore + ": " + code, errors.getvalue())
+            self.assertNotIn("PASS_G1_LIVE_ENV_METADATA_READONLY " + restore, output.getvalue())
+            self.assertNotIn("PASS_G1_LIVE_ENV_METADATA_FIVE_READONLY_NO_SECRETS", output.getvalue())
 
 
 if __name__ == "__main__":
