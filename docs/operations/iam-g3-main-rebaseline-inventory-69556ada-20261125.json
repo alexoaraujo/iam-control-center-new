@@ -1,0 +1,1153 @@
+{
+  "format": "peos/g3-main-rebaseline-inventory/read-only-v1",
+  "repository": "alexoaraujo/iam-control-center-new",
+  "baseline": {
+    "pr": 151,
+    "sha": "6af7e9e62cbc7f6febf92e630ecf209b00b99981",
+    "tree": "5efd5e502d4d251f060545501c6aa94a1f154729"
+  },
+  "candidate_main": {
+    "sha": "69556ada6d3554d88c650a46f8ad14ea137fce00",
+    "tree": "a3306b78c3732c61d2dc2e4c53d7c08ee7ff599f"
+  },
+  "compare": {
+    "ahead": 215,
+    "behind": 0,
+    "path_count": 92
+  },
+  "changed_paths": [
+    {
+      "path": ".github/scripts/iam-g1-environment-readonly-attestation.py",
+      "status": "modified",
+      "baseline": {
+        "sha": "53c6d98aaf8f2d11e5993bb5540a9312427284dd",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "b9550ee00ffa937ccd6ac373bd1850c1df24d656",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/scripts/iam-g1-verify-main-checks.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "0de7e06f42e4034e103531d7693b21402cb96623",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/scripts/iam-g2-environment-preflight.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "a21ee8024ea90e598de32054d7c45cb853a61cdc",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/tests/g1-pg18-private-toc.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "8a53df6e5a5808bcf52b4a029daf312fa1bbfeb7",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/tests/test-iam-g1-archive-authentication.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "b1e8d2bb46e39341b34ca04b4a645eace1bb4d95",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/tests/test-iam-g1-b2-full-readback.py",
+      "status": "modified",
+      "baseline": {
+        "sha": "19681fe9930241f8d3453ecf5b4506cb767ca3ab",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "923e5986ae931b88b277099c97990989938f7861",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/tests/test-iam-g1-environment-readonly-attestation.py",
+      "status": "modified",
+      "baseline": {
+        "sha": "c87869baccde4e96c5ca9bb06f49abb2d4c90e7e",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "8db7836eefd8c5e3ebf4fe5c4558243ec36deff1",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/tests/test-iam-g1-main-checks-pagination.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "81469ced1a5d6d178187ff499dd1775f307ac05e",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/tests/test-iam-g1-real-restore.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "b0eb94b6efb753837738aef4b10af66a663b9f7e",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/tests/test-iam-g2-environment-preflight.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "5cc74da8655cbc545d8cd89b93edd8df1c234348",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/trusted/iam-main-postmerge-preflight.sh",
+      "status": "modified",
+      "baseline": {
+        "sha": "a249595a6eade403248d4d12d7260387c757c4a7",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "6792f285f5a8dc4ea4cb9f551a6069dbe5c44149",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/database-tests.yml",
+      "status": "modified",
+      "baseline": {
+        "sha": "be8dde9ea32db82cc3f0306dc075e812a814b651",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "16cddd7e7c37c7b936a8b0a22e02cf021e2ac852",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/docs-preview-gate.yml",
+      "status": "modified",
+      "baseline": {
+        "sha": "64d5034818d9628af0cf73084696848005f48a6d",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "7ca6e7729bb6b69e25c20b6e2b72089245c6a4b6",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g1-b2-full-readback.yml",
+      "status": "modified",
+      "baseline": {
+        "sha": "4f7fc211fba8f3f1d6827bb9a5c7477bcc50aa2d",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "404cfa1771316803826694ed3999f8a03d9645a8",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g1-b2-isolated-full-restore.yml",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "54c9a32ce09422cfd781cb249249ce33e5604e0b",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g1-environments-readonly-attestation.yml",
+      "status": "modified",
+      "baseline": {
+        "sha": "19dd58c36e590f951c2ed23c2a328ad5ca9d174c",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "773e0fc311c875bbd4ac206f86bbdf7b92082893",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g1-full-recovery-contract.yml",
+      "status": "modified",
+      "baseline": {
+        "sha": "e1123e7466cc905ee34c6475534f410f0b97a258",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "4724404e561fcccd3c2fde7e4fa5fd22484fbb23",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g1-real-restore-offline-contract.yml",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "5887dfa83a03f5a8d4efb9eae49775c43f0fea26",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g2-acl-candidate-contract.yml",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "8902299e470d2eb7e44e5ae3a435feed7eeba398",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g2-clone-login-contract.yml",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "35e1ec48eb632e44f42419f0a0a6b00f1f19ee01",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g2-development-collector-contract.yml",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "df00826f0f234f9fd8c98f9002d1e5c8be7ed50a",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g2-environment-preflight.yml",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "69fb43c7c0d5cf3614d44160864f700965d9549c",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g2-legacy-provenance.yml",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "a8cb0aab508fda6e94672d0727409fc11857eefd",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g3-rebaseline-candidate-offline.yml",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "5da1f6de8283cb8d1bb390db4843853ab8438e8b",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/iam-g3-tree-inventory-offline.yml",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "56c3c04a14a4a8755f44c747cb4f0af8d5960663",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": ".github/workflows/quality.yml",
+      "status": "modified",
+      "baseline": {
+        "sha": "7cca041dd0b079f9c4abbcdbfb1fe2d693e884cc",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "d1dfcf032e52b04724dcd0a86bb8cf255dafdbd9",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/baselines/development-collection-policy.json",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "a451cacab08ce4342ce7a3ab707808462b411bac",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/migrations/README.md",
+      "status": "modified",
+      "baseline": {
+        "sha": "bf9a5f3bdbdf50442f9df8fd55c8d4370bcb3a58",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "3addc84ed272f59753ebbed0c7699156c6f4321a",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/offline/assemble-canonical-signatures.mjs",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "ba925989fe9998a65badde1a3178585e3abde63d",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/offline/compare-migration-ledgers.mjs",
+      "status": "modified",
+      "baseline": {
+        "sha": "82e0b8375a6245a8c1df68b1aec029adc7421acc",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "6acf067157f52444c5b4428abb6b3387cfc25622",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/offline/compare-migration-ledgers.test.mjs",
+      "status": "modified",
+      "baseline": {
+        "sha": "dc0782511842e2e1a60051b42501d9cdfee566b5",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "bcb099624d12f679119843b9f4d2cf60165365dd",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/offline/prepare-canonical-baseline.mjs",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "70dd6adba130087d4be176890efa4bb6a4652028",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/offline/reconcile-canonical-readonly.mjs",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "00ec64eeb9685d52067918bcdc210ed0ddb2367c",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/review/g2-reader-acl-candidate.json",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "12a4737e7e94d18506833ef29224b6aeed7234c5",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/scripts/collect-canonical-development.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "1de690d9959dfbe435b603a4053351a8871ee8c7",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/scripts/g2-clone-direct-login.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "695741ab502db43f7a72beeb76a6f3e4844d6c6a",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/scripts/iam-collector-reader-preflight.sql",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "51e3aa6141b3227764d032033be33bd9eda3adbc",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/baseline-evidence-fixture/collector.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "50432c6dd75aee47074441bd364676c3b7e40f1d",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/baseline-evidence-fixture/test.sh",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "15cb076e632967d486993ba1258f0d599b5a3391",
+        "mode": "100755",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/g2-reader-acl-candidate-contract.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "3c023869140919e844b13f09c5841bf3b1ee1c3b",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/migration-runner-fixture/1001_events.sql",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "ffbb52e59fc58533fba2fe448b51a20de54c767a",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/migration-runner-fixture/1002_tenants.sql",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "c0438e8c1bb91d332650a0a4b1bcfdaff628e2de",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/migration-runner-fixture/1003_rollback.sql",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "236a27bfd3a689181eba3a0fbb165ffd9d87b792",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/migration-runner-fixture/README.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "98bc7035d1771a1066a656457cd0385b8d159061",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/migration-runner-fixture/runner.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "c906ccd6f874e6828a8d851f35ba23f5160ddd3e",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/migration-runner-fixture/test.sh",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "0527be298162063bd2412b95a479c99b09de5745",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/role-reconciliation-fixture/README.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "1ca129386a438d74c37f0cf1b68322f881d3fd62",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/role-reconciliation-fixture/reconcile-and-test.sql",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "747ac1599a2ef18b987af503f5bac3a789715c7c",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/role-reconciliation-fixture/test.sh",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "70452fabd300215e96793e5a45b96ae8caeff871",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/run.sh",
+      "status": "modified",
+      "baseline": {
+        "sha": "6d1994968e7e898c2ce5c55b06bb3ea65e2b1b3f",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "d0312d3602513079e0ac4261c61b43da66a98307",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/test-g2-clone-direct-login.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "9f34db8570234e6a2ef51149652ed47e49f3e9f3",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "database/tests/test-protected-development-collector.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "7d0ac2c1eb39bba8de7c259a43724e6509cd5f27",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/audits/2026-11-17-peos-github-audit.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "e03a8f837aa5da11e49ff7bcdd90ec225d14d475",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/g1-environment-restrictions-20261118.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "57ef2a08801948c86f3923f486db1adb554ae12a",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-baseline-evidence-acquisition-20261123.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "a54e33ebfc82164cc9cd0f73081bad2e7d4e3489",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-canonical-baseline-preparation-20261123.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "8e31ab9688f29074cb6e0b7e050dca2b6d24ee4f",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-canonical-reconciliation-executor-20261123.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "560d1bb38e3e96b243ff499aa6575f388d312dfc",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g1-b2-authenticated-restore-design-20261121.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "dd473202a76e86dbed64463d38c50c136a47bf83",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g1-b2-real-restore-attestation-45060036018.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "7332c61b59caefc9e16dd2038a4a14625d3c0ef5",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g1-real-isolated-restore-20261122.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "cbb9292b7bc48ac8ec93957875edc92ebae68e5c",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g2-acl-review-candidate-20261125.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "ad8fb75159ef749556757eced2500b7e7916bc96",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g2-clone-direct-login-20261125.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "31154070471db4d5ec9af9bca98afb706045860f",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g2-environment-preflight-20261124.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "b0831aa7bc3c4d52570ee342b549bc5c87c0b32c",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g2-legacy-provenance-20261125.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "b7313d78b5139b1d79d1c8eb0e4192ce4dc7c6c7",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g2-offline-signature-custody-20261124.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "c8db9bf6b48d616437b130ef694e46db4ca4420c",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g2-protected-development-collector-20261124.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "e0423dd20500c172a73faecfc6442c97914e1d8d",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g2-reader-acl-rehearsal-20261124.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "941a4dd1ae36aa7c6543bb42a1fc29aae35e3973",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g3-main-lineage-inventory-20261122.json",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "1316c441adfeea64449da4afd8e8fc243d75ffc8",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g3-main-lineage-inventory-20261122.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "1a334a8ebe7da8ee0cbdc4218e801172b3299d64",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g3-main-rebaseline-candidate-20261123.json",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "8397bc55b43fb88f0e44e8ffd57ac13d4f7a1364",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-g3-main-rebaseline-candidate-20261123.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "0ff8bf591af42d3b981e35031c6d2aaf5333765c",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/iam-peos-neon-production-schema-drift-20261123.md",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "52e4bdf3b6c2f7a5acabf0ad6acb771ed27db478",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "docs/operations/vercel-preview-build-filter.md",
+      "status": "modified",
+      "baseline": {
+        "sha": "2f8b7fbc9c8b51d586b5f99d88afdf7a9afb64e2",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "45629553281ff7eeb4de4624b0ff508fa5facde9",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/auth0-preview-contract.test.mjs",
+      "status": "modified",
+      "baseline": {
+        "sha": "63876f299db7401c081d4c3e02907eba3df9409a",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "4830c4d23a1f89b05d10a89e685c6d9376122b85",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/bind-e2e-preview.mjs",
+      "status": "modified",
+      "baseline": {
+        "sha": "3a6a5ea3c06e295399c20275fab858f2ea3cf263",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "a509f1009841f239b8b58f7388d9435f9346c2ef",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/bind-e2e-preview.test.mjs",
+      "status": "modified",
+      "baseline": {
+        "sha": "28e385004f9f25c92c2d84fe83b595fb0312ea89",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "26e2a2062e69ed205568985e5c39369eb91eb50f",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/canonical-baseline-preparation.test.mjs",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "1f607926133946e48f78d458f584f87d754358d7",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/canonical-reconciliation-readonly.test.mjs",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "59dabe4170868bcd0e1602d384ce7aa8917435dc",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/iam-g1-archive-authentication.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "bd17bc9366203c0886ae899e136ae6e49bf049d0",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/iam-g1-b2-full-readback.py",
+      "status": "modified",
+      "baseline": {
+        "sha": "37e76d6dd43e13e8f4899521572336a8e2228ab0",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "13ac05132a5f6c9fef63eef38d8e2cd13eab8a7d",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/iam-g1-full-restore.py",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "2169086290d191bdf48fdb3d5d35dc9990ab606c",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/peos-pr41-pr70-release-policy-integration.test.mjs",
+      "status": "modified",
+      "baseline": {
+        "sha": "58f6b3b42327439f034713b94577a01ca7d1f5a0",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "a999f57b72598be9b4813359544b5d8cad595324",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/release-security-gate.test.mjs",
+      "status": "modified",
+      "baseline": {
+        "sha": "b692203956eabca0f67cfa6779f1d10381d963e4",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "461454656c286d4c9ab580b947096cf0214ca88b",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/sync-auth0-e2e-preview.test.mjs",
+      "status": "modified",
+      "baseline": {
+        "sha": "fc93e8259710baa1db1d71464655559de35665a3",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "0a69044594f356a71bd426bf271718e58648ef53",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/vercel-ignore-build.mjs",
+      "status": "modified",
+      "baseline": {
+        "sha": "34cbf4fc6918c4f33e1e952c5e2b4f6b2a01a4c3",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "e93352b86caa11fdf9ddc6805649a87a85c8d00d",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/vercel-ignore-build.test.mjs",
+      "status": "modified",
+      "baseline": {
+        "sha": "13c846c446cfd53d30ddf2538fd52796a92f1c76",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "5055b85ccbf5fad3e252b058a37abf5d9b1de088",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/verify-g3-main-rebaseline-candidate.mjs",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "88746176dcf35217bac35d19366f4901c2b7f600",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/verify-g3-main-rebaseline-candidate.test.mjs",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "ec1138998bfd0d3a404a1b8140d542cd815d77e5",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/verify-g3-tree-inventory.mjs",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "683ee0e8b5fa12c0fccac5b09b1b60474de5575e",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/verify-g3-tree-inventory.test.mjs",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "283bfb70d52a3725f068a0d96624ec7f22a11775",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/verify-legacy-provenance.mjs",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "21cd1ae0a5efb29277d9e108bc332a476bec11bd",
+        "mode": "100644",
+        "type": "blob"
+      }
+    },
+    {
+      "path": "scripts/verify-legacy-provenance.test.mjs",
+      "status": "added",
+      "baseline": null,
+      "current": {
+        "sha": "92347adb18448a4eb6ebd9385a5a484509eba9d4",
+        "mode": "100644",
+        "type": "blob"
+      }
+    }
+  ],
+  "critical_comparison": [
+    {
+      "path": ".github/trusted/iam-main-postmerge-preflight.sh",
+      "baseline": {
+        "sha": "a249595a6eade403248d4d12d7260387c757c4a7",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "6792f285f5a8dc4ea4cb9f551a6069dbe5c44149",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "unchanged": false
+    },
+    {
+      "path": ".github/trusted/g3-pr128.spec.cjs",
+      "baseline": {
+        "sha": "78c221e1d49492dc53efd95f2a1e7c235b00978e",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "78c221e1d49492dc53efd95f2a1e7c235b00978e",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "unchanged": true
+    },
+    {
+      "path": ".github/trusted/g3-pr128.playwright.config.cjs",
+      "baseline": {
+        "sha": "2074dd5d52534ea57dc8d6dd220cf147c9bb70b3",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "2074dd5d52534ea57dc8d6dd220cf147c9bb70b3",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "unchanged": true
+    },
+    {
+      "path": ".github/workflows/iam-main-postmerge-auth0-rbac.yml",
+      "baseline": {
+        "sha": "f69a5578a1c3e8e7a5ea86b78177f1da6336b73e",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "f69a5578a1c3e8e7a5ea86b78177f1da6336b73e",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "unchanged": true
+    },
+    {
+      "path": "apps/web/src/lib/authorization.ts",
+      "baseline": {
+        "sha": "e545f7b82ca17d3f4b997364485efab3768e791b",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "e545f7b82ca17d3f4b997364485efab3768e791b",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "unchanged": true
+    },
+    {
+      "path": "apps/web/src/lib/readiness.ts",
+      "baseline": {
+        "sha": "fda1fb8c977eba704d2cc50d81b7123893870260",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "fda1fb8c977eba704d2cc50d81b7123893870260",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "unchanged": true
+    },
+    {
+      "path": "database/migrations/lineage-policy.json",
+      "baseline": {
+        "sha": "909aa6750c159c4faffccc10ad81335c05102122",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "current": {
+        "sha": "909aa6750c159c4faffccc10ad81335c05102122",
+        "mode": "100644",
+        "type": "blob"
+      },
+      "unchanged": true
+    }
+  ],
+  "lease_candidate": {
+    "project": "tiny-rice-70320263",
+    "branch": "br-calm-forest-b6a1jpzs",
+    "parent": "br-muddy-bar-b63ksdy7",
+    "expires": "2026-11-27T22:00:00Z",
+    "compute_count": 0,
+    "approved": false
+  },
+  "checks": {
+    "quality_run": 45569578076,
+    "pg18_run": 45569578078,
+    "main_g3": "skipped"
+  },
+  "read_only": true,
+  "execution_authorized": false,
+  "privileged_g3": false,
+  "production_cutover": false
+}
