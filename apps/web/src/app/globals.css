@@ -254,3 +254,10 @@ body { font-size: 16px; line-height: 1.5; }
   .welcome-actions { justify-content: flex-start; }
   .content { overflow-wrap: anywhere; }
 }
+
+.directory-panel { overflow-wrap: anywhere; }
+.directory-panel form { display: grid; gap: 12px; max-width: 560px; }
+.directory-panel label { display: grid; gap: 4px; }
+.directory-panel input,.directory-panel button { font: inherit; min-height: 44px; padding: 8px; border: 1px solid #64748b; border-radius: 6px; }
+.directory-panel button { color: white; background: #3456a4; cursor: pointer; }
+.directory-panel input:focus-visible,.directory-panel button:focus-visible { outline: 3px solid #3868e8; outline-offset: 2px; }

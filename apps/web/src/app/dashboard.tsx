@@ -1,4 +1,6 @@
 import { requireSession } from "../lib/session";
+import { directoryEnabled } from "../lib/authorization";
+import { DirectoryPanel } from "../components/dashboard/directory-panel";
 import { getReleaseSnapshot, type ReleaseSnapshot } from "../lib/github-release";
 import Link from "next/link";
 import { navigation, Status, SectionHeading, type DashboardPath } from "../components/dashboard/presentation";
@@ -105,7 +107,7 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
           {show("/organizations") && (
           <section className="panel-card" id="organizations">
             <SectionHeading eyebrow="TENANT MANAGEMENT" title="Organizações" description="Administração de tenants e fronteiras de dados. A listagem será habilitada após a persistência IAM e as políticas RLS serem aprovadas." />
-            <div className="empty-state"><span className="empty-icon">▦</span><strong>Nenhuma fonte de organizações conectada</strong><p>Não há consulta operacional habilitada para listar tenants neste estágio.</p><Status tone="warning">NOT CONFIGURED / NOT VERIFIED</Status></div>
+            {!overview && directoryEnabled() ? <DirectoryPanel kind="organizations" /> : <div className="empty-state"><span className="empty-icon">▦</span><strong>Nenhuma fonte de organizações conectada</strong><p>Não há consulta operacional habilitada para listar tenants neste estágio.</p><Status tone="warning">NOT CONFIGURED / NOT VERIFIED</Status></div>}
           </section>
           )}
 
@@ -113,7 +115,7 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
           <section className="panel-card" id="identities">
             <SectionHeading eyebrow="IDENTITY DIRECTORY" title="Diretório de identidades" description="Identidades federadas e vínculo com o provedor OIDC." />
             <div className="info-strip"><strong>Chave de identidade</strong><code>(issuer, subject)</code><p>E-mail é atributo mutável de perfil e não deve ser usado como identificador primário.</p></div>
-            <div className="empty-state empty-state--compact"><strong>Diretório ainda não disponível</strong><p>A integração de leitura depende do modelo IAM persistido e da validação de sessão Auth0 no servidor.</p><Status tone="warning">AGUARDANDO IMPLEMENTAÇÃO</Status></div>
+            {!overview && directoryEnabled() ? <DirectoryPanel kind="identities" /> : <div className="empty-state empty-state--compact"><strong>Diretório ainda não disponível</strong><p>A integração de leitura depende do modelo IAM persistido e da validação de sessão Auth0 no servidor.</p><Status tone="warning">AGUARDANDO IMPLEMENTAÇÃO</Status></div>}
           </section>
           )}
 

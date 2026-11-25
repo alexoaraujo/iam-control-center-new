@@ -8,6 +8,7 @@ const repository = "alexoaraujo/iam-control-center-new";
 import { approvedCallback } from "./bind-e2e-preview.mjs";
 test("Auth0 Preview callback is resolved from live Vercel binding for every PR", () => {
   assert.equal(approvedCallback("feat/peos-p1-console-accessibility-20261125"), "iam-control-center-new-p1-console-ci.vercel.app");
+  assert.equal(approvedCallback("feat/peos-p2-tenant-directory-20261125"), "iam-control-center-new-p2-directory-ci.vercel.app");
   assert.equal(approvedCallback("feat/peos-dashboard-documentation-20261125"), "iam-control-center-new-pr195-ci.vercel.app");
   assert.equal(approvedCallback("integration/peos-g1-g2-canonical-bun-20261118"), "iam-control-center-new-ci-preview.vercel.app");
   assert.equal(approvedCallback("feat/iam-g1-b2-readback-independent-gate"), "iam-control-center-new-pr101-ci.vercel.app");

@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { getSql } from "./db";
+import { DIRECTORY_SQL } from "./directory-query";
 import { canonicalIssuer } from "./identity-sync";
 import { g3PreviewBranchValid, g3PreviewLeaseValid } from "./g3-preview-lease";
 import { expectedProductionBranch, productionBranchValid } from "./production-branch";
@@ -112,4 +113,74 @@ export async function checkPermission(
     // No raw SQL, secret, connection URL or HMAC appears in logs or responses.
     return false;
   }
+}
+
+export type DirectoryKind = "organizations" | "identities";
+export type DirectoryRow = { id: string; displayName: string | null; status: "active" };
+export type DirectoryResult = { rows: DirectoryRow[]; nextCursor: string | null };
+
+const directoryHost = "https://iam-control-center-new-p2-directory-ci.vercel.app";
+const directoryBranch = "feat/peos-p2-tenant-directory-20261125";
+
+/** Never enabled by default; only an explicitly leased, exact Preview branch. */
+export function directoryEnabled(): boolean {
+  const start = Date.parse(process.env.IAM_DIRECTORY_PREVIEW_LEASE_START_AT ?? "");
+  const expiry = Date.parse(process.env.IAM_DIRECTORY_PREVIEW_EXPIRES_AT ?? "");
+  const now = Date.now();
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA ?? "";
+  const branchId = process.env.IAM_DIRECTORY_PREVIEW_BRANCH_ID ?? "";
+  const reserved = ["br-muddy-snow-b63cepcv", "br-ancient-term-b6mmx5ol", "br-floral-glitter-b6zvytjp", "br-solitary-sunset-b681d15f", "br-calm-forest-b6a1jpzs", "br-muddy-bar-b63ksdy7", "br-nameless-hat-b6j2p4m4", "br-plain-cell-b68uorki"];
+  return process.env.IAM_DIRECTORY_PREVIEW_ENABLED === "true"
+    && /^[a-f0-9]{40}$/.test(sha)
+    && sha === process.env.IAM_DIRECTORY_PREVIEW_APPROVED_SHA
+    && !reserved.includes(branchId)
+    && Number.isFinite(start) && start <= now
+    && expiry > start && expiry - start <= 2 * 60 * 60 * 1000
+    && process.env.VERCEL_ENV === "preview"
+    && process.env.VERCEL_GIT_COMMIT_REF === directoryBranch
+    && process.env.APP_BASE_URL === directoryHost
+    && /^br-[a-z0-9-]{3,100}$/.test(branchId)
+    && Number.isFinite(expiry) && expiry > now && expiry <= now + 2 * 60 * 60 * 1000;
+}
+
+/** Single selected tenant; data and grant checked in the same SQL statement.
+ * No global enumeration, no email/issuer/subject in the returned projection.
+ * Missing prerequisites, malformed results and SQL errors all deny.
+ */
+export async function readTenantDirectory(subject: string, tenantId: string, identityId: string, kind: DirectoryKind, cursor: string | null): Promise<DirectoryResult | null> {
+  if (!directoryEnabled() || !subject || subject.length > 255 || !validSelector(tenantId) || !validSelector(identityId)
+    || (kind !== "organizations" && kind !== "identities")
+    || (cursor !== null && (!validSelector(cursor) || kind !== "identities"))
+    || process.env.DATABASE_RUNTIME_ROLE !== expectedRuntime) return null;
+  const domain = process.env.AUTH0_DOMAIN?.trim();
+  if (!domain || !/^[a-z0-9][a-z0-9.-]+$/i.test(domain)) return null;
+  const branch = process.env.IAM_DIRECTORY_PREVIEW_BRANCH_ID;
+  if (!branch) return null;
+  try {
+    const tenant = tenantId.toLowerCase(), identity = identityId.toLowerCase();
+    const db = getSql();
+    const roles = await db.query(
+      "SELECT current_user AS role, session_user AS login, rolsuper, rolbypassrls, current_setting('neon.branch_id',true) AS branch_id FROM pg_roles WHERE rolname = current_user",
+      [], { fetchOptions: { signal: AbortSignal.timeout(3000), cache: "no-store" } },
+    );
+    const role = roles[0];
+    if (!role || role.role !== expectedRuntime || role.login !== expectedRuntime || role.rolsuper !== false
+      || role.rolbypassrls !== false || role.branch_id !== branch || !directoryEnabled()) return null;
+    const proof = signTenantContext(tenant, identity);
+    if (!proof) return null;
+    const [, result] = await db.transaction([
+      db.query("SELECT iam.set_tenant_context($1::uuid,$2::uuid,$3::bigint,$4::text,$5::text)", [tenant, identity, proof.expires, proof.nonce, proof.signature]),
+      db.query(DIRECTORY_SQL, [tenant, identity, canonicalIssuer(domain), subject, kind, cursor?.toLowerCase() ?? null, branch]),
+    ], { readOnly: true, fetchOptions: { signal: AbortSignal.timeout(5000), cache: "no-store" } });
+    const rows: unknown = result[0]?.rows;
+    if (!directoryEnabled() || result.length !== 1 || result[0]?.allowed !== true || !Array.isArray(rows)
+      || rows.length > (kind === "organizations" ? 1 : 51)) return null;
+    const clean: DirectoryRow[] = [];
+    for (const row of rows) {
+      if (!row || !validSelector(row.id) || (row.displayName !== null && typeof row.displayName !== "string") || row.status !== "active") return null;
+      if (kind === "organizations" && row.id !== tenant) return null;
+      clean.push({ id: row.id, displayName: row.displayName, status: "active" });
+    }
+    return { rows: clean.slice(0, 50), nextCursor: clean.length === 51 ? clean[49]?.id ?? null : null };
+  } catch { return null; }
 }
