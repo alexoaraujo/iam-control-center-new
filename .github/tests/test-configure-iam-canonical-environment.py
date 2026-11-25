@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline fail-closed contract for secure local environment provisioning."""
+"""Synthetic fail-closed contracts for PEOS single-maintainer environment setup."""
 from __future__ import annotations
 
 import importlib.util
@@ -17,201 +17,151 @@ config = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = config
 spec.loader.exec_module(config)
 
-def protected(review_id=325264810, *, allow=("main",), self_review=True):
+
+def protected(*, reviewer=False, bypass=False, branch=True):
     return {
         "name": config.ENVIRONMENT,
+        "can_admins_bypass": bypass,
         "deployment_branch_policy": {
-            "protected_branches": False, "custom_branch_policies": True
+            "protected_branches": not branch, "custom_branch_policies": branch,
         },
         "protection_rules": [{
             "type": "required_reviewers",
-            "prevent_self_review": self_review,
-            "reviewers": [{
-                "type": "User", "reviewer": {"id": review_id}
-            }]
-        }],
+            "prevent_self_review": True,
+            "reviewers": [{"type": "User", "reviewer": {"id": 123}}],
+        }] if reviewer else [],
     }
 
-class SecureConfigTests(unittest.TestCase):
-    def test_protected_environment_requires_exact_reviewer_main_and_no_self_review(self):
-        review_id = 654321
-        def okay(*args, **kwargs):
-            if "deployment-branch-policies" in args[1]:
-                return {"branch_policies": [{"name": "main", "type": "branch"}]}
-            return protected(review_id)
-        with patch.object(config, "gh_json", side_effect=okay):
-            config.verify_environment(review_id)
-        def badextra(*args, **kwargs):
-            if "deployment-branch-policies" in args[1]:
-                return {"branch_policies": [{"name": "main", "type": "branch"},
-                                           {"name": "staging", "type": "branch"}]}
-            return protected(review_id)
-        with patch.object(config, "gh_json", side_effect=badextra):
-            with self.assertRaisesRegex(RuntimeError, "main"):
-                config.verify_environment(review_id)
-        with patch.object(config, "gh_json", return_value=protected(review_id, self_review=False)):
-            with self.assertRaisesRegex(RuntimeError, "self-review"):
-                config.verify_environment(review_id)
-        with patch.object(config, "gh_json", return_value=protected(111)):
-            with self.assertRaises(RuntimeError):
-                config.verify_environment(review_id)
 
-    def test_configure_policy_uses_exact_required_reviewer_and_only_main(self):
+class SingleMaintainerConfigTests(unittest.TestCase):
+    def policies(self, *args, **kwargs):
+        if "deployment-branch-policies" in args[1]:
+            return {"branch_policies": [{"name": "main", "type": "branch"}]}
+        return protected()
+
+    def test_environment_accepts_no_reviewers_and_main_only(self):
+        with patch.object(config, "gh_json", side_effect=self.policies):
+            config.verify_environment()
+
+    def test_environment_rejects_old_independent_reviewer_rule_and_admin_bypass(self):
+        for settings in (protected(reviewer=True), protected(bypass=True),
+                         protected(branch=False)):
+            def reply(*args, **kwargs):
+                if "deployment-branch-policies" in args[1]:
+                    return {"branch_policies": [{"name": "main", "type": "branch"}]}
+                return settings
+            with patch.object(config, "gh_json", side_effect=reply):
+                with self.assertRaises(RuntimeError):
+                    config.verify_environment()
+
+    def test_environment_rejects_extra_branch(self):
+        def reply(*args, **kwargs):
+            if "deployment-branch-policies" in args[1]:
+                return {"branch_policies": [
+                    {"name": "main", "type": "branch"},
+                    {"name": "feature/*", "type": "branch"},
+                ]}
+            return protected()
+        with patch.object(config, "gh_json", side_effect=reply):
+            with self.assertRaisesRegex(RuntimeError, "main"):
+                config.verify_environment()
+
+    def test_maintainer_identity_and_admin_permission(self):
+        def response(*args, **kwargs):
+            endpoint = args[1]
+            if endpoint.endswith("/permission"):
+                return {"permission": "admin"}
+            if endpoint == "user":
+                return {"login": config.MAINTAINER, "id": 123}
+            return {"default_branch": "main", "private": False}
+        with patch.object(config, "gh_json", side_effect=response):
+            config.verify_account_and_repo()
+        for bad in (
+            {"login": "other-person", "id": 123},
+            {"login": config.MAINTAINER},
+        ):
+            with patch.object(config, "gh_json", side_effect=lambda *a, **k:
+                              bad if a[1] == "user" else response(*a, **k)):
+                with self.assertRaisesRegex(RuntimeError, "identity"):
+                    config.verify_account_and_repo()
+        with patch.object(config, "gh_json", side_effect=lambda *a, **k:
+                          {"permission": "write"} if a[1].endswith("/permission")
+                          else response(*a, **k)):
+            with self.assertRaisesRegex(RuntimeError, "admin"):
+                config.verify_account_and_repo()
+
+    def test_put_policy_uses_no_required_reviewers_and_restricts_branches(self):
         calls = []
         def reply(*args, input_value=None):
             calls.append((args, input_value))
-            if "deployment-branch-policies" in args[1]:
-                return {"branch_policies": [{"name": "main", "type": "branch"}]}
-            return protected(77)
+            return self.policies(*args, input_value=input_value)
         with patch.object(config, "gh_json", side_effect=reply):
-            config.ensure_protected_environment(77)
+            config.ensure_protected_environment()
         payloads = [json.loads(value) for _, value in calls if value is not None]
-        self.assertEqual(payloads[0]["reviewers"], [{"type":"User","id":77}])
-        self.assertTrue(payloads[0]["prevent_self_review"])
-        self.assertNotIn("can_admins_bypass", payloads[0])
+        self.assertEqual(payloads[0]["reviewers"], [])
+        self.assertFalse(payloads[0]["prevent_self_review"])
+        self.assertFalse(payloads[0]["can_admins_bypass"])
         self.assertTrue(payloads[0]["deployment_branch_policy"]["custom_branch_policies"])
 
     def test_configure_secret_streams_value_only_via_stdin(self):
         value = "synthetic_secret_NOT_FOR_LOGS"
-        with patch.object(config, "gh") as mock:
+        with patch.object(config, "gh") as mocked:
             config.set_environment_secret("IAM_CANONICAL_TARGET_URL", value)
-        args, kwargs = mock.call_args
+        args, kwargs = mocked.call_args
         self.assertEqual(kwargs, {"input_value": value})
         self.assertNotIn(value, str(args))
-        self.assertEqual(args[0], "secret")
-        self.assertEqual(args[1], "set")
-        self.assertIn("--env", args)
+        self.assertEqual(args[:2], ("secret", "set"))
 
     def test_unknown_secret_name_is_rejected(self):
-        with patch.object(config, "gh") as mock:
+        with patch.object(config, "gh") as mocked:
             with self.assertRaises(RuntimeError):
                 config.set_environment_secret("DATABASE_URL", "synthetic")
-            mock.assert_not_called()
+            mocked.assert_not_called()
 
     def test_only_metadata_is_used_to_verify_secret_presence(self):
         with patch.object(config, "gh_json", return_value={"secrets": [
-            {"name": name, "updated_at": "2026-11-13"} for name in config.SECRET_NAMES
+            {"name": name, "updated_at": "2026-11-17"} for name in config.SECRET_NAMES
         ]}):
             config.verify_secret_metadata()
         with patch.object(config, "gh_json", return_value={"secrets": []}):
             with self.assertRaisesRegex(RuntimeError, "secrets"):
                 config.verify_secret_metadata()
 
-    def test_target_only_writes_only_missing_target_and_preserves_source_approval(self):
-        from unittest.mock import MagicMock
-        url = ("postgresql://neondb_owner:synthetic_password"
-               "@ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech:5432"
-               "/iam_canonical_validation?sslmode=verify-full&sslrootcert=system")
-        before = {"IAM_CANONICAL_SOURCE_URL", "IAM_CANONICAL_OPERATOR_APPROVAL"}
-        with patch.object(config, "verify_environment") as gate, \
-             patch.object(config, "present_secret_names",
-                          side_effect=[before, {*before, "IAM_CANONICAL_TARGET_URL"}]), \
-             patch.object(config, "set_environment_secret") as write, \
-             patch.object(config.getpass, "getpass", return_value=url), \
-             patch.object(config.sys, "stdin", MagicMock(isatty=lambda: True)):
-            config.sync_target_only(77)
-        write.assert_called_once_with("IAM_CANONICAL_TARGET_URL", url)
-        self.assertEqual(gate.call_count, 2)
-
-    def test_target_only_never_overwrites_existing_secret_even_if_value_unknown(self):
-        before = set(config.SECRET_NAMES)
-        with patch.object(config, "verify_environment"), \
-             patch.object(config, "present_secret_names", return_value=before), \
-             patch.object(config, "set_environment_secret") as write, \
-             patch.object(config.getpass, "getpass") as prompt:
-            config.sync_target_only(77)
-        write.assert_not_called()
-        prompt.assert_not_called()
-
-    def test_target_only_blocks_missing_source_or_approval_metadata(self):
-        for present in [
-            {"IAM_CANONICAL_SOURCE_URL"},
-            {"IAM_CANONICAL_OPERATOR_APPROVAL"},
-            set(),
-        ]:
-            with self.subTest(present=present), \
-                 patch.object(config, "verify_environment"), \
-                 patch.object(config, "present_secret_names", return_value=present), \
-                 patch.object(config, "set_environment_secret") as write, \
-                 patch.object(config.getpass, "getpass") as prompt:
-                with self.assertRaisesRegex(RuntimeError, "source/approval"):
-                    config.sync_target_only(77)
-                write.assert_not_called()
-                prompt.assert_not_called()
-
-    def test_target_only_rejects_wrong_db_role_tls_and_pooler_before_secret_write(self):
-        from unittest.mock import MagicMock
-        base = ("postgresql://neondb_owner:synthetic_password"
-                "@ep-crimson-smoke-b6jxg2v5.c-2.sa-east-1.aws.neon.tech:5432"
-                "/iam_canonical_validation?sslmode=verify-full&sslrootcert=system")
-        candidates = [
-            base.replace("iam_canonical_validation", "iam_database"),
-            base.replace("neondb_owner:", "iam_app_runtime_login:"),
-            base.replace("verify-full", "require"),
-            base.replace("ep-crimson-smoke-", "ep-crimson-smoke-pooler-"),
-        ]
-        before = {"IAM_CANONICAL_SOURCE_URL", "IAM_CANONICAL_OPERATOR_APPROVAL"}
-        for value in candidates:
-            with self.subTest(value=value.replace("synthetic_password", "***")), \
-                 patch.object(config, "verify_environment"), \
-                 patch.object(config, "present_secret_names", return_value=before), \
-                 patch.object(config, "set_environment_secret") as write, \
-                 patch.object(config.getpass, "getpass", return_value=value), \
-                 patch.object(config.sys, "stdin", MagicMock(isatty=lambda: True)):
-                with self.assertRaisesRegex(RuntimeError, "target URL allowlist"):
-                    config.sync_target_only(77)
-                write.assert_not_called()
-
-    def test_target_only_rejects_noninteractive_invocations(self):
-        from unittest.mock import MagicMock
-        before = {"IAM_CANONICAL_SOURCE_URL", "IAM_CANONICAL_OPERATOR_APPROVAL"}
-        with patch.object(config, "verify_environment"), \
-             patch.object(config, "present_secret_names", return_value=before), \
-             patch.object(config, "set_environment_secret") as write, \
-             patch.object(config.getpass, "getpass") as prompt, \
-             patch.object(config.sys, "stdin", MagicMock(isatty=lambda: False)):
-            with self.assertRaisesRegex(RuntimeError, "interactive"):
-                config.sync_target_only(77)
-            write.assert_not_called()
-            prompt.assert_not_called()
-
-    def test_verify_only_does_not_mutate_environment_or_secrets(self):
+    def test_verify_only_reads_policy_and_metadata_without_writes(self):
         with patch.object(config.sys, "argv", ["script.py", "--verify-only"]), \
-             patch.object(config, "verify_account_and_repo", return_value=77), \
-             patch.object(config, "verify_environment") as gate, \
+             patch.object(config, "verify_account_and_repo") as account, \
+             patch.object(config, "verify_environment") as policy, \
              patch.object(config, "verify_secret_metadata") as metadata, \
              patch.object(config, "ensure_protected_environment") as mutate, \
              patch.object(config, "set_environment_secret") as write:
             self.assertEqual(config.main(), 0)
-        gate.assert_called_once_with(77)
-        metadata.assert_called_once()
+        account.assert_called_once_with()
+        policy.assert_called_once_with()
+        metadata.assert_called_once_with()
         mutate.assert_not_called()
         write.assert_not_called()
 
-    def test_documented_rest_environment_response_has_no_admin_bypass_field(self):
-        # GitHub REST GET/PUT environment schemas do not expose this UI toggle.
-        def read(*args, **kwargs):
-            if "deployment-branch-policies" in args[1]:
-                return {"branch_policies": [{"name": "main", "type": "branch"}]}
-            value = protected(77)
-            self.assertNotIn("can_admins_bypass", value)
-            return value
-        with patch.object(config, "gh_json", side_effect=read):
-            config.verify_environment(77)
-
-
-    def test_protect_only_updates_policy_not_existing_secrets(self):
-        with patch.object(config.sys, "argv", ["script.py", "--protect-only"]), \
-             patch.object(config, "verify_account_and_repo", return_value=77), \
-             patch.object(config, "ensure_protected_environment") as protect, \
+    def test_verify_only_fails_closed_on_policy_error(self):
+        with patch.object(config.sys, "argv", ["script.py", "--verify-only"]), \
+             patch.object(config, "verify_account_and_repo"), \
+             patch.object(config, "verify_environment", side_effect=RuntimeError("policy mismatch")), \
              patch.object(config, "verify_secret_metadata") as metadata, \
-             patch.object(config, "set_environment_secret") as write, \
-             patch.object(config.getpass, "getpass") as prompt:
-            self.assertEqual(config.main(), 0)
-        protect.assert_called_once_with(77)
-        metadata.assert_called_once()
+             patch.object(config, "ensure_protected_environment") as mutate, \
+             patch.object(config, "set_environment_secret") as write:
+            self.assertEqual(config.main(), 2)
+        metadata.assert_not_called()
+        mutate.assert_not_called()
         write.assert_not_called()
-        prompt.assert_not_called()
+
+    def test_default_mode_blocks_expired_target_without_mutation(self):
+        with patch.object(config.sys, "argv", ["script.py"]), \
+             patch.object(config, "verify_account_and_repo"), \
+             patch.object(config, "ensure_protected_environment") as mutate, \
+             patch.object(config, "set_environment_secret") as write:
+            self.assertEqual(config.main(), 2)
+        mutate.assert_not_called()
+        write.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

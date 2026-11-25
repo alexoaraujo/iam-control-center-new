@@ -1,0 +1,19 @@
+name: G2 protected Environment metadata preflight
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/iam-g2-environment-preflight.py'
+      - '.github/tests/test-iam-g2-environment-preflight.py'
+      - '.github/workflows/iam-g2-environment-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-preflight-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - run: python3 .github/tests/test-iam-g2-environment-preflight.py -v

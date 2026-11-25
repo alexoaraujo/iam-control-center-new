@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure a *protected* GitHub environment and store 3 Neon secrets via gh CLI.
+"""Read back protected canonical GitHub Environment metadata via gh CLI.
 
 Run locally with GitHub CLI authenticated as a repository administrator.
 Never put connection strings in shell arguments, CI inputs, git, logs or issues.
@@ -8,17 +8,14 @@ This does not run a workflow, migrate schemas, or alter Neon databases.
 from __future__ import annotations
 
 import argparse
-import getpass
-import importlib.util
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 
 REPOSITORY = "alexoaraujo/iam-control-center-new"
 ENVIRONMENT = "IAM-Canonical-Isolated-Restore"
-REVIEWER = "alexoaraujo83"
+MAINTAINER = "alexoaraujo"
 SECRET_NAMES = (
     "IAM_CANONICAL_SOURCE_URL",
     "IAM_CANONICAL_TARGET_URL",
@@ -49,51 +46,45 @@ def gh_json(*args: str, input_value: str | None = None):
     except json.JSONDecodeError as exc:
         raise RuntimeError("GitHub returned invalid JSON") from exc
 
-def verify_account_and_repo() -> int:
+def verify_account_and_repo() -> None:
     repo = gh_json("api", f"repos/{REPOSITORY}")
     if repo.get("default_branch") != "main" or repo.get("private") is not False:
         fail("expected public repository with main as default branch")
-    user = gh_json("api", "user")
-    reviewer = gh_json("api", f"users/{REVIEWER}")
-    if user.get("id") == reviewer.get("id"):
-        fail("reviewer must be a distinct GitHub identity")
-    collaborator = gh_json(
-        "api", f"repos/{REPOSITORY}/collaborators/{REVIEWER}/permission"
+    actor = gh_json("api", "user")
+    if actor.get("login") != MAINTAINER or not isinstance(actor.get("id"), int):
+        fail("single-maintainer operator identity mismatch")
+    permissions = gh_json(
+        "api", f"repos/{REPOSITORY}/collaborators/{MAINTAINER}/permission"
     )
-    if collaborator.get("permission") not in ("read", "triage", "write", "maintain", "admin"):
-        fail("reviewer has no repository access")
-    if not isinstance(reviewer.get("id"), int):
-        fail("reviewer ID unavailable")
-    return reviewer["id"]
+    if permissions.get("permission") != "admin":
+        fail("single maintainer must have repository admin permission")
 
-def verify_environment(review_id: int) -> None:
+
+def verify_environment() -> None:
     info = gh_json("api", ENV_API)
     if info.get("name") != ENVIRONMENT:
         fail("environment identity mismatch")
     bp = info.get("deployment_branch_policy") or {}
     if bp.get("protected_branches") is not False or bp.get("custom_branch_policies") is not True:
         fail("environment branch policy is not custom-only")
-    reviewers = [rule for rule in info.get("protection_rules", [])
-                 if rule.get("type") == "required_reviewers"]
-    if len(reviewers) != 1:
-        fail("environment has no exactly one required-reviewer protection rule")
-    rule = reviewers[0]
-    if rule.get("prevent_self_review") is not True:
-        fail("Prevent self-review is not active")
-    allowed = [x for x in rule.get("reviewers", [])
-               if x.get("type") == "User"]
-    if len(allowed) != 1 or allowed[0].get("reviewer", {}).get("id") != review_id:
-        fail("independent required reviewer is not configured")
+    if info.get("can_admins_bypass") is not False:
+        fail("administrator bypass must remain disabled")
+    # Single-maintainer PEOS policy: no human required-reviewers gate.
+    if any(rule.get("type") == "required_reviewers"
+           for rule in info.get("protection_rules", [])):
+        fail("mandatory independent reviewer still configured")
     policies = gh_json("api", f"{ENV_API}/deployment-branch-policies?per_page=100")
     actual = [(x.get("name"), x.get("type")) for x in policies.get("branch_policies", [])]
     if actual != [("main", "branch")]:
         fail("deployment branch policies must contain exactly one branch: main")
 
-def ensure_protected_environment(review_id: int) -> None:
+
+def ensure_protected_environment() -> None:
     payload = json.dumps({
         "wait_timer": 0,
-        "prevent_self_review": True,
-        "reviewers": [{"type": "User", "id": review_id}],
+        "prevent_self_review": False,
+        "can_admins_bypass": False,
+        "reviewers": [],
         "deployment_branch_policy": {
             "protected_branches": False,
             "custom_branch_policies": True
@@ -108,7 +99,10 @@ def ensure_protected_environment(review_id: int) -> None:
                 f"{ENV_API}/deployment-branch-policies",
                 "--input", "-",
                 input_value=json.dumps({"name": "main", "type": "branch"}))
-    verify_environment(review_id)
+    elif existing != [("main", "branch")]:
+        fail("unexpected branch policy; refusing to override")
+    verify_environment()
+
 
 def set_environment_secret(name: str, value: str) -> None:
     if name not in SECRET_NAMES or not value:
@@ -117,121 +111,31 @@ def set_environment_secret(name: str, value: str) -> None:
     gh("secret", "set", name, "--env", ENVIRONMENT,
        "--repo", REPOSITORY, input_value=value)
 
-def present_secret_names() -> set[str]:
-    """Only GitHub secret *metadata*. Secret values are never read or printed."""
-    rows = gh_json("api", f"{ENV_API}/secrets?per_page=100")
-    return {x.get("name") for x in rows.get("secrets", [])
-            if isinstance(x.get("name"), str)}
-
 def verify_secret_metadata() -> None:
-    present = present_secret_names()
+    rows = gh_json("api", f"{ENV_API}/secrets?per_page=100")
+    present = {x.get("name") for x in rows.get("secrets", [])}
     missing = sorted(set(SECRET_NAMES) - present)
     if missing:
         fail("required environment secrets are missing: " + ", ".join(missing))
 
-def sync_target_only(review_id: int) -> None:
-    """Set only a MISSING target URL, without rotating source or approval."""
-    verify_environment(review_id)
-    present = present_secret_names()
-    required = {"IAM_CANONICAL_SOURCE_URL", "IAM_CANONICAL_OPERATOR_APPROVAL"}
-    missing = sorted(required - present)
-    if missing:
-        fail("existing source/approval secret metadata missing: " + ", ".join(missing))
-    if "IAM_CANONICAL_TARGET_URL" in present:
-        # An existing value cannot be attested via GitHub secret metadata.
-        print("SKIPPED_TARGET_EXISTS: no overwrite; value is NOT verified")
-        print("Run the protected auth_only workflow to attest the actual credentials")
-        return
-    if not sys.stdin.isatty():
-        fail("target-only secret setup requires a private interactive terminal")
-    target = getpass.getpass("Paste TARGET URL (iam_canonical_validation), hidden: ")
-    guard = guard_module()
-    try:
-        guard.parse_approved_url(
-            target,
-            host=guard.TARGET_HOST,
-            database=guard.TARGET_DATABASE,
-            role=guard.TARGET_ROLE,
-        )
-    except guard.GateBlocked as exc:
-        fail(f"target URL allowlist rejected: {exc}")
-    # No source or approval secret is accessed, read, or overwritten.
-    set_environment_secret("IAM_CANONICAL_TARGET_URL", target)
-    verify_secret_metadata()
-    verify_environment(review_id)
-    print("PASS_TARGET_SECRET_METADATA: only target written to protected environment")
-    print("NOT_ATTESTED: source and approval secret values cannot be read by GitHub")
-    print("NEXT_GATE: protected auth_only; do not run readiness/export/restore yet")
-
-def guard_module():
-    path = (Path(__file__).resolve().parents[2] / "database" / "scripts"
-            / "guard-canonical-restore-target.py")
-    spec = importlib.util.spec_from_file_location("iam_guard_secure_setup", path)
-    if spec is None or spec.loader is None:
-        fail("target URL allowlist guard is missing")
-    import sys as _sys
-    module = importlib.util.module_from_spec(spec)
-    _sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Fail-closed GitHub Environment secret metadata or interactive setup"
+        description="Read protected canonical Environment policy and secret metadata only"
     )
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--verify-only", action="store_true",
-                      help="Check environment policy and all 3 secret names; never read values")
-    mode.add_argument("--target-only", action="store_true",
-                      help="Write only a missing target secret; preserve source/approval")
-    mode.add_argument("--protect-only", action="store_true",
-                      help="Configure reviewer, self-review deny and main-only via documented REST API; admin bypass must be disabled in GitHub UI")
+    parser.add_argument("--verify-only", action="store_true",
+                        help="Read policy and secret names only; never access values or mutate settings")
     args = parser.parse_args()
     try:
-        review_id = verify_account_and_repo()
+        verify_account_and_repo()
         if args.verify_only:
-            verify_environment(review_id)
+            verify_environment()
             verify_secret_metadata()
-            print("PASS_REST_METADATA_ONLY: main, independent reviewer, 3 secret names")
-            print("ADMIN_BYPASS_UNATTESTED: verify OFF in GitHub Settings UI; REST omits this control")
-            print("NOT_ATTESTED: URL values, TLS auth, privileges, or restore")
+            print("PASS_REST_METADATA_ONLY: current policy and required secret names")
+            print("NOT_ATTESTED: secret values, endpoint identity, TLS auth, privileges, restore or lease")
             return 0
-        if args.target_only:
-            sync_target_only(review_id)
-            return 0
-        if args.protect_only:
-            ensure_protected_environment(review_id)
-            verify_secret_metadata()
-            print("PASS_REST_PROTECTION_ONLY: main-only, independent reviewer, self-review denied")
-            print("ADMIN_BYPASS_UNATTESTED: deselect in GitHub Settings UI and obtain independent evidence")
-            print("NO_SECRET_WRITE: existing source, target and approval values preserved")
-            print("NEXT_GATE: verify Settings UI, run --verify-only, then reviewed main auth_only / NO_DDL")
-            return 0
-        # Historical full-configuration mode is unchanged; it explicitly
-        # requires the operator to provide and validate BOTH secret URLs.
-        ensure_protected_environment(review_id)
-        print("PASS_ENVIRONMENT_POLICY: independent reviewer, self-review denied, main only")
-        guard = guard_module()
-        if not sys.stdin.isatty():
-            fail("must run interactively in a private terminal; no automation/pipes for plaintext URLs")
-        source = getpass.getpass("Paste SOURCE URL (iam_schema_export_reader), hidden: ")
-        target = getpass.getpass("Paste TARGET URL (iam_canonical_validation), hidden: ")
-        try:
-            guard.verify_connections(source, target)
-        except guard.GateBlocked as exc:
-            raise RuntimeError(f"credential URL allowlist rejected: {exc}") from exc
-        set_environment_secret("IAM_CANONICAL_SOURCE_URL", source)
-        set_environment_secret("IAM_CANONICAL_TARGET_URL", target)
-        # This publicly known sentinel is NOT the approval mechanism.
-        # Required environment reviewers and branch restrictions are the actual gate.
-        set_environment_secret("IAM_CANONICAL_OPERATOR_APPROVAL", APPROVAL_LATCH)
-        verify_secret_metadata()
-        verify_environment(review_id)
-        print("PASS_SECRET_METADATA: all three names exist in protected environment")
-        print("ADMIN_BYPASS_UNATTESTED: check OFF in GitHub Settings UI; REST omits this control")
-        print("No credentials printed; no Neon DDL, export or restore executed")
-        print("Verify actual reviewer approval for each run in GitHub Environments")
-        return 0
+        # The pinned disposable destination expired on 2026-11-20.
+        # Do not run legacy provisioning against it or overwrite existing custody.
+        fail("historical provisioning disabled; use --verify-only and obtain a separately reviewed fresh target")
     except RuntimeError as exc:
         print(f"BLOCKED_ENVIRONMENT_CONFIGURATION: {exc}", file=sys.stderr)
         return 2

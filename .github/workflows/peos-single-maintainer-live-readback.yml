@@ -1,0 +1,64 @@
+name: PEOS single-maintainer live Environment approval readback
+
+on:
+  pull_request:
+    paths:
+      - ".github/scripts/iam-peos-environments-approval-readback.py"
+      - ".github/tests/test-iam-peos-environments-approval-readback.py"
+      - ".github/workflows/peos-single-maintainer-live-readback.yml"
+      - ".github/scripts/iam-g3-environments-inventory-readonly.py"
+      - ".github/tests/test-iam-g3-environments-inventory-readonly.py"
+      - ".github/scripts/iam-g3-environment-protection-readonly.py"
+      - ".github/tests/test-iam-g3-environment-protection-readonly.py"
+      - ".github/scripts/iam-g3-environment-bootstrap.py"
+      - ".github/tests/test-iam-g3-environment-bootstrap.py"
+      - ".github/scripts/iam-g3-owner-secret-metadata-readonly.py"
+      - ".github/tests/test-iam-g3-owner-secret-metadata-readonly.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  peos-environment-approvals-readback:
+    if: >-
+      github.repository == 'alexoaraujo/iam-control-center-new' &&
+      (github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Validate offline contract with no secrets
+        run: python3 .github/tests/test-iam-peos-environments-approval-readback.py
+      - name: Check actual Environments without mutation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/iam-peos-environments-approval-readback.py
+      # Inventory is a diagnostic, not a privileged Environment approval.
+      # Do not set environment: here: an unknown name could auto-create an
+      # unprotected Environment. This job never receives owner credentials.
+      - name: Validate complete G3 inventory contract without secrets
+        run: python3 .github/tests/test-iam-g3-environments-inventory-readonly.py
+      - name: Discover ALL live GitHub Environments (read only)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/iam-g3-environments-inventory-readonly.py
+      # Existing G3 Environment was discovered by a full API listing.
+      # Read effective protection rules with NO environment binding or owner secret.
+      - name: Check PR128 G3 policy validation contracts
+        run: python3 .github/tests/test-iam-g3-environment-protection-readonly.py
+      - name: Verify G3 local administrator bootstrap contract offline
+        run: python3 .github/tests/test-iam-g3-environment-bootstrap.py
+      # Offline contract only. GitHub Actions never reads environment secret metadata
+      # or mounts the PR128 owner secret; admin inventory is local-only.
+      - name: Validate owner secret metadata preflight without credentials
+        run: python3 .github/tests/test-iam-g3-owner-secret-metadata-readonly.py
+      - name: Attest effective G3 owner Environment policies (read only)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/iam-g3-environment-protection-readonly.py
