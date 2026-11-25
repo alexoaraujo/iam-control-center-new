@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
+import type { DashboardPath } from "../components/dashboard/presentation";
 import { auth0 } from "./auth0";
 
-export async function requireSession(returnTo: "/" | "/protected") {
+export async function requireSession(returnTo: DashboardPath | "/protected") {
   const session = await auth0.getSession();
   if (!session) redirect(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
   return session;

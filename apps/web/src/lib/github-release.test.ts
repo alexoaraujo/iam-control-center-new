@@ -4,8 +4,9 @@ afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 it("returns live SHA-bound CI and public PR count without treating CI as release approval", async () => {
   const fetchMock = vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ commit: { sha: "a".repeat(40) } }) })
     .mockResolvedValueOnce({ ok: true, json: async () => ({ workflow_runs: [{
-      name: "CI", status: "completed", conclusion: "success",
+      name: "CI", event: "push", head_branch: "main", status: "completed", conclusion: "success",
       head_sha: "a".repeat(40),
       html_url: "https://github.com/alexoaraujo/iam-control-center-new/actions/runs/123",
     }] }) })
@@ -14,7 +15,7 @@ it("returns live SHA-bound CI and public PR count without treating CI as release
   const result = await getReleaseSnapshot();
   expect(result).toMatchObject({ mainSha: "a".repeat(40), ci: "success", openPullRequests: 2, error: false });
   expect(result.runUrl).toBe("https://github.com/alexoaraujo/iam-control-center-new/actions/runs/123");
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(fetchMock).toHaveBeenCalledTimes(3);
   expect(fetchMock.mock.calls[0][1]).toMatchObject({ cache: "no-store" });
 });
 
@@ -31,6 +32,7 @@ it("never reports PASS when GitHub is unavailable, malformed or rate-limited", a
 
 it("does not trust unverified HTML links or unrelated check results", async () => {
   vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ commit: { sha: "b".repeat(40) } }) })
     .mockResolvedValueOnce({ ok: true, json: async () => ({ workflow_runs: [{
       name: "CI", status: "completed", conclusion: "success", head_sha: "b".repeat(40),
       html_url: "https://example.invalid/fake",
@@ -38,4 +40,12 @@ it("does not trust unverified HTML links or unrelated check results", async () =
     .mockResolvedValueOnce({ ok: true, json: async () => [] }));
   const result = await getReleaseSnapshot();
   expect(result).toMatchObject({ ci: "success", runUrl: null, openPullRequests: 0 });
+});
+
+it("does not report stale successful CI as current main evidence", async () => {
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ commit: { sha: "c".repeat(40) } }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ workflow_runs: [{ name: "CI", event: "push", head_branch: "main", head_sha: "d".repeat(40), status: "completed", conclusion: "success" }] }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => [] }));
+  expect(await getReleaseSnapshot()).toMatchObject({ mainSha: "c".repeat(40), ci: "unavailable", runUrl: null, openPullRequests: 0 });
 });
