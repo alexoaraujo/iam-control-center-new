@@ -1,19 +1,22 @@
 import { requireSession } from "../lib/session";
-import { getReleaseSnapshot } from "../lib/github-release";
+import { getReleaseSnapshot, type ReleaseSnapshot } from "../lib/github-release";
 import Link from "next/link";
 import { navigation, Status, SectionHeading, type DashboardPath } from "../components/dashboard/presentation";
 
 export default async function Dashboard({ path }: { path: DashboardPath }) {
   await requireSession(path);
-  const github = await getReleaseSnapshot();
   const overview = path === "/";
+  // Avoid consuming the public GitHub API quota for unrelated module pages.
+  const github: ReleaseSnapshot = overview || path === "/integrations" || path === "/evidence"
+    ? await getReleaseSnapshot()
+    : { source: "github", observedAt: "", mainSha: null, ci: "unavailable", runUrl: null, openPullRequests: null, error: true };
   const label = navigation.find(item => item.href === path)?.label ?? "Visão geral";
   const show = (section: DashboardPath) => overview || path === section;
 
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <Link className="brand" href="/" aria-label="IAM Control Center - início">
+        <Link prefetch={false} className="brand" href="/" aria-label="IAM Control Center - início">
           <span className="brand-mark">I<span>A</span></span>
           <span className="brand-copy"><strong>IAM CONTROL</strong><small>CENTER</small></span>
         </Link>
@@ -22,17 +25,17 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
         <nav className="main-nav" aria-label="Navegação principal">
           <span className="nav-caption">GERENCIAMENTO</span>
           {navigation.slice(0, 5).map(item => (
-            <Link className={path === item.href ? "nav-link nav-link--active" : "nav-link"} aria-current={path === item.href ? "page" : undefined} aria-label={item.label} href={item.href} key={item.href}>
+            <Link prefetch={false} className={path === item.href ? "nav-link nav-link--active" : "nav-link"} aria-current={path === item.href ? "page" : undefined} aria-label={item.label} href={item.href} key={item.href}>
               <span className="nav-icon">{item.icon}</span>{item.label}
             </Link>
           ))}
           <span className="nav-caption nav-caption--spaced">GOVERNANÇA</span>
           {navigation.slice(5).map((item) => (
-            <Link className={path === item.href ? "nav-link nav-link--active" : "nav-link"} aria-current={path === item.href ? "page" : undefined} aria-label={item.label} href={item.href} key={item.href}><span className="nav-icon">{item.icon}</span>{item.label}</Link>
+            <Link prefetch={false} className={path === item.href ? "nav-link nav-link--active" : "nav-link"} aria-current={path === item.href ? "page" : undefined} aria-label={item.label} href={item.href} key={item.href}><span className="nav-icon">{item.icon}</span>{item.label}</Link>
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="support-card"><span className="support-icon">?</span><strong>Central de segurança</strong><p>Princípios, controles e procedimentos operacionais.</p><Link href="/security">Consultar controles <span>↗</span></Link></div>
+          <div className="support-card"><span className="support-icon">?</span><strong>Central de segurança</strong><p>Princípios, controles e procedimentos operacionais.</p><Link prefetch={false} href="/security">Consultar controles <span>↗</span></Link></div>
           <div className="sidebar-user"><span className="user-avatar">IA</span><span><strong>Usuário autenticado</strong><small>Sessão Auth0</small></span><a href="/auth/logout" aria-label="Encerrar sessão">↗</a></div>
         </div>
       </aside>
@@ -40,13 +43,13 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
       <section className="main-panel">
         <header className="topbar">
           <div className="breadcrumb">Workspace <span>/</span> <strong>{label}</strong></div>
-          <div className="topbar-actions"><span className="environment-pill"><i /> AMBIENTE NÃO IDENTIFICADO</span><Link className="icon-button" href="/evidence" aria-label="Central de evidências">◷</Link><a className="topbar-avatar" href="/auth/logout" aria-label="Sair">IA</a></div>
+          <div className="topbar-actions"><span className="environment-pill"><i /> AMBIENTE NÃO IDENTIFICADO</span><Link prefetch={false} className="icon-button" href="/evidence" aria-label="Central de evidências">◷</Link><a className="topbar-avatar" href="/auth/logout" aria-label="Sair">IA</a></div>
         </header>
 
         <div className="content" id="overview">
           <div className="welcome-row">
             <div><span className="eyebrow">IDENTITY · ACCESS · GOVERNANCE</span><h1>{overview ? "Centro de controle" : label}</h1><p>Console somente leitura de identidade, acesso e segurança.</p></div>
-            <div className="welcome-actions"><span className="read-only-label"><span /> VISÃO SOMENTE LEITURA</span><Link className="button button--secondary" href="/evidence">Ver evidências <span>↗</span></Link></div>
+            <div className="welcome-actions"><span className="read-only-label"><span /> VISÃO SOMENTE LEITURA</span><Link prefetch={false} className="button button--secondary" href="/evidence">Ver evidências <span>↗</span></Link></div>
           </div>
 
           <div className="notice notice--info"><span className="notice-icon">i</span><div><strong>Fontes e limites operacionais</strong><p>Metadados públicos do GitHub são consultados no servidor. Métricas de tenants e identidade permanecem indisponíveis até autorização e fontes específicas verificadas.</p></div><Status tone="warning">DADOS IAM NÃO VERIFICADOS</Status></div>
@@ -66,11 +69,11 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
           <div className="overview-grid">
             <section className="panel-card posture-card">
               <div className="panel-title"><div><span className="eyebrow">SECURITY POSTURE</span><h3>Postura de segurança</h3></div><Status tone="warning">NÃO AVALIADA</Status></div>
-              <div className="posture-empty"><div className="shield-ring">⬡</div><strong>Coleta de evidências pendente</strong><p>O índice de segurança será calculado somente quando os controles tiverem fontes verificáveis, critérios e resultados vinculados a um SHA ou ambiente.</p><Link href="/evidence">Entender critérios <span>→</span></Link></div>
+              <div className="posture-empty"><div className="shield-ring">⬡</div><strong>Coleta de evidências pendente</strong><p>O índice de segurança será calculado somente quando os controles tiverem fontes verificáveis, critérios e resultados vinculados a um SHA ou ambiente.</p><Link prefetch={false} href="/evidence">Entender critérios <span>→</span></Link></div>
               <div className="posture-legend"><span><i className="legend-dot legend-dot--green" /> Verificado</span><span><i className="legend-dot legend-dot--amber" /> Pendente</span><span><i className="legend-dot legend-dot--gray" /> Não verificado</span></div>
             </section>
             <section className="panel-card integrations-card">
-              <div className="panel-title"><div><span className="eyebrow">PLATFORM HEALTH</span><h3>Saúde das integrações</h3></div><Link href="/integrations" className="text-link">Detalhes ↗</Link></div>
+              <div className="panel-title"><div><span className="eyebrow">PLATFORM HEALTH</span><h3>Saúde das integrações</h3></div><Link prefetch={false} href="/integrations" className="text-link">Detalhes ↗</Link></div>
               <div className="integration-row"><span className="integration-logo integration-logo--auth">A</span><div><strong>Auth0</strong><small>Identidade e sessão OIDC</small></div><Status tone="warning">A VALIDAR</Status></div>
               <div className="integration-row"><span className="integration-logo integration-logo--neon">N</span><div><strong>Neon PostgreSQL</strong><small>Persistência e isolamento RLS</small></div><Status tone="warning">A VALIDAR</Status></div>
               <div className="integration-row"><span className="integration-logo integration-logo--github">GH</span><div><strong>GitHub Actions</strong><small>CI, checks e evidências por SHA</small></div><Status tone="neutral">{github.error ? "NÃO VERIFICADO" : "FONTE CONSULTADA"}</Status></div>
@@ -92,7 +95,7 @@ export default async function Dashboard({ path }: { path: DashboardPath }) {
                 ["08","Ambientes","Development, Preview e Production.","/environments","▤"],
                 ["09","Evidências","SHA, workflow, execução e artefatos.","/evidence","▣"],
                 ["10","Operações","Saúde, incidentes e procedimentos.","/operations","◷"],
-              ].map(([number,title,description,href,icon]) => <Link className="module-card" href={href} key={number}><span className="module-icon">{icon}</span><span className="module-number">{number}</span><strong>{title}</strong><p>{description}</p><span className="module-arrow">↗</span></Link>)}
+              ].map(([number,title,description,href,icon]) => <Link prefetch={false} className="module-card" href={href} key={number}><span className="module-icon">{icon}</span><span className="module-number">{number}</span><strong>{title}</strong><p>{description}</p><span className="module-arrow">↗</span></Link>)}
             </div>
           </section>
 
