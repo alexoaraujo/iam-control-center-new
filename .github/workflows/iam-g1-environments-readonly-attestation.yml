@@ -42,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/tests/test-iam-g1-environment-readonly-attestation.py
-      - name: Verify four G1 GitHub Environments via read-only Actions token
+      - name: Verify five G1 GitHub Environments including Restore via read-only Actions token
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}

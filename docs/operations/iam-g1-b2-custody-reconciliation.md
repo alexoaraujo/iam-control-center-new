@@ -1,34 +1,17 @@
-# IAM-G1 — Backblaze B2 environment reconciliation
+# IAM G1 — Backblaze B2 custody reconciliation (historical incident #97)
 
-**Scope:** `alexoaraujo/iam-control-center-new` · `IAM-G1-Backup-Custody` · issue #97.
-No Neon operations. Never put Backblaze credentials in pull requests, source code, issues, CI logs, or this document.
+Reconciled 2026-11-25 against main 19c265139404939814ffc59efb9c3f28016eab88. Evidence only; no settings or secret changes.
 
-## Why the probe failed
+Historical run [43798649391](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/43798649391) stopped with BLOCKED_MISSING_B2_SECRETS before network access. The original PR #98 proposed bootstrap/apply/audit/run-probe modes for IAM-G1-Backup-Custody; its administrative script, synthetic tests and workflow remain in [original HEAD 4d38c0b4](https://github.com/alexoaraujo/iam-control-center-new/tree/4d38c0b4f551e2a13b26c6c103fc614756c70c65). These executable additions are not integrated: they could overwrite custody secrets and dispatch an upload under a historical policy.
 
-GitHub Actions run [43798649391](https://github.com/alexoaraujo/iam-control-center-new/actions/runs/43798649391) stopped before network access with `BLOCKED_MISSING_B2_SECRETS`. At least one of the two expected secrets was unavailable to the job. Workflow `iam-g1-b2-probe.yml` resolves **environment secrets** under the exact name `IAM-G1-Backup-Custody`.
+## Current custody boundaries
 
-## Offline guard regression checks
+- Synthetic probe: IAM-G1-Backup-Custody, workflow iam-g1-b2-probe.yml; synthetic readback is separate. The synthetic probe is not a full backup or recovery.
+- Full writer: IAM-G1-Full-Backup-Custody, [writer contract](iam-g1-b2-full-backup-writer.md).
+- Full readback: IAM-G1-B2-Full-Readback-Custody, [reader contract](iam-g1-b2-full-readback.md).
+- Full restore: IAM-G1-Full-Restore-Custody, [historical restore attestation](iam-g1-b2-real-restore-attestation-45060036018.md).
+- Read-only metadata attestation: iam-g1-environments-readonly-attestation.yml covers five named G1 environments including the full custody chain, not the legacy synthetic writer. Do not assert it attests the latter.
 
-Before running the administrative repair, execute `python3 scripts/test-iam-g1-b2-environment-policy.py` on a trusted machine with `jq` installed. These tests use a fake `gh` executable and exercise rejection of tag-only `main`, administrator bypass, missing protection flags, self-review, and extra allowed branches. They do not access GitHub or Backblaze.
+Check effective policy and existing secret names independently; names cannot attest values. Do not overwrite existing keys or change reviewers/branch restrictions to obtain a green check. Keep writer/reader permissions distinct, exact prefix, private AES escrow and approved SHA. A future synthetic probe requires its own authorization; it creates an object and is not a read-only diagnostic.
 
-## Secure administrative repair
-
-Use a **trusted, interactive terminal** with `gh`, `jq`, and a GitHub account authorized to administer this repository. Authenticate with `gh auth login` if needed. Do not use an arbitrary CI runner to enter secrets.
-
-1. Run `bash scripts/iam-g1-b2-environment.sh bootstrap`. If the environment does not exist, this only creates an environment with a custom deployment branch policy restricted to `main`. It **does not add secrets or reviewers**. Existing environment settings are preserved.
-2. Open [GitHub Environments](https://github.com/alexoaraujo/iam-control-center-new/settings/environments) → **IAM-G1-Backup-Custody**. Require a genuinely independent reviewer, enable **Prevent self-review**, and disable **Allow administrators to bypass configured protection rules**. Keep the deployment branch restriction to **only the `main` branch** (policy type `branch`, not a tag named `main`). Do not assume the author of a previous PR is an independent backup custodian.
-3. Run `bash scripts/iam-g1-b2-environment.sh apply`. It **refuses** to write variables or secrets unless an exact `main` branch-only deployment policy, required reviewers with prevent-self-review, and `can_admins_bypass=false` all pass. A missing security field also fails closed. It upserts these Environment variables:
-   - `IAM_G1_B2_BUCKET=iam-control-center-g1-backups`
-   - `IAM_G1_B2_ENDPOINT=https://s3.us-east-005.backblazeb2.com`
-   - `IAM_G1_B2_REGION=us-east-005`
-4. The script prompts privately for the *existing* Backblaze **keyID** and **applicationKey**, setting **Environment secrets** `IAM_G1_B2_ACCESS_KEY_ID` and `IAM_G1_B2_SECRET_ACCESS_KEY`. Secret values are sent to `gh secret set` through stdin; nothing is committed or logged. If the applicationKey is lost, create a replacement in Backblaze and revoke the obsolete key.
-5. Run `bash scripts/iam-g1-b2-environment.sh audit`. It verifies restrictions, secret **names** (not values), and variable values. An audit cannot prove that Backblaze credentials are valid.
-6. Run `bash scripts/iam-g1-b2-environment.sh run-probe` to dispatch the synthetic encrypted upload workflow from `main`. Independently approve the protected job and inspect the resulting GitHub Actions run. Success requires `PASS_B2_ENCRYPTED_SYNTHETIC_UPLOAD`; invalid credentials or bucket grants may produce an S3 error even when secrets are present.
-
-## Guardrails and evidence
-
-- Do not copy a repository secret into an environment by assuming its hidden value can be retrieved: GitHub secret values are write-only.
-- The existing environment must not be relaxed for the sake of passing a probe. If your GitHub plan does not support these protection controls, stop and obtain an independent authorization method rather than bypassing the gate.
-- A successful upload does not prove readback, object integrity after retrieval, private key custody, retention policy, isolated restore, or rollback.
-- Backup, restore, Neon branch mutations, and `G1_FULL_BACKUP_OWNER_APPROVED` remain **BLOCKED** until their independent gates pass.
-- Record only the run URL, SHA, status, ciphertext checksum, and reviewer approval in issue #97; **never** record credentials.
+The historical restore attestation documents a limited real restore at an earlier SHA; the current run #45558018753 is separate and its result must be read directly. No new backup, readback, restore, credentials, bucket operations or issue closure are authorized or attested by this document.
