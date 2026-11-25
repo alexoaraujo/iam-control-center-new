@@ -2,6 +2,7 @@ import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const branchCallbacks = new Map([
+  ["test/peos-g2-reader-acl-rehearsal-20261125", "iam-control-center-new-pr183-ci.vercel.app"],
   ["feat/peos-g2-protected-environment-preflight-20261124", "iam-control-center-new-pr182-ci.vercel.app"],
   ["feat/peos-offline-signature-custody-20261124", "iam-control-center-new-pr181-ci.vercel.app"],
   ["feat/peos-protected-development-evidence-20261124", "iam-control-center-new-pr180-ci.vercel.app"],
