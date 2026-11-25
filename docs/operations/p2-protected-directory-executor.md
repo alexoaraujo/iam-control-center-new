@@ -21,3 +21,5 @@ The fixed provider expiry makes this executor intentionally fail closed after le
 ## Review corrections
 
 Deployment-config workflow identity was confirmed as vercel-deployment-guard.yml from run 45645862578. The executor now also requires authenticated GitHub Environment readback: secret IAM_P2_GITHUB_ENVIRONMENT_READ_TOKEN must be a separately scoped read-only credential capable of reading the named environment and deployment branch policies; no write permission. It checks required reviewers, admin bypass disabled and a single exact main branch policy. The session advisory lock must remain held at every mutation, with idle connection expiry disabled; reconnect without lock blocks, including cleanup, and requires the documented emergency path.
+
+The executor PR #198 has an exclusive CI Preview iam-control-center-new-pr198-ci.vercel.app. It is distinct from the P2 operational Preview. No privileged credentials or lease flags are configured there. Auth0 callback /auth/callback, logout and web origin must be added without replacing existing entries. No generic alias reuse.
