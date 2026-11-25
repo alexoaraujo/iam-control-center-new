@@ -1,0 +1,44 @@
+{
+  "format": "iam-g2-acl-review-candidate/v1",
+  "status": "REVIEW_ONLY",
+  "execution_authorized": false,
+  "collector_activation_authorized": false,
+  "source_sha": "760c4adf428e5e580c9670d8facddab7f0e4833d",
+  "evidence_issue_comment": 7152668112,
+  "observed_clone": {
+    "project": "tiny-rice-70320263",
+    "branch": "br-solitary-sunset-b681d15f",
+    "database": "iam_database",
+    "original_acl_md5": "af4d49e3855fc20aac2e7cecbb599a82",
+    "remediated_acl_md5": "b33aeb06c133f625b1e374086ef0db17",
+    "routine_definition_md5": "482a61605f6d438bc5a671b67bbf97a2"
+  },
+  "required_reviews": [
+    "MIGRATOR_CALLER_NECESSITY",
+    "PROVIDER_ROLE_IMPACT",
+    "CANONICAL_LINEAGE",
+    "EXACT_SHA_OPERATIONAL_APPROVAL",
+    "DIRECT_TLS_REMEDIATED_PROOF"
+  ],
+  "provider_roles_losing_execute": [
+    "neon_service",
+    "neon_superuser",
+    "pg_read_all_data",
+    "pg_write_all_data"
+  ],
+  "payload_encoding": "UTF-8 LF; each statement terminated by semicolon and LF",
+  "forward_sha256": "4a1550f739fd38478b71fd0a293903e6a1037e7a1f71468b1e9853b4e5016500",
+  "compensation_sha256": "f9d3af5134a0859052a1113a7da76a94d80e01405fc122f80576e301553cb8d1",
+  "forward": [
+    "GRANT EXECUTE ON FUNCTION iam.clear_tenant_context() TO iam_migrator",
+    "REVOKE EXECUTE ON FUNCTION iam.clear_tenant_context() FROM PUBLIC",
+    "GRANT USAGE ON SCHEMA iam TO iam_schema_export_reader",
+    "GRANT SELECT ON TABLE iam.schema_migrations TO iam_schema_export_reader"
+  ],
+  "compensation": [
+    "REVOKE SELECT ON TABLE iam.schema_migrations FROM iam_schema_export_reader",
+    "REVOKE USAGE ON SCHEMA iam FROM iam_schema_export_reader",
+    "REVOKE EXECUTE ON FUNCTION iam.clear_tenant_context() FROM iam_migrator, iam_owner, iam_app_runtime, iam_worker",
+    "GRANT EXECUTE ON FUNCTION iam.clear_tenant_context() TO PUBLIC, iam_owner, iam_app_runtime, iam_worker"
+  ]
+}
