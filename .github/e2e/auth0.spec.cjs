@@ -313,6 +313,48 @@ test("Auth0 login, callback, session persistence and logout", async ({ page }) =
     expect(result.payload, result.name).toEqual({ allowed: false });
   }
 
+  // PR195 console: exercise the actual authenticated routes, not just the
+  // protected session probe. Reuse the reviewed session without extra logins.
+  if (process.env.E2E_CALLBACK_BRANCH === "feat/peos-dashboard-documentation-20261125") {
+    const modules = [
+      ["/", "Centro de controle", "Visão geral"],
+      ["/organizations", "Organizações", "Organizações"],
+      ["/identities", "Identidades", "Identidades"],
+      ["/access", "Acesso e permissões", "Acesso e permissões"],
+      ["/policies", "Políticas", "Políticas"],
+      ["/audit", "Auditoria", "Auditoria"],
+      ["/security", "Segurança", "Segurança"],
+      ["/integrations", "Integrações", "Integrações"],
+      ["/environments", "Ambientes", "Ambientes"],
+      ["/evidence", "Evidências", "Evidências"],
+      ["/operations", "Operações", "Operações"],
+    ];
+    // Parallel same-origin reads share the existing session and keep within its
+    // short absolute lifetime. No database mutation or extra login occurs.
+    const results = await page.evaluate(async (routes) => Promise.all(
+      routes.map(async ([path, heading, label]) => {
+        const response = await fetch(path, { credentials: "same-origin", cache: "no-store", redirect: "manual" });
+        const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+        const current = doc.querySelector('nav a[aria-current="page"]');
+        return { path, status: response.status, heading: doc.querySelector("h1")?.textContent,
+          current: current?.getAttribute("href"), label: current?.getAttribute("aria-label"),
+          expectedHeading: heading, expectedLabel: label };
+      })
+    ), modules);
+    for (const result of results) {
+      expect(result.status, result.path).toBe(200);
+      expect(result.heading, result.path).toBe(result.expectedHeading);
+      expect(result.current, result.path).toBe(result.path);
+      expect(result.label, result.path).toBe(result.expectedLabel);
+    }
+    await page.goto("/operations");
+    await expect(page.getByRole("heading", { name: "Operações", exact: true, level: 1 })).toBeVisible();
+    await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("link", { name: "Visão geral", exact: true }).click();
+    await expect(page).toHaveURL(url => url.pathname === "/");
+    await expect(page.getByRole("heading", { name: "Centro de controle", level: 1 })).toBeVisible();
+    console.log("PASS_PR195_AUTHENTICATED_CONSOLE_11_ROUTES_AND_NAVIGATION");
+  }
+
   // Logout returns to the app root, which is immediately redirected to
   // Auth0 by the Next.js proxy. Verify the login screen, not a transient URL.
   await page.goto("/auth/logout");

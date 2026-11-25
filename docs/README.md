@@ -4,6 +4,10 @@ Documentação de referência para Next.js + TypeScript, Auth0, Neon PostgreSQL,
 
 ## Começar
 
+- [Console, rotas e estado operacional atual](operations/dashboard-and-repository-status.md)
+- [Roadmap mestre](operations/roadmap-master-iam-control-center-new.md)
+- [Atestado histórico de restauração isolada G1](operations/iam-g1-b2-real-restore-attestation-45060036018.md)
+
 - [Auditoria integral do repositório — 2026-11-07](evidence/repository-audit-2026-11-07.md)
 
 - [Visão geral da arquitetura](architecture/overview.md)

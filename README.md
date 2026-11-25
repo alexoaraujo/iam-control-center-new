@@ -3,12 +3,12 @@
 Security-first, multi-tenant identity and access management control plane.
 
 ## Status
-Bootstrap scaffold only. Authentication, authorization, persistence, and deployment are **not yet production-ready**. This GitHub repository exists, but this scaffold does not configure or verify a working Auth0 login, managed PostgreSQL connection, or Vercel deployment.
+Active security-first implementation; **Production promotion is not authorized by this README**. Auth0 session protection, server-side authorization checks, PostgreSQL 18 contracts, GitHub CI and isolated recovery evidence exist. Operational tenant administration, current G2/G3 attestations and Production release require separate exact-SHA evidence. See the [console and evidence guide](docs/operations/dashboard-and-repository-status.md).
 
 ## Architecture
 - `apps/web`: Next.js App Router UI and server-side endpoints.
 - `database/migrations`: reviewed, versioned PostgreSQL migrations.
-- `.github/workflows/quality.yml`: CI checks for pushes and pull requests targeting any branch.
+- `.github/workflows/quality.yml`: CI checks for main pushes, pull requests and manual dispatch.
 - `docs/`: architecture, security, evidence, and operations records.
 
 Auth0 is the identity provider; application authorization and tenant membership remain server-side application responsibilities. Never derive tenant access from email or user-editable metadata.
@@ -16,7 +16,7 @@ Auth0 is the identity provider; application authorization and tenant membership 
 ## Prerequisites
 - Node.js 24.x
 - pnpm 10.34.9 (pinned through `packageManager`)
-- PostgreSQL for future integration tests
+- PostgreSQL 18 for database contract tests
 - Auth0 development tenant created separately
 - GitHub repository and Vercel project configured separately
 
@@ -32,7 +32,7 @@ pnpm build
 pnpm --filter @iam-control-center/web dev
 ```
 
-Bootstrap note: `pnpm-lock.yaml` is committed and CI uses `pnpm install --frozen-lockfile` with the pinned pnpm version. The quality workflow runs dependency audit, lint, typecheck, tests, and build; a successful run is evidence only for the exact tested SHA and does not by itself make GitHub branch rules enforceable. The health endpoint reports only whether the required Auth0 and database environment variables are present; it does not verify credentials, perform an Auth0 login, or establish database connectivity. The dashboard and protected routes require an Auth0 session. The public health endpoint is liveness only. Configure secrets only in local ignored env files or protected service environment settings.
+Toolchain note: `pnpm-lock.yaml` is committed and CI uses `pnpm install --frozen-lockfile` with the pinned pnpm version. The quality workflow runs dependency audit, lint, typecheck, tests, and build; a successful run is evidence only for the exact tested SHA and does not by itself make GitHub branch rules enforceable. The public health endpoint reports liveness and configuration inventory; it does not verify credentials, perform an Auth0 login, or establish database connectivity. The dashboard and protected routes require an Auth0 session. The public health endpoint is liveness only. Configure secrets only in local ignored env files or protected service environment settings.
 
 ## Evidence policy
 A result is PASS only when a check completed successfully against the exact commit SHA under review. A missing, skipped, stale, or unrelated check is not PASS. Production deployment requires explicit approval and a verified Preview evidence bundle.

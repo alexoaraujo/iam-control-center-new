@@ -5,7 +5,7 @@
  */
 
 const api = "https://api.github.com/repos/alexoaraujo/iam-control-center-new";
-type GithubRun = { id?: unknown; name?: unknown; head_sha?: unknown; conclusion?: unknown; status?: unknown; html_url?: unknown; created_at?: unknown };
+type GithubRun = { id?: unknown; name?: unknown; head_sha?: unknown; conclusion?: unknown; status?: unknown; html_url?: unknown; created_at?: unknown; event?: unknown; head_branch?: unknown };
 export type ReleaseSnapshot = {
   source: "github";
   observedAt: string;
@@ -38,8 +38,14 @@ export async function getReleaseSnapshot(): Promise<ReleaseSnapshot> {
       cache: "no-store",
       signal: AbortSignal.timeout(3500),
     });
+    const branchResponse = await request("/branches/main");
+    if (!branchResponse.ok) return snapshot;
+    const branch = await branchResponse.json();
+    const sha: unknown = branch?.commit?.sha;
+    if (typeof sha !== "string" || !/^[a-f0-9]{40}$/i.test(sha)) return snapshot;
+    snapshot.mainSha = sha;
     const [runsResponse, prsResponse] = await Promise.all([
-      request("/actions/workflows/quality.yml/runs?branch=main&per_page=5"),
+      request(`/actions/workflows/quality.yml/runs?branch=main&event=push&head_sha=${sha}&per_page=5`),
       request("/pulls?state=open&per_page=100"),
     ]);
     if (!runsResponse.ok || !prsResponse.ok) return snapshot;
@@ -49,15 +55,15 @@ export async function getReleaseSnapshot(): Promise<ReleaseSnapshot> {
     if (!runsData || typeof runsData !== "object" || !("workflow_runs" in runsData) ||
       !Array.isArray(runsData.workflow_runs) || !Array.isArray(prsData)) return snapshot;
     const latest = (runsData.workflow_runs as GithubRun[]).find(
-      run => run.name === "CI" && typeof run.head_sha === "string",
+      run => run?.name === "CI" && run.head_sha === sha && run.event === "push" && run.head_branch === "main",
     );
-    if (!latest || typeof latest.head_sha !== "string" || !/^[a-f0-9]{40}$/i.test(latest.head_sha)) return snapshot;
+    if (!latest) return { ...snapshot, openPullRequests: prsData.length, error: false };
     const ci = latest.status !== "completed" ? "pending" :
       latest.conclusion === "success" ? "success" :
-      latest.conclusion === "failure" || latest.conclusion === "cancelled" ? "failure" : "pending";
+      latest.conclusion === "failure" || latest.conclusion === "cancelled" || latest.conclusion === "timed_out" ? "failure" : "unavailable";
     return {
       source: "github", observedAt: snapshot.observedAt,
-      mainSha: latest.head_sha, ci, runUrl: safeRunUrl(latest.html_url),
+      mainSha: sha, ci, runUrl: safeRunUrl(latest.html_url),
       openPullRequests: prsData.length,
       error: false,
     };
