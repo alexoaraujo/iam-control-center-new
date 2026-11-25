@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "repository": "alexoaraujo/iam-control-center-new",
+  "preview": {
+    "environment": "Preview",
+    "target_branches": [
+      "refs/pull/*/merge",
+      "main"
+    ],
+    "wildcard_activation": "HOLD_PENDING_TRUSTED_EXECUTOR_MIGRATION",
+    "require_no_environment_or_repository_secrets": true
+  },
+  "environments": {
+    "Preview": {
+      "role": "pr-unprivileged",
+      "branches": [
+        "refs/pull/*/merge",
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "Development": {
+      "role": "development",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "Production": {
+      "role": "production",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-Audit-Development": {
+      "role": "read-only",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "Neon-PR-Lifecycle": {
+      "role": "lifecycle",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "neon-review-maintenance": {
+      "role": "read-only",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "neon-schema-export": {
+      "role": "read-only",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-Canonical-Isolated-Restore": {
+      "role": "restore",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-Canonical-Revocation": {
+      "role": "revocation",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-G1-Backup-Custody": {
+      "role": "writer",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-G1-B2-Readback-Custody": {
+      "role": "reader",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-G1-Full-Backup-Custody": {
+      "role": "writer",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-G1-B2-Full-Readback-Custody": {
+      "role": "reader",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-G1-Full-Restore-Custody": {
+      "role": "restore",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-G1-Disposable-Lease-Revocation": {
+      "role": "revocation",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-G1-Disposable-Lease-Probe": {
+      "role": "lease",
+      "branches": [
+        "audit/iam-g1-lease-schema-probe-20261115"
+      ],
+      "status": "inventory_candidate",
+      "migration_target": [
+        "main"
+      ]
+    },
+    "IAM-G2-Neon-Endpoint-Attestation": {
+      "role": "reader",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-G2-Development-Evidence-Acquisition": {
+      "role": "reader",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    },
+    "IAM-G3-PR128-Disposable-RBAC": {
+      "role": "lease",
+      "branches": [
+        "main"
+      ],
+      "status": "inventory_candidate"
+    }
+  },
+  "proposed_environments": [
+    "Preview-Auth0-Control",
+    "Preview-Authenticated-E2E",
+    "IAM-G3-Disposable-RBAC",
+    "IAM-P2-Disposable-RBAC"
+  ]
+}

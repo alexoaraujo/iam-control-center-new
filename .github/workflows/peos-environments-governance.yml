@@ -1,0 +1,26 @@
+name: PEOS Environment governance offline contracts
+on:
+  pull_request:
+    paths:
+      - '.github/policies/environments.json'
+      - '.github/scripts/peos-environments-inventory.py'
+      - '.github/tests/test-peos-environments-inventory.py'
+      - '.github/workflows/peos-environments-governance.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/policies/environments.json'
+      - '.github/scripts/peos-environments-inventory.py'
+      - '.github/tests/test-peos-environments-inventory.py'
+      - '.github/workflows/peos-environments-governance.yml'
+permissions:
+  contents: read
+jobs:
+  environment-governance-offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - run: python3 .github/tests/test-peos-environments-inventory.py
