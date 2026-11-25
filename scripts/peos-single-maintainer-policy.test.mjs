@@ -25,7 +25,9 @@ test("canonical setup enforces owner, branch and no required reviewers", () => {
   assert.match(source, /mandatory independent reviewer still configured/);
   assert.match(source, /"main", "branch"/);
   assert.doesNotMatch(source, /REVIEWER =/);
-  assert.match(source, /getpass\.getpass/);
+  assert.match(source, /--verify-only/);
+  assert.match(source, /historical provisioning disabled/);
+  assert.doesNotMatch(source, /getpass\.getpass/);
 });
 
 test("G1 revoker retains technical safeguards without extra human approval", () => {

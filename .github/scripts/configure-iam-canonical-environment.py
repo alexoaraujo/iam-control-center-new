@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure a *protected* GitHub environment and store 3 Neon secrets via gh CLI.
+"""Read back protected canonical GitHub Environment metadata via gh CLI.
 
 Run locally with GitHub CLI authenticated as a repository administrator.
 Never put connection strings in shell arguments, CI inputs, git, logs or issues.
@@ -7,11 +7,9 @@ This does not run a workflow, migrate schemas, or alter Neon databases.
 """
 from __future__ import annotations
 
-import getpass
-import importlib.util
+import argparse
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 
@@ -120,44 +118,24 @@ def verify_secret_metadata() -> None:
     if missing:
         fail("required environment secrets are missing: " + ", ".join(missing))
 
-def guard_module():
-    path = (Path(__file__).resolve().parents[2] / "database" / "scripts"
-            / "guard-canonical-restore-target.py")
-    spec = importlib.util.spec_from_file_location("iam_guard_secure_setup", path)
-    if spec is None or spec.loader is None:
-        fail("target URL allowlist guard is missing")
-    import sys as _sys
-    module = importlib.util.module_from_spec(spec)
-    _sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Read protected canonical Environment policy and secret metadata only"
+    )
+    parser.add_argument("--verify-only", action="store_true",
+                        help="Read policy and secret names only; never access values or mutate settings")
+    args = parser.parse_args()
     try:
         verify_account_and_repo()
-        ensure_protected_environment()
-        print("PASS_ENVIRONMENT_POLICY: single maintainer, no required reviewers, main only")
-        guard = guard_module()
-        if not sys.stdin.isatty():
-            fail("must run interactively in a private terminal; no automation/pipes for plaintext URLs")
-        source = getpass.getpass("Paste SOURCE URL (iam_schema_export_reader), hidden: ")
-        target = getpass.getpass("Paste TARGET URL (iam_canonical_validation), hidden: ")
-        try:
-            guard.verify_connections(source, target)
-        except guard.GateBlocked as exc:
-            raise RuntimeError(f"credential URL allowlist rejected: {exc}") from exc
-        set_environment_secret("IAM_CANONICAL_SOURCE_URL", source)
-        set_environment_secret("IAM_CANONICAL_TARGET_URL", target)
-        # This public sentinel is NOT proof of operator authorization.
-        # The single maintainer retains exact-SHA, manual confirmation,
-        # branch scope, TLS and restore/rollback technical gates.
-        set_environment_secret("IAM_CANONICAL_OPERATOR_APPROVAL", APPROVAL_LATCH)
-        verify_secret_metadata()
-        verify_environment()
-        print("PASS_SECRET_METADATA: all three names exist in protected environment")
-        print("No credentials printed; no Neon DDL, export or restore executed")
-        print("Verify exact-SHA maintainer attestation and live Environment readback per run")
-        return 0
+        if args.verify_only:
+            verify_environment()
+            verify_secret_metadata()
+            print("PASS_REST_METADATA_ONLY: current policy and required secret names")
+            print("NOT_ATTESTED: secret values, endpoint identity, TLS auth, privileges, restore or lease")
+            return 0
+        # The pinned disposable destination expired on 2026-11-20.
+        # Do not run legacy provisioning against it or overwrite existing custody.
+        fail("historical provisioning disabled; use --verify-only and obtain a separately reviewed fresh target")
     except RuntimeError as exc:
         print(f"BLOCKED_ENVIRONMENT_CONFIGURATION: {exc}", file=sys.stderr)
         return 2

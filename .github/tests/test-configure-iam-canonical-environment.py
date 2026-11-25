@@ -127,6 +127,41 @@ class SingleMaintainerConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "secrets"):
                 config.verify_secret_metadata()
 
+    def test_verify_only_reads_policy_and_metadata_without_writes(self):
+        with patch.object(config.sys, "argv", ["script.py", "--verify-only"]), \
+             patch.object(config, "verify_account_and_repo") as account, \
+             patch.object(config, "verify_environment") as policy, \
+             patch.object(config, "verify_secret_metadata") as metadata, \
+             patch.object(config, "ensure_protected_environment") as mutate, \
+             patch.object(config, "set_environment_secret") as write:
+            self.assertEqual(config.main(), 0)
+        account.assert_called_once_with()
+        policy.assert_called_once_with()
+        metadata.assert_called_once_with()
+        mutate.assert_not_called()
+        write.assert_not_called()
+
+    def test_verify_only_fails_closed_on_policy_error(self):
+        with patch.object(config.sys, "argv", ["script.py", "--verify-only"]), \
+             patch.object(config, "verify_account_and_repo"), \
+             patch.object(config, "verify_environment", side_effect=RuntimeError("policy mismatch")), \
+             patch.object(config, "verify_secret_metadata") as metadata, \
+             patch.object(config, "ensure_protected_environment") as mutate, \
+             patch.object(config, "set_environment_secret") as write:
+            self.assertEqual(config.main(), 2)
+        metadata.assert_not_called()
+        mutate.assert_not_called()
+        write.assert_not_called()
+
+    def test_default_mode_blocks_expired_target_without_mutation(self):
+        with patch.object(config.sys, "argv", ["script.py"]), \
+             patch.object(config, "verify_account_and_repo"), \
+             patch.object(config, "ensure_protected_environment") as mutate, \
+             patch.object(config, "set_environment_secret") as write:
+            self.assertEqual(config.main(), 2)
+        mutate.assert_not_called()
+        write.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

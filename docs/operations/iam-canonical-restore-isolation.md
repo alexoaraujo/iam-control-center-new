@@ -4,6 +4,18 @@
 
 **State: DRAFT / REVIEW ONLY.** This is not permission to perform a schema restore, write data, fix ACLs in Development or Production, update main, or cut over. It is an executable guard for credentials and targets, tested entirely offline with synthetic passwords.
 
+## Current scope — 2026-11-25
+
+The disposable destination below expired on 2026-11-20; all historical target identities and observations are evidence only, not current execution authority. The original PR75 proposed independent-reviewer protection and target-only secret provisioning before the subsequent single-maintainer policy was integrated. Do not reapply that historical configuration or reuse its target/approval latch.
+
+The reconciled CLI supports a metadata-only check:
+
+```bash
+python3 .github/scripts/configure-iam-canonical-environment.py --verify-only
+```
+
+It verifies the currently versioned Environment policy (main only, no admin bypass, expected operator and reviewer configuration) and required secret names. It cannot attest the values, TLS authentication, endpoint identity or restore authority. The default invocation fails closed; historical interactive provisioning is disabled. No Environment setting or secret is modified by either invocation. A new target and exact-SHA authorization require a separate reviewed change and live readback. No change to Production or Development is authorized.
+
 ## Verified Neon control-plane targets (2026-11-13)
 
 | Purpose | Project | Branch | Database | Direct PostgreSQL endpoint |
