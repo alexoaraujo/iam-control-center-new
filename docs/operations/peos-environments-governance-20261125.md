@@ -23,3 +23,6 @@ No merge or privileged execution is authorized by the inventory, and no operatio
 
 ## Phase 1 review extension
 The inventory also reads repository variable names, configured reviewer identity (not proof of independence), wait timers and custom deployment protection IDs. All results remain observational. The initial PR had 10/10 offline tests passing; its general security gate blocked on AUTH0_E2E_NOT_SUCCESS. A dedicated verified Preview callback and safe credential segregation are still prerequisites; do not bypass the gate or grant privileges to PR code.
+
+## PR workflow exposure diagnostics
+Run `ruby .github/scripts/peos-pr-workflow-exposure.rb --report-only` on a reviewed checkout. It inventories PR-related events, secret references, reusable calls, dynamic secret access, Environment binding, OIDC/write permissions and checkout credential persistence. `--enforce` returns 2 on any finding; report-only is diagnostic while legacy jobs are migrated. It does not prove reachability, provider permissions, safety of scripts or effective secret values. Checkout-only findings are review candidates, not confirmed leaks. The 15 inventory tests passed at 90cde77a9039a4d9f7d61de65582154f5ebe7c4b; overall gate remains blocked by BRANCH_NOT_BOUND_TO_CALLBACK / AUTH0_E2E_NOT_SUCCESS.

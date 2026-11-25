@@ -5,6 +5,8 @@ on:
       - '.github/policies/environments.json'
       - '.github/scripts/peos-environments-inventory.py'
       - '.github/tests/test-peos-environments-inventory.py'
+      - '.github/scripts/peos-pr-workflow-exposure.rb'
+      - '.github/tests/test-peos-pr-workflow-exposure.rb'
       - '.github/workflows/peos-environments-governance.yml'
   push:
     branches: [main]
@@ -12,6 +14,8 @@ on:
       - '.github/policies/environments.json'
       - '.github/scripts/peos-environments-inventory.py'
       - '.github/tests/test-peos-environments-inventory.py'
+      - '.github/scripts/peos-pr-workflow-exposure.rb'
+      - '.github/tests/test-peos-pr-workflow-exposure.rb'
       - '.github/workflows/peos-environments-governance.yml'
 permissions:
   contents: read
@@ -24,3 +28,7 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 .github/tests/test-peos-environments-inventory.py
+      - name: Test PR workflow exposure diagnostics
+        run: ruby .github/tests/test-peos-pr-workflow-exposure.rb
+      - name: Report PR workflow exposure without authorizing execution
+        run: ruby .github/scripts/peos-pr-workflow-exposure.rb --report-only
