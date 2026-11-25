@@ -8,7 +8,7 @@ Migrations are versioned, checksum-verified proposals. This PR replaces the unsa
 - Canonical Neon Production, Development and Preview currently report `pooler_enabled=false`; do not use a `-pooler` hostname until Neon confirms pooling is enabled and a real connection test passes.
 - While pooler remains disabled, use the verified direct endpoint for Development runtime testing only. The runtime identity and connection are still BLOCKED until a real credential and `SELECT 1` test exist.
 - Migration execution uses `DATABASE_MIGRATION_URL` with a direct endpoint and a dedicated migrator identity; never expose it to the web runtime.
-- The repository has no implemented migration runner. These variable names define a boundary, not proof of connectivity or execution.
+- The repository has no implemented canonical/Neon migration runner; the synthetic PG18 fixture runner is documented below. These variable names define a boundary, not proof of connectivity or execution.
 - See [Neon connection pooling](../../docs/architecture/neon-connection-pooling.md).
 
 ## Required review sequence
@@ -41,7 +41,7 @@ Migrations are versioned, checksum-verified proposals. This PR replaces the unsa
 - It introduces `iam.touch_session_last_seen_at()`, rebinds only `iam.sessions_touch`, and fails closed unless the existing trigger points to `iam.touch_updated_at()` and the expected columns are present.
 - This is not a clean-database migration and must not be appended to the 0001 clean-install pipeline. Apply only after schema-lineage review on an isolated Development-derived branch.
 - Contract test: `database/tests/0002_sessions_touch_contract.sql`. Run after migration 0002 using the authenticated migrator login with the `iam_migrator_login -> iam_migrator -> iam_owner` SET chain. The test rolls back its temporary probe objects.
-- The repository still has no general migration runner. Do not infer automatic migration discovery or checksum-ledger registration.
+- The repository still has no general/canonical migration runner. Do not infer automatic migration discovery or checksum-ledger registration.
 
 ## Migration integrity
 
@@ -80,3 +80,7 @@ This new CI test complements rather than replaces the existing `runtime-rls-cont
 - The clean-install `0001` schema intentionally has no owner policy; CI uses a clearly named `iam_owner_access` policy **fixture** while testing 0004, and does not imply that this fixture belongs in the initial migration. The actual Neon Development-derived schema already has that owner policy.
 - All PostgreSQL 18 tests and the actual Auth0 authenticated Preview E2E run on disposable clones. **Do not run 0004 on permanent Development/Production without a separate migration review, ledger reconciliation, recovery plan, and explicit approval.**
 - The actual Neon NEW Development `iam.schema_migrations` schema uses `migration_id, checksum_sha256, source_sha, applied_at, execution_role`; its ledger and that of the PR42 validation clone were empty when inspected. In contrast, the clean-install 0001 ledger uses `version, name, checksum, applied_at, applied_by`. Do not backfill the ledger from an assumed filename or claim schema-version parity without reconciling that structural difference.
+
+## Synthetic PG18 runner contract
+
+See [fixture-only transactional runner](../tests/migration-runner-fixture/README.md). It cannot execute canonical migrations or access Neon. All canonical SQL remains REVIEW_ONLY.

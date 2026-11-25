@@ -2,6 +2,21 @@ import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const branchCallbacks = new Map([
+  ["feat/peos-g2-acl-candidate-contract-20261125", "iam-control-center-new-pr187-ci.vercel.app"],
+  ["fix/peos-g2-local-preflight-diagnostics-20261125", "iam-control-center-new-pr186-ci.vercel.app"],
+  ["feat/peos-g2-legacy-provenance-proof-20261125", "iam-control-center-new-pr185-ci.vercel.app"],
+  ["feat/peos-g2-clone-direct-login-preflight-20261125", "iam-control-center-new-pr184-ci.vercel.app"],
+  ["test/peos-g2-reader-acl-rehearsal-20261125", "iam-control-center-new-pr183-ci.vercel.app"],
+  ["feat/peos-g2-protected-environment-preflight-20261124", "iam-control-center-new-pr182-ci.vercel.app"],
+  ["feat/peos-offline-signature-custody-20261124", "iam-control-center-new-pr181-ci.vercel.app"],
+  ["feat/peos-protected-development-evidence-20261124", "iam-control-center-new-pr180-ci.vercel.app"],
+  ["feat/peos-canonical-ledger-adapter-20261123", "iam-control-center-new-pr179-ci.vercel.app"],
+  ["feat/peos-collector-effective-privilege-preflight-20261123", "iam-control-center-new-pr178-ci.vercel.app"],
+  ["feat/peos-baseline-evidence-collector-fixture-20261123", "iam-control-center-new-pr177-ci.vercel.app"],
+  ["feat/peos-canonical-baseline-preparation-20261123", "iam-control-center-new-pr176-ci.vercel.app"],
+  ["feat/peos-role-reconciliation-fixture-20261123", "iam-control-center-new-pr175-ci.vercel.app"],
+  ["feat/peos-fixture-transactional-migration-runner-20261123", "iam-control-center-new-pr174-ci.vercel.app"],
+  ["feat/peos-canonical-reconciliation-readonly-20261123", "iam-control-center-new-pr173-ci.vercel.app"],
   ["audit/peos-g3-current-main-rebaseline-20261123", "iam-control-center-new-pr171-ci.vercel.app"],
   ["test/peos-g3-tree-inventory-20261123", "iam-control-center-new-pr169-ci.vercel.app"],
   ["feat/iam-g1-b2-readback-independent-gate", "iam-control-center-new-pr101-ci.vercel.app"],

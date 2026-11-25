@@ -1,0 +1,26 @@
+name: G2 protected collector offline contract
+on:
+  pull_request:
+    branches:
+      - main
+      - feat/peos-canonical-ledger-adapter-20261123
+    paths:
+      - 'database/scripts/collect-canonical-development.py'
+      - 'database/tests/test-protected-development-collector.py'
+      - 'database/baselines/development-collection-policy.json'
+      - 'database/tests/baseline-evidence-fixture/collector.py'
+      - '.github/workflows/iam-g2-development-collector-contract.yml'
+permissions:
+  contents: read
+jobs:
+  offline-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+        with:
+          persist-credentials: false
+      - name: Assert staged-only policy
+        run: python3 database/scripts/collect-canonical-development.py --check
+      - name: Test scope, TLS, endpoint binding and synthetic encryption
+        run: python3 database/tests/test-protected-development-collector.py -v
